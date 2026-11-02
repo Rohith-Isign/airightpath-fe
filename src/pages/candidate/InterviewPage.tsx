@@ -1674,7 +1674,9 @@ export function InterviewPage() {
                       size="sm"
                       onClick={() => voiceInterview.submitAnswer()}
                       disabled={
-                        voiceInterview.state === 'processing' || !voiceInterview.codeContent.trim()
+                        voiceInterview.state === 'processing' ||
+                        voiceInterview.isSubmitting ||
+                        !voiceInterview.codeContent.trim()
                       }
                       leftIcon={<Send size={14} />}
                     >
@@ -1784,10 +1786,19 @@ export function InterviewPage() {
                   <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
                     <button
                       onClick={() => voiceInterview.submitAnswer()}
-                      className="flex flex-1 items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 px-6 py-4 text-white shadow-lg ring-2 ring-rose-500/20 transition-all hover:shadow-rose-500/30 hover:shadow-xl active:scale-[0.98]"
+                      disabled={voiceInterview.isSubmitting}
+                      className="flex flex-1 items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 px-6 py-4 text-white shadow-lg ring-2 ring-rose-500/20 transition-all hover:shadow-rose-500/30 hover:shadow-xl active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
                     >
-                      <Square size={22} className="shrink-0" />
-                      <span className="truncate text-sm font-semibold sm:text-base">{STRINGS.candidateInterview.controls.stopAndSubmit}</span>
+                      {voiceInterview.isSubmitting ? (
+                        <Loader2 size={22} className="shrink-0 animate-spin" />
+                      ) : (
+                        <Square size={22} className="shrink-0" />
+                      )}
+                      <span className="truncate text-sm font-semibold sm:text-base">
+                        {voiceInterview.isSubmitting
+                          ? STRINGS.candidateInterview.controls.submitting
+                          : STRINGS.candidateInterview.controls.stopAndSubmit}
+                      </span>
                     </button>
                     <div className="flex shrink-0 items-center justify-center gap-3 px-1">
                       <span className="flex items-center gap-2">

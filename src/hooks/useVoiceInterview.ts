@@ -657,8 +657,20 @@ export function useVoiceInterview() {
     setError("Response timed out. Please try answering again.");
   }, [detectAndCleanCodingTag]);
 
+  /**
+   * An answer is being submitted: from the first press until it has been sent, or has failed and the candidate is
+   * back to answering.
+   *
+   * <p>The state only becomes "processing" after the last audio is flushed and transcribed, which can take many
+   * seconds, and until then the submit button was still live. Each extra press ran the whole submission again and
+   * sent the same answer more than once, so a candidate who felt nothing had happened and pressed again got
+   * duplicates. The ref blocks a second call at once; the state lets the page disable the buttons.</p>
+   */
+  const submittingRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Submit answer — stops recording, waits for final transcription, then sends
-  const submitAnswer = useCallback(
+  const performSubmit = useCallback(
     async (manualTranscript?: string) => {
       // Wait for the final audio chunk to be flushed and sent to BE
       await audioStreaming.stopRecording();
@@ -788,6 +800,21 @@ export function useVoiceInterview() {
       }, APP_CONFIG.INTERVIEW_PROCESSING_TIMEOUT_MS);
     },
     [audioStreaming, codeContent, codeLanguage, codeOutput, isCodingQuestion, sendToInterview, waitForConnection, recoverLostReply],
+  );
+
+  const submitAnswer = useCallback(
+    async (manualTranscript?: string) => {
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setIsSubmitting(true);
+      try {
+        await performSubmit(manualTranscript);
+      } finally {
+        submittingRef.current = false;
+        setIsSubmitting(false);
+      }
+    },
+    [performSubmit],
   );
 
   // Skip question — sends a skipped answer bypassing the empty-transcript guard
@@ -1025,6 +1052,7 @@ export function useVoiceInterview() {
     startInterview,
     startAnswering,
     submitAnswer,
+    isSubmitting,
     skipQuestion,
     endInterview,
     sendProctoringEvent,

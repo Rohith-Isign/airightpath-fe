@@ -310,6 +310,7 @@ export const STRINGS = {
       hearAgain: 'Hear it again',
       interviewerSpeaking: 'The interviewer is speaking',
       stopAndSubmit: 'Stop & submit',
+      submitting: 'Submitting your answer…',
       recording: 'Recording',
       interviewerThinking: 'The interviewer is thinking…',
       hintTapMic: 'Tap the mic when you are ready to answer.',
