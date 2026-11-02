@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { isPast } from '@/utils/datetime.utils';
 import type {
   InterviewResult,
@@ -78,7 +79,7 @@ export function isNotAttended(schedule: Pick<InterviewSchedule, 'attemptStatus' 
 export function attemptStatusLabel(
   schedule: Pick<InterviewSchedule, 'attemptStatus' | 'deadlineTime'>,
 ): string {
-  return isNotAttended(schedule) ? 'NOT ATTENDED' : schedule.attemptStatus.replace(/_/g, ' ');
+  return isNotAttended(schedule) ? STRINGS.interviewStatus.notAttendedBadge : schedule.attemptStatus.replace(/_/g, ' ');
 }
 
 /**

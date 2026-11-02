@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -420,7 +421,7 @@ export function InterviewCandidateResultPage() {
         <SummaryStat
           icon={<Users size={16} />}
           value={groups.length}
-          label="Rounds attended"
+          label={STRINGS.scoreBreakdown.roundsAttended}
           hint={
             rounds.length > groups.length
               ? `${rounds.length} attempts in total`

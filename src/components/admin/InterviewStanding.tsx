@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { CalendarClock, CheckCircle2, Clock, Loader2, PlayCircle, TimerOff } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
@@ -16,24 +17,24 @@ const STATE_DISPLAY: Record<
   { label: string; variant: 'info' | 'warning' | 'success' | 'error' | 'secondary'; icon: React.ReactNode }
 > = {
   pending: {
-    label: 'Assigned',
+    label: STRINGS.interviewStatus.assigned,
     variant: 'info',
     icon: <CalendarClock size={12} className="flex-shrink-0" />,
   },
   'in-progress': {
-    label: 'In progress',
+    label: STRINGS.interviewStatus.inProgress,
     variant: 'warning',
     icon: <PlayCircle size={12} className="flex-shrink-0" />,
   },
   // Not "missed": nobody has judged the candidate yet, and the only thing this
   // state actually licenses is booking them again.
   expired: {
-    label: 'Not Attended',
+    label: STRINGS.interviewStatus.notAttended,
     variant: 'error',
     icon: <TimerOff size={12} className="flex-shrink-0" />,
   },
   completed: {
-    label: 'Completed',
+    label: STRINGS.interviewStatus.completed,
     variant: 'success',
     icon: <CheckCircle2 size={12} className="flex-shrink-0" />,
   },

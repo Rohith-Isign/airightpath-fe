@@ -1,3 +1,5 @@
+import { STRINGS } from '@/constants/strings';
+
 /**
  * A score in words, so a reviewer comparing candidates does not have to decide for themselves what 6.4 out of 10
  * means. The bands are fixed here rather than left to the grader, so the same score reads the same on every
@@ -16,37 +18,37 @@ const LEVELS: readonly (PerformanceLevel & { min: number })[] = [
     min: 9,
     label: 'Outstanding',
     variant: 'success',
-    meaning: 'Exceptional command of the subject; answers were accurate, deep and well reasoned.',
+    meaning: STRINGS.performance.outstanding,
   },
   {
     min: 8,
     label: 'Excellent',
     variant: 'success',
-    meaning: 'Strong, dependable knowledge with only minor gaps; exceeds what the role requires.',
+    meaning: STRINGS.performance.excellent,
   },
   {
     min: 7,
     label: 'Good',
     variant: 'info',
-    meaning: 'Solid working knowledge; meets the expectations of the role with some areas to strengthen.',
+    meaning: STRINGS.performance.good,
   },
   {
     min: 6,
     label: 'Satisfactory',
     variant: 'primary',
-    meaning: 'Adequate understanding of the fundamentals, but inconsistent depth or application.',
+    meaning: STRINGS.performance.satisfactory,
   },
   {
     min: 4,
     label: 'Needs Improvement',
     variant: 'warning',
-    meaning: 'Partial understanding; significant gaps for the demands of the role.',
+    meaning: STRINGS.performance.needsImprovement,
   },
   {
     min: 0,
     label: 'Poor',
     variant: 'error',
-    meaning: 'Little evidence of the required knowledge; answers were incorrect, very limited or missing.',
+    meaning: STRINGS.performance.poor,
   },
 ];
 

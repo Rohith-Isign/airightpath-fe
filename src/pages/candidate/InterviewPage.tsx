@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
@@ -626,7 +627,7 @@ export function InterviewPage() {
     endCauseRef.current = stillThereCauseRef.current;
     voiceInterview.sendProctoringEvent(
       'candidate_unresponsive',
-      'Interview closed: the candidate did not respond to the "are you still there?" prompt',
+      STRINGS.stillThere.closedReason,
     );
     runPostCompletionFlowRef.current(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1268,21 +1269,21 @@ export function InterviewPage() {
   const endMessage = (() => {
     switch (endCause) {
       case 'ai_closed':
-        return 'Thank you for your time. The interviewer has finished the interview and your answers have been submitted for review.';
+        return STRINGS.interviewEnd.aiClosed;
       case 'question_limit':
-        return 'You have answered all the questions for this interview, so it has been submitted for review. Thank you.';
+        return STRINGS.interviewEnd.questionLimit;
       case 'time_up':
-        return 'The time allowed for this interview is over, so it was submitted automatically with your answers so far.';
+        return STRINGS.interviewEnd.timeUp;
       case 'candidate_ended':
-        return 'You ended the interview, so it has been submitted with your answers so far.';
+        return STRINGS.interviewEnd.candidateEnded;
       case 'no_response_after_skips':
       case 'inactivity':
-        return 'We did not hear from you after several unanswered questions, so the interview was closed and submitted with your answers so far.';
+        return STRINGS.interviewEnd.noResponse;
       case null:
       case undefined:
-        return 'Your interview has been submitted with your answers so far.';
+        return STRINGS.interviewEnd.unknown;
       default:
-        return `Your interview was submitted automatically: ${endCause.replace(/^./, (c) => c.toUpperCase())}. Your answers so far are saved.`;
+        return STRINGS.interviewEnd.other(endCause.replace(/^./, (c) => c.toUpperCase()));
     }
   })();
 
@@ -1396,7 +1397,7 @@ export function InterviewPage() {
       <Modal
         isOpen={stillThereOpen}
         onClose={() => undefined}
-        title="Are you still there?"
+        title={STRINGS.stillThere.title}
         size="sm"
         footer={
           <Button
@@ -1408,24 +1409,20 @@ export function InterviewPage() {
               startInactivityTimers();
             }}
           >
-            Yes, I&apos;m still here
+            {STRINGS.stillThere.confirm}
           </Button>
         }
       >
         <p className="text-sm text-[var(--textSecondary)]">
           {stillThereCauseRef.current === 'idle' ? (
-            <>
-              We have not heard an answer yet. Tap the microphone when you are ready. If the time for this question
-              runs out, it will be skipped, and after {APP_CONFIG.INTERVIEW_MAX_CONSECUTIVE_SKIPS} unanswered
-              questions in a row the interview is submitted.
-            </>
+            STRINGS.stillThere.idle(APP_CONFIG.INTERVIEW_MAX_CONSECUTIVE_SKIPS)
           ) : (
             <>
               {stillThereCauseRef.current === 'no_response_after_skips'
-                ? 'Several questions in a row have gone unanswered.'
-                : 'We have not heard anything for a few minutes.'}{' '}
-              Please confirm you are still here. If we do not hear from you in{' '}
-              <strong>{stillThereSeconds}s</strong>, the interview will be closed and submitted with your answers so far.
+                ? STRINGS.stillThere.afterSkips
+                : STRINGS.stillThere.afterSilence}{' '}
+              {STRINGS.stillThere.confirmPrompt} <strong>{stillThereSeconds}s</strong>
+              {STRINGS.stillThere.consequence}
             </>
           )}
         </p>
@@ -1466,7 +1463,7 @@ export function InterviewPage() {
               {getStepStatus('ending') === 'done' ? (
                 <>
                   <CheckCircle2 size={36} className="mx-auto mb-2 text-emerald-500" />
-                  <h2 className="text-xl font-bold text-[var(--text)]">Interview submitted</h2>
+                  <h2 className="text-xl font-bold text-[var(--text)]">{STRINGS.interviewEnd.submittedTitle}</h2>
                   <p className="mt-1 text-sm text-[var(--textSecondary)]">
                     Your answers are saved. Nothing below can change that.
                   </p>

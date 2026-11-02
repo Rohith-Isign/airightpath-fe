@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { performanceLevel } from '@/utils/performance-level.utils';
@@ -46,7 +47,7 @@ export function PerformanceRating({
               onClick={() => setExpanded((open) => !open)}
               className="ml-1 font-semibold text-[var(--primary)] hover:underline"
             >
-              {expanded ? 'Show less' : 'Show more'}
+              {expanded ? STRINGS.showLess : STRINGS.showMore}
             </button>
           )}
         </p>

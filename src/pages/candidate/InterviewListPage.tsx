@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Video, Play, Calendar, CheckCircle2, Loader2 } from 'lucide-react';
@@ -46,9 +47,9 @@ export function InterviewListPage() {
       case 'NOT_ATTEMPTED':
         return <Badge variant="warning">Not Attempted</Badge>;
       case 'IN_PROGRESS':
-        return <Badge variant="info">In Progress</Badge>;
+        return <Badge variant="info">{STRINGS.interviewStatus.inProgress}</Badge>;
       case 'COMPLETED':
-        return <Badge variant="success">Completed</Badge>;
+        return <Badge variant="success">{STRINGS.interviewStatus.completed}</Badge>;
       default:
         return <Badge variant="default">{status}</Badge>;
     }
@@ -109,7 +110,7 @@ export function InterviewListPage() {
                         <p className="text-xs text-[var(--textSecondary)]">AI Interview</p>
                       </div>
                     </div>
-                    <span className="flex-shrink-0 whitespace-nowrap">{isNotAttended(interview) ? <Badge variant="error">Not Attended</Badge> : getStatusBadge(interview.attemptStatus)}</span>
+                    <span className="flex-shrink-0 whitespace-nowrap">{isNotAttended(interview) ? <Badge variant="error">{STRINGS.interviewStatus.notAttended}</Badge> : getStatusBadge(interview.attemptStatus)}</span>
                   </div>
 
                   {/* Details */}
@@ -144,12 +145,12 @@ export function InterviewListPage() {
                       }
                     >
                       {interview.attemptStatus === 'IN_PROGRESS'
-                        ? 'Continue Interview'
+                        ? STRINGS.interviewStatus.continueInterview
                         : opensLater(interview)
-                          ? 'Not open yet'
+                          ? STRINGS.interviewStatus.notOpenYet
                           : isNotAttended(interview)
-                            ? 'Time slot ended'
-                            : 'Start Interview'}
+                            ? STRINGS.interviewStatus.slotEnded
+                            : STRINGS.interviewStatus.startInterview}
                     </Button>
                   )}
 

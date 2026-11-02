@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
@@ -72,21 +73,21 @@ export function ScoreBreakdown({
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <SummaryStat value={counts.asked} label="Questions asked" tone="info" />
-        <SummaryStat value={counts.answered} label="Answered" tone="success" />
-        <SummaryStat value={counts.skipped} label="Skipped" tone="warning" />
+        <SummaryStat value={counts.asked} label={STRINGS.scoreBreakdown.questionsAsked} tone="info" />
+        <SummaryStat value={counts.answered} label={STRINGS.scoreBreakdown.answered} tone="success" />
+        <SummaryStat value={counts.skipped} label={STRINGS.scoreBreakdown.skipped} tone="warning" />
         <SummaryStat
           value={counts.average == null ? '--' : counts.average.toFixed(1)}
-          label="Avg answer score"
+          label={STRINGS.scoreBreakdown.averageAnswerScore}
           tone="primary"
-          hint="Mean of the interviewer's rating of each answer, out of 10"
+          hint={STRINGS.scoreBreakdown.averageHint}
         />
       </div>
 
       {counts.byLevel.size > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--textTertiary)]">
-            How the answers were rated
+            {STRINGS.scoreBreakdown.howAnswersRated}
           </span>
           {[...counts.byLevel.entries()].map(([label, { count, variant }]) => (
             <Badge key={label} variant={variant} size="sm">
@@ -99,17 +100,17 @@ export function ScoreBreakdown({
       {areas.length > 0 && (
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--textTertiary)]">
-            How the overall score is built
+            {STRINGS.scoreBreakdown.howOverallBuilt}
           </p>
           <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
             <table className="w-full text-left text-xs">
               <thead className="bg-[var(--surface1)] text-[var(--textTertiary)]">
                 <tr>
-                  <th className="px-3 py-2 font-semibold">Area</th>
-                  <th className="px-3 py-2 font-semibold">Weight</th>
-                  <th className="px-3 py-2 font-semibold">Score</th>
-                  <th className="px-3 py-2 font-semibold">Level</th>
-                  <th className="px-3 py-2 text-right font-semibold">Adds to overall</th>
+                  <th className="px-3 py-2 font-semibold">{STRINGS.scoreBreakdown.columns.area}</th>
+                  <th className="px-3 py-2 font-semibold">{STRINGS.scoreBreakdown.columns.weight}</th>
+                  <th className="px-3 py-2 font-semibold">{STRINGS.scoreBreakdown.columns.score}</th>
+                  <th className="px-3 py-2 font-semibold">{STRINGS.scoreBreakdown.columns.level}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{STRINGS.scoreBreakdown.columns.addsToOverall}</th>
                 </tr>
               </thead>
               <tbody>
@@ -138,7 +139,7 @@ export function ScoreBreakdown({
                 })}
                 <tr className="border-t border-[var(--border)] bg-[var(--surface1)]">
                   <td className="px-3 py-2 font-semibold text-[var(--text)]" colSpan={4}>
-                    Overall
+                    {STRINGS.scoreBreakdown.overall}
                   </td>
                   <td className="px-3 py-2 text-right font-bold text-[var(--text)]">
                     {evaluation.overallScore.toFixed(1)} / 10
@@ -148,22 +149,21 @@ export function ScoreBreakdown({
             </table>
           </div>
           <p className="mt-1.5 text-xs text-[var(--textTertiary)]">
-            Overall = the sum of each area&apos;s score × its share of the total weight. Weights are the ones set for
-            this round on the Manage AI Prompts page, taken as shares of their total.
+            {STRINGS.scoreBreakdown.formulaNote}
           </p>
         </div>
       )}
 
       {weakest.length > 0 && (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
-          <p className="mb-2 text-sm font-semibold text-[var(--text)]">Where the candidate fell short</p>
+          <p className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.scoreBreakdown.fellShort}</p>
           <ul className="space-y-2.5">
             {weakest.map((area) => (
               <li key={area.category} className="text-xs leading-relaxed text-[var(--textSecondary)]">
                 <span className="font-semibold text-[var(--text)]">
                   {area.category} ({area.score}/10):
                 </span>{' '}
-                {area.feedback || 'No detail was recorded for this area.'}
+                {area.feedback || STRINGS.scoreBreakdown.noDetail}
               </li>
             ))}
           </ul>
@@ -178,7 +178,7 @@ export function ScoreBreakdown({
             className="flex items-center gap-1.5 text-sm font-semibold text-[var(--primary)] hover:underline"
           >
             <ChevronDown size={15} className={`transition-transform ${showAnswers ? 'rotate-180' : ''}`} />
-            {showAnswers ? 'Hide' : 'Show'} answer-by-answer scores ({answers.length})
+            {showAnswers ? STRINGS.scoreBreakdown.hideAnswers(answers.length) : STRINGS.scoreBreakdown.showAnswers(answers.length)}
           </button>
           {showAnswers && (
             <ol className="mt-3 space-y-2">
@@ -191,12 +191,12 @@ export function ScoreBreakdown({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <p className="min-w-0 font-medium text-[var(--text)]">
-                        {index + 1}. {row.question || 'Question'}
+                        {index + 1}. {row.question || STRINGS.scoreBreakdown.question}
                       </p>
                       <span className="flex-shrink-0">
                         {row.skipped ? (
                           <Badge variant="warning" size="sm">
-                            Skipped
+                            {STRINGS.scoreBreakdown.skipped}
                           </Badge>
                         ) : level ? (
                           <Badge variant={level.variant} size="sm">
@@ -204,7 +204,7 @@ export function ScoreBreakdown({
                           </Badge>
                         ) : (
                           <Badge variant="default" size="sm">
-                            Not rated
+                            {STRINGS.scoreBreakdown.notRated}
                           </Badge>
                         )}
                       </span>

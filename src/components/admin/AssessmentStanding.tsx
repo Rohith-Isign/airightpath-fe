@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { BookOpen, Code2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import type { CandidateStanding, ModuleStanding } from '@/utils/scoreboard.utils';
@@ -66,7 +67,7 @@ function ModuleLine({ label, module }: Readonly<{ label: string; module: ModuleS
       )}
       {!module.sat && (
         <Badge variant="warning" size="sm">
-          Not Started
+          {STRINGS.assessmentStatus.notStarted}
         </Badge>
       )}
     </div>
