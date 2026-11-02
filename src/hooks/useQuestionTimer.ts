@@ -16,6 +16,13 @@ export function useQuestionTimer({ state, isPlaying, isCodingQuestion, onTimeout
   const [isTimerActive, setIsTimerActive] = useState(false);
 
   const intervalRef = useRef<number | null>(null);
+  /** The seconds still to run, kept outside React state so the countdown can act on it without a state updater. */
+  const remainingRef = useRef(0);
+  /** Read at the moment the time runs out, so an interviewer who is speaking (or being replayed) is never skipped. */
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
   const onTimeoutRef = useRef(onTimeout);
   onTimeoutRef.current = onTimeout;
   const onMaxSkipsRef = useRef(onMaxSkips);
@@ -41,25 +48,31 @@ export function useQuestionTimer({ state, isPlaying, isCodingQuestion, onTimeout
     const timeout = isCodingRef.current
       ? APP_CONFIG.INTERVIEW_CODING_QUESTION_TIMEOUT_SECONDS
       : APP_CONFIG.INTERVIEW_QUESTION_TIMEOUT_SECONDS;
+    remainingRef.current = timeout;
     setSecondsLeft(timeout);
     setIsTimerActive(true);
 
     intervalRef.current = window.setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          // The time given is up: say so once and stop. Restarting the countdown meant a question the candidate
-          // never answered was held open for ever, with the same reminder every few minutes. The page now moves the
-          // interview on, as an interviewer would when someone does not answer.
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-          setIsTimerActive(false);
-          window.setTimeout(() => onTimeoutRef.current(), 0);
-          return 0;
-        }
-        return prev - 1;
-      });
+      remainingRef.current -= 1;
+      setSecondsLeft(Math.max(0, remainingRef.current));
+      if (remainingRef.current > 0) return;
+
+      // The time given is up: say so once and stop. Restarting the countdown meant a question the candidate
+      // never answered was held open for ever, with the same reminder every few minutes. The page now moves the
+      // interview on, as an interviewer would when someone does not answer.
+      //
+      // Done here rather than inside a state updater: React may run an updater more than once, which could skip
+      // the question twice.
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      setIsTimerActive(false);
+      // Only a question that is waiting to be answered can run out of time. If the interviewer is speaking, as in a
+      // replay started the moment before, or the candidate has begun answering, the question is not skipped; the
+      // countdown starts again when the audio ends.
+      if (stateRef.current !== 'active' || isPlayingRef.current) return;
+      window.setTimeout(() => onTimeoutRef.current(), 0);
     }, 1000);
   }, [clearTimer]);
 
