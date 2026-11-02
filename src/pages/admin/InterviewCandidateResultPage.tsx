@@ -27,6 +27,8 @@ import {
 import { EmptyState } from '@/components/ui/EmptyState';
 import { RadialScore, SummaryStat, SkillBar } from '@/components/admin/result/ResultPrimitives';
 import { PerformanceRating } from '@/components/admin/result/PerformanceRating';
+import { AreaQuestions } from '@/components/admin/result/AreaQuestions';
+import { questionRows } from '@/utils/interview-questions.utils';
 import { ScoreBreakdown } from '@/components/admin/result/ScoreBreakdown';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
@@ -884,6 +886,7 @@ function AttemptSection({
 function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
   const { schedule, evaluation, transcript, proctoring } = round;
   const resolved = evaluation;
+  const questions = useMemo(() => questionRows(transcript), [transcript]);
 
   return (
     <div className="space-y-6">
@@ -988,6 +991,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                     detail={`${category.score}/10`}
                   />
                   <PerformanceRating score={category.score} reason={category.feedback} showMeaning />
+                  <AreaQuestions numbers={category.questionNumbers} rows={questions} />
                 </div>
               ))}
               <div className="grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2">

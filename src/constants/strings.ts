@@ -100,6 +100,12 @@ export const STRINGS = {
     question: 'Question',
     notRated: 'Not rated',
     roundsAttended: 'Rounds attended',
+    areaBasedOn: (count: number) => `Based on ${count} question${count === 1 ? '' : 's'}`,
+    areaAnswered: (count: number) => `${count} answered`,
+    areaSkipped: (count: number) => `${count} skipped`,
+    areaNoQuestions: 'No questions covered this area, so its score has little evidence behind it.',
+    showQuestions: 'Show questions',
+    hideQuestions: 'Hide questions',
   },
 
   /** Admin → Interview Results list. */

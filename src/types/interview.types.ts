@@ -400,6 +400,11 @@ export interface VoiceCategoryScore {
   score: number;
   weight: number;
   feedback: string;
+  /**
+   * Numbers of the interviewer's questions this score is based on, in the order they were asked. Absent on a result
+   * graded before this was recorded; empty when the area was never asked about.
+   */
+  questionNumbers?: number[] | null;
 }
 
 export interface SpeechAnalysis {
