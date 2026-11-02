@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { formatElapsedSeconds, parseServerInstant } from '@/utils/format.utils';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -85,7 +86,7 @@ const TABLE_MIN_WIDTH = '1385px';
 type RoundFilter = 'ALL' | InterviewRound;
 
 const ROUND_FILTER_OPTIONS: { value: RoundFilter; label: string }[] = [
-  { value: 'ALL', label: 'All rounds' },
+  { value: 'ALL', label: STRINGS.interviewResults.allRounds },
   { value: 'L2_TECHNICAL', label: INTERVIEW_ROUND_LABELS.L2_TECHNICAL },
   { value: 'L3_BEHAVIORAL', label: INTERVIEW_ROUND_LABELS.L3_BEHAVIORAL },
 ];
@@ -224,9 +225,9 @@ function ResultCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
         <Badge
           variant="warning"
           size="sm"
-          title="The interview finished but the candidate did not answer, so there is nothing to score."
+          title={STRINGS.interviewResults.notAssessableHint}
         >
-          NOT ASSESSABLE
+          {STRINGS.interviewResults.notAssessable}
         </Badge>
       );
     }
@@ -299,19 +300,19 @@ function InterviewActions({
         leftIcon={<Eye size={14} />}
         onClick={() => onViewDetail(interview)}
       >
-        View
+        {STRINGS.interviewResults.view}
       </Button>
       {/* Was window.open on the stored s3:// reference, which no browser can
           open — the same blank tab the result page had. Both now use the one
           player, so a recording behaves the same from either place. */}
       {interview.recordReferences && (
-        <RecordingPlayerButton scheduleId={interview.id} kind="camera" label="Camera" />
+        <RecordingPlayerButton scheduleId={interview.id} kind="camera" label={STRINGS.interviewResults.recording.camera} />
       )}
       {interview.screenRecordReferences && (
-        <RecordingPlayerButton scheduleId={interview.id} kind="screen" label="Screen" />
+        <RecordingPlayerButton scheduleId={interview.id} kind="screen" label={STRINGS.interviewResults.recording.screen} />
       )}
       {interview.mobileRecordReferences && (
-        <RecordingPlayerButton scheduleId={interview.id} kind="mobile" label="Phone" />
+        <RecordingPlayerButton scheduleId={interview.id} kind="mobile" label={STRINGS.interviewResults.recording.phone} />
       )}
       {/* Removal is soft and reversible, so both directions live here rather
           than behind separate screens. A removed row is only on this list at
@@ -522,7 +523,7 @@ export function InterviewResultsPage() {
     // Round is a column even when the view is filtered to one: an exported file
     // outlives the screen's filter state, and a reader opening it later cannot
     // otherwise tell which interview the numbers came from.
-    const headers = ['Email', 'Round', 'Status', 'Result', 'Completion Reason', 'Score', 'Warnings', 'Duration', 'Submitted', 'Assigned', 'Deadline'];
+    const headers = STRINGS.interviewResults.csvHeaders;
     const rows = interviews.map((i) => [
       emailOf(i),
       roundLabelOf(i),
@@ -565,21 +566,21 @@ export function InterviewResultsPage() {
         rows: interviews.map((row) => ({ ...row, email: emailOf(row) })),
         totalCandidates: allInterviews.length,
         filters: {
-          round: roundFilter === 'ALL' ? 'All rounds' : INTERVIEW_ROUND_LABELS[roundFilter],
+          round: roundFilter === 'ALL' ? STRINGS.interviewResults.allRounds : INTERVIEW_ROUND_LABELS[roundFilter],
           ...(dateFilterActive ? { submitted: describeDateRange(dateFrom, dateTo) } : {}),
         },
         generatedAt: new Date(),
       };
       downloadBlob(await buildInterviewWorkbook(input), interviewWorkbookFileName(input));
     } catch {
-      showToast('Could not build the Excel report. Please try again.', 'error');
+      showToast(STRINGS.interviewResults.exportFailed, 'error');
     } finally {
       setExportingExcel(false);
     }
   }, [exportingExcel, interviews, emailOf, allInterviews.length, jobs, selectedPrefix, roundFilter, dateFilterActive, dateFrom, dateTo, showToast]);
 
   const jobOptions = [
-    { value: '', label: 'Select a job' },
+    { value: '', label: STRINGS.interviewResults.selectJobPlaceholder },
     ...jobs.map((j) => ({ value: j.jobPrefix, label: `${j.jobTitle} (${j.jobPrefix})` })),
   ];
 
@@ -594,9 +595,9 @@ export function InterviewResultsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-[var(--text)]">Interview Results</h1>
+        <h1 className="text-3xl font-bold text-[var(--text)]">{STRINGS.interviewResults.pageTitle}</h1>
         <p className="text-[var(--textSecondary)] mt-1">
-          Review AI interview results, evaluation scores, and recordings for each job
+          {STRINGS.interviewResults.pageSubtitle}
         </p>
       </div>
 
@@ -608,7 +609,7 @@ export function InterviewResultsPage() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="w-full sm:w-72">
               <Select
-                label="Select Job"
+                label={STRINGS.interviewResults.selectJob}
                 options={jobOptions}
                 value={selectedPrefix}
                 onChange={(e) => setSelectedPrefix(e.target.value)}
@@ -616,7 +617,7 @@ export function InterviewResultsPage() {
             </div>
             <div className="w-full sm:w-48">
               <Select
-                label="Round"
+                label={STRINGS.interviewResults.round}
                 options={ROUND_FILTER_OPTIONS}
                 value={roundFilter}
                 onChange={(e) => setRoundFilter(e.target.value as RoundFilter)}
@@ -626,7 +627,7 @@ export function InterviewResultsPage() {
             <div className="w-full sm:w-44">
               <Input
                 type="date"
-                label="Submitted from"
+                label={STRINGS.interviewResults.submittedFrom}
                 value={dateFrom}
                 max={dateTo || undefined}
                 disabled={!selectedPrefix}
@@ -636,7 +637,7 @@ export function InterviewResultsPage() {
             <div className="w-full sm:w-44">
               <Input
                 type="date"
-                label="Submitted to"
+                label={STRINGS.interviewResults.submittedTo}
                 value={dateTo}
                 min={dateFrom || undefined}
                 disabled={!selectedPrefix}
@@ -653,13 +654,13 @@ export function InterviewResultsPage() {
                   setDateTo('');
                 }}
               >
-                Clear
+                {STRINGS.interviewResults.clear}
               </Button>
             )}
           </div>
           {dateRangeInverted && (
             <p className="mt-3 text-sm text-[var(--error)]">
-              The start date is after the end date, so nothing can match. Swap them to see results.
+              {STRINGS.interviewResults.dateRangeInverted}
             </p>
           )}
         </CardContent>
@@ -676,7 +677,7 @@ export function InterviewResultsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-[var(--text)]">{stats.totalInterviews}</p>
-                  <p className="text-xs text-[var(--textSecondary)]">Total Interviews</p>
+                  <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.totalInterviews}</p>
                 </div>
               </div>
             </CardContent>
@@ -689,7 +690,7 @@ export function InterviewResultsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-[var(--text)]">{stats.passRate}%</p>
-                  <p className="text-xs text-[var(--textSecondary)]">Pass Rate</p>
+                  <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.passRate}</p>
                 </div>
               </div>
             </CardContent>
@@ -702,7 +703,7 @@ export function InterviewResultsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-[var(--text)]">{stats.avgScore}/10</p>
-                  <p className="text-xs text-[var(--textSecondary)]">Avg Score</p>
+                  <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.avgScore}</p>
                 </div>
               </div>
             </CardContent>
@@ -715,7 +716,7 @@ export function InterviewResultsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-[var(--text)]">{stats.avgDurationMinutes}m</p>
-                  <p className="text-xs text-[var(--textSecondary)]">Avg Duration</p>
+                  <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.avgDuration}</p>
                 </div>
               </div>
             </CardContent>
@@ -730,7 +731,7 @@ export function InterviewResultsPage() {
             <div className="flex items-center justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <Video size={20} className="text-[var(--primary)]" />
-                <CardTitle>Results ({interviews.length})</CardTitle>
+                <CardTitle>{STRINGS.interviewResults.resultsTitle(interviews.length)}</CardTitle>
                 {/* Named here rather than in a column: with a round selected
                     every row carries the same one, so it belongs to the whole
                     table, not to each line of it. */}
@@ -756,11 +757,11 @@ export function InterviewResultsPage() {
                   onClick={() => setShowRemoved((on) => !on)}
                   title={
                     showRemoved
-                      ? 'Hide results that have been removed'
-                      : 'Also list results that have been removed'
+                      ? STRINGS.interviewResults.hideRemovedHint
+                      : STRINGS.interviewResults.showRemovedHint
                   }
                 >
-                  {showRemoved ? 'Hide removed' : 'Show removed'}
+                  {showRemoved ? STRINGS.interviewResults.hideRemoved : STRINGS.interviewResults.showRemoved}
                 </Button>
               </div>
               {interviews.length > 0 && (
@@ -778,7 +779,7 @@ export function InterviewResultsPage() {
                     onClick={handleExportExcel}
                     disabled={exportingExcel}
                   >
-                    Export Excel
+                    {STRINGS.interviewResults.exportExcel}
                   </Button>
                   <Button
                     variant="ghost"
@@ -786,7 +787,7 @@ export function InterviewResultsPage() {
                     leftIcon={<Download size={14} />}
                     onClick={handleExportCSV}
                   >
-                    Export CSV
+                    {STRINGS.interviewResults.exportCsv}
                   </Button>
                 </div>
               )}
@@ -800,13 +801,13 @@ export function InterviewResultsPage() {
             ) : interviews.length === 0 ? (
               <EmptyState
                 icon={<Video size={48} />}
-                title="No interview results"
+                title={STRINGS.interviewResults.empty.title}
                 description={
                   dateFilterActive && allInterviews.length > 0
-                    ? 'No interviews were submitted in this date range. Change or clear the dates to see the others.'
+                    ? STRINGS.interviewResults.empty.inDateRange
                     : roundFilter === 'ALL'
-                    ? 'No interviews have been conducted for this job yet.'
-                    : `No ${INTERVIEW_ROUND_LABELS[roundFilter]} interviews for this job yet. Choose "All rounds" to see the others.`
+                    ? STRINGS.interviewResults.empty.noneForJob
+                    : STRINGS.interviewResults.empty.noneForRound(INTERVIEW_ROUND_LABELS[roundFilter])
                 }
               />
             ) : (
@@ -845,32 +846,32 @@ export function InterviewResultsPage() {
                         <ResultCell interview={interview} />
                         <CompletionCell interview={interview} />
                         {interview.needsHumanReview && !interview.overriddenResult && (
-                          <Badge variant="warning" size="sm">Needs review</Badge>
+                          <Badge variant="warning" size="sm">{STRINGS.interviewResults.needsReview}</Badge>
                         )}
                       </div>
 
                       <dl className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
                         <div className="min-w-0">
-                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">Duration</dt>
+                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">{STRINGS.interviewResults.columns.duration}</dt>
                           <dd className="text-sm text-[var(--textSecondary)]">
                             {formatDuration(interview.startedAt, interview.endedAt)}
                           </dd>
                         </div>
                         <div className="min-w-0">
-                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">Submitted</dt>
+                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">{STRINGS.interviewResults.columns.submitted}</dt>
                           <dd className="text-sm">
                             <SubmittedCell interview={interview} />
                           </dd>
                         </div>
                         <div className="min-w-0">
-                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">Warnings</dt>
+                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">{STRINGS.interviewResults.columns.warnings}</dt>
                           <dd>
                             <WarningsCell interview={interview} />
                           </dd>
                         </div>
                         <div className="min-w-0">
                           <dt className="text-xs text-[var(--textTertiary)] mb-0.5">
-                            Recommendation
+                            {STRINGS.interviewResults.columns.recommendation}
                           </dt>
                           <dd>
                             <RecommendationCell interview={interview} />
@@ -896,19 +897,19 @@ export function InterviewResultsPage() {
                   <Table className="table-fixed" style={{ minWidth: TABLE_MIN_WIDTH }}>
                     <TableHeader>
                       <TableRow>
-                        <TableHead style={{ width: columnWidths.candidate }}>Candidate</TableHead>
+                        <TableHead style={{ width: columnWidths.candidate }}>{STRINGS.interviewResults.columns.candidate}</TableHead>
                         {showRound && (
-                          <TableHead style={{ width: columnWidths.round }}>Round</TableHead>
+                          <TableHead style={{ width: columnWidths.round }}>{STRINGS.interviewResults.columns.round}</TableHead>
                         )}
-                        <TableHead style={{ width: columnWidths.status }}>Status</TableHead>
-                        <TableHead style={{ width: columnWidths.result }}>Result</TableHead>
-                        <TableHead style={{ width: columnWidths.score }}>Score</TableHead>
-                        <TableHead style={{ width: columnWidths.duration }}>Duration</TableHead>
-                        <TableHead style={{ width: columnWidths.submitted }}>Submitted</TableHead>
-                        <TableHead style={{ width: columnWidths.warnings }}>Warnings</TableHead>
-                        <TableHead style={{ width: columnWidths.completion }}>Completion</TableHead>
-                        <TableHead style={{ width: columnWidths.recommendation }}>Recommendation</TableHead>
-                        <TableHead style={{ width: columnWidths.actions }}>Actions</TableHead>
+                        <TableHead style={{ width: columnWidths.status }}>{STRINGS.interviewResults.columns.status}</TableHead>
+                        <TableHead style={{ width: columnWidths.result }}>{STRINGS.interviewResults.columns.result}</TableHead>
+                        <TableHead style={{ width: columnWidths.score }}>{STRINGS.interviewResults.columns.score}</TableHead>
+                        <TableHead style={{ width: columnWidths.duration }}>{STRINGS.interviewResults.columns.duration}</TableHead>
+                        <TableHead style={{ width: columnWidths.submitted }}>{STRINGS.interviewResults.columns.submitted}</TableHead>
+                        <TableHead style={{ width: columnWidths.warnings }}>{STRINGS.interviewResults.columns.warnings}</TableHead>
+                        <TableHead style={{ width: columnWidths.completion }}>{STRINGS.interviewResults.columns.completion}</TableHead>
+                        <TableHead style={{ width: columnWidths.recommendation }}>{STRINGS.interviewResults.columns.recommendation}</TableHead>
+                        <TableHead style={{ width: columnWidths.actions }}>{STRINGS.interviewResults.columns.actions}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -928,14 +929,16 @@ export function InterviewResultsPage() {
                               className={`text-left text-[var(--primary)] underline-offset-2 hover:underline ${
                                 interview.deletedAt ? 'line-through' : ''
                               }`}
-                              title="See this candidate's rounds"
+                              title={STRINGS.interviewResults.seeRounds}
                             >
                               {emailOf(interview)}
                             </button>
                             {interview.deletedAt && (
                               <p className="mt-1 text-[11px] leading-snug text-red-600 dark:text-red-400">
-                                Removed by {interview.deletedBy || 'unknown'} —{' '}
-                                {interview.deleteReason || 'no reason recorded'}
+                                {STRINGS.interviewResults.removedBy(
+                                  interview.deletedBy || STRINGS.interviewResults.unknown,
+                                  interview.deleteReason || STRINGS.interviewResults.noReason,
+                                )}
                               </p>
                             )}
                           </TableCell>
