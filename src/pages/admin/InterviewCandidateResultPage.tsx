@@ -235,7 +235,7 @@ export function InterviewCandidateResultPage() {
    * stays the fallback for a link opened cold.
    */
   const back: NavOrigin = (location.state as { from?: NavOrigin } | null)?.from ?? {
-    label: 'Interview Results',
+    label: STRINGS.candidateResult.backFallbackLabel,
     path: ROUTES.ADMIN.INTERVIEWS_RESULTS,
   };
   const navigate = useNavigate();
@@ -289,7 +289,7 @@ export function InterviewCandidateResultPage() {
       // The application holds the address as it was entered; the interview row is the next best, and the link last.
       setRegisteredEmail((application && getAppEmail(application)) || mine[0]?.email || null);
     } catch {
-      setLoadError('This candidate\'s interview results could not be loaded.');
+      setLoadError(STRINGS.candidateResult.loadFailed);
     } finally {
       setLoading(false);
     }
@@ -353,9 +353,9 @@ export function InterviewCandidateResultPage() {
         <BackLink label={back.label} onClick={() => navigate(back.path, { state: back.state })} />
         <EmptyState
           icon={<Users size={48} />}
-          title={loadError ? 'Could not load results' : 'No interview rounds'}
+          title={loadError ? STRINGS.candidateResult.loadFailedTitle : STRINGS.candidateResult.noRoundsTitle}
           description={
-            loadError ?? `${shownEmail} has no interview rounds on ${jobPrefix}.`
+            loadError ?? STRINGS.candidateResult.noRounds(shownEmail, jobPrefix)
           }
         />
       </div>
@@ -379,15 +379,15 @@ export function InterviewCandidateResultPage() {
               <div className="min-w-0">
                 <h1 className="break-all text-2xl font-bold text-[var(--text)]">{shownEmail}</h1>
                 <p className="mt-0.5 text-sm text-[var(--textSecondary)]">
-                  Job: {jobPrefix}
+                  {STRINGS.candidateResult.job(jobPrefix)}
                   <span className="mx-2 text-[var(--textTertiary)]">|</span>
-                  {groups.length} round{groups.length === 1 ? '' : 's'}
+                  {STRINGS.candidateResult.rounds(groups.length)}
                   {/* Only worth saying when a round was sat more than once —
                       otherwise it restates the round count. */}
                   {rounds.length > groups.length && (
                     <>
                       <span className="mx-2 text-[var(--textTertiary)]">|</span>
-                      {rounds.length} attempts
+                      {STRINGS.candidateResult.attempts(rounds.length)}
                     </>
                   )}
                 </p>
@@ -414,9 +414,9 @@ export function InterviewCandidateResultPage() {
         <SummaryStat
           icon={<BarChart3 size={16} />}
           value={overall != null ? `${overall.toFixed(1)}/10` : '--'}
-          label="Overall score"
+          label={STRINGS.candidateResult.overallScore}
           tone={overall == null ? 'neutral' : overall >= 6 ? 'success' : 'error'}
-          hint="Mean of the latest scored attempt at each round"
+          hint={STRINGS.candidateResult.overallScoreHint}
         />
         <SummaryStat
           icon={<Users size={16} />}
@@ -424,21 +424,21 @@ export function InterviewCandidateResultPage() {
           label={STRINGS.scoreBreakdown.roundsAttended}
           hint={
             rounds.length > groups.length
-              ? `${rounds.length} attempts in total`
+              ? STRINGS.candidateResult.attemptsInTotal(rounds.length)
               : undefined
           }
         />
         <SummaryStat
           icon={<Shield size={16} />}
           value={totalWarnings}
-          label="Proctoring warnings"
+          label={STRINGS.candidateResult.proctoringWarnings}
           tone={totalWarnings >= 3 ? 'error' : totalWarnings > 0 ? 'warning' : 'success'}
         />
         <SummaryStat
           icon={<Clock size={16} />}
           value={formatElapsedSeconds(totalMinutes)}
-          label="Time in interview"
-          hint="Summed over every sitting"
+          label={STRINGS.candidateResult.timeInInterview}
+          hint={STRINGS.candidateResult.timeInInterviewHint}
         />
       </div>
 
@@ -451,7 +451,7 @@ export function InterviewCandidateResultPage() {
           // it so a re-sat round says so before the tab is opened.
           const label =
             tab === 'overview'
-              ? 'Overview'
+              ? STRINGS.candidateResult.overview
               : `${group?.label ?? INTERVIEW_ROUND_LABELS[tab as InterviewRound]}${
                   (group?.attempts.length ?? 0) > 1 ? ` (${group?.attempts.length})` : ''
                 }`;
@@ -517,7 +517,7 @@ function BackLink({ label, onClick }: Readonly<{ label: string; onClick: () => v
       className="flex items-center gap-2 text-sm font-medium text-[var(--textSecondary)] transition-colors hover:text-[var(--text)]"
     >
       <ArrowLeft size={16} />
-      Back to {label}
+      {STRINGS.candidateResult.backTo(label)}
     </button>
   );
 }
@@ -542,7 +542,7 @@ function RoundSummaryCard({
             <CardTitle>{roundLabelOf(schedule)}</CardTitle>
             {attemptCount > 1 && (
               <p className="mt-0.5 text-xs text-[var(--textTertiary)]">
-                Attempt {attemptNumber} of {attemptCount}
+                {STRINGS.candidateResult.attemptOf(attemptNumber, attemptCount)}
                 {attemptDateLabel(schedule) && ` · ${attemptDateLabel(schedule)}`}
               </p>
             )}
@@ -557,14 +557,14 @@ function RoundSummaryCard({
           {/* The dial is on a 0-100 track and interview scores are 0-10. */}
           <RadialScore
             score={score != null ? score * 10 : 0}
-            label="Score"
+            label={STRINGS.candidateResult.score}
             status={schedule.interviewResult}
           />
           <div className="min-w-0 flex-1 space-y-2">
             {score != null ? (
               <PerformanceRating score={score} reason={resolved?.summary} size="md" showMeaning />
             ) : (
-              <p className="text-sm text-[var(--textSecondary)]">Not scored yet</p>
+              <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateResult.notScoredYet}</p>
             )}
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={resultVariant(schedule.interviewResult)} size="sm">
@@ -578,11 +578,11 @@ function RoundSummaryCard({
             </div>
             <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
               <div>
-                <dt className="text-[var(--textTertiary)]">Duration</dt>
+                <dt className="text-[var(--textTertiary)]">{STRINGS.candidateResult.duration}</dt>
                 <dd className="text-[var(--textSecondary)]">{durationLabel(schedule)}</dd>
               </div>
               <div>
-                <dt className="text-[var(--textTertiary)]">Warnings</dt>
+                <dt className="text-[var(--textTertiary)]">{STRINGS.candidateResult.warnings}</dt>
                 <dd className="text-[var(--textSecondary)]">{warningsOf(schedule)}</dd>
               </div>
             </dl>
@@ -594,21 +594,21 @@ function RoundSummaryCard({
             from it how much was actually asked, what it covered, or how the
             interview ended, and had to open the round to learn anything. */}
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <SummaryStat value={counts.asked} label="Questions" tone="info" />
-          <SummaryStat value={counts.answered} label="Answered" tone="success" />
-          <SummaryStat value={counts.skipped} label="Skipped" tone="warning" />
+          <SummaryStat value={counts.asked} label={STRINGS.candidateResult.questions} tone="info" />
+          <SummaryStat value={counts.answered} label={STRINGS.candidateResult.answered} tone="success" />
+          <SummaryStat value={counts.skipped} label={STRINGS.candidateResult.skipped} tone="warning" />
           <SummaryStat
             value={counts.averageScore == null ? '--' : counts.averageScore.toFixed(1)}
-            label="Avg answer"
+            label={STRINGS.candidateResult.avgAnswer}
             tone="primary"
-            hint="Mean of the interviewer's per-answer scores"
+            hint={STRINGS.candidateResult.avgAnswerHint}
           />
         </div>
 
         {resolved?.categoryScores?.length ? (
           <div className="mt-4 space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--textTertiary)]">
-              Scores by area
+              {STRINGS.candidateResult.scoresByArea}
             </p>
             {resolved.categoryScores.map((category) => (
               <SkillBar
@@ -627,7 +627,7 @@ function RoundSummaryCard({
         {resolved?.areasForImprovement?.length ? (
           <div className="mt-4 flex flex-wrap items-center gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--textTertiary)]">
-              Areas to improve
+              {STRINGS.candidateResult.areasToImprove}
             </span>
             {resolved.areasForImprovement.map((area) => (
               <Badge key={area} variant="error" size="sm">
@@ -638,7 +638,7 @@ function RoundSummaryCard({
         ) : null}
 
         <Button variant="outline" size="sm" className="mt-4 w-full" onClick={onOpen}>
-          Transcript and scores
+          {STRINGS.candidateResult.transcriptAndScores}
         </Button>
       </CardContent>
     </Card>
@@ -733,14 +733,14 @@ function AttemptSection({
           jobPrefix: schedule.jobPrefix,
           rows: [schedule],
           totalCandidates: 1,
-          filters: { round: schedule.roundLabel ?? schedule.round ?? 'Interview' },
+          filters: { round: schedule.roundLabel ?? schedule.round ?? STRINGS.candidateResult.interviewFallback },
           generatedAt: new Date(),
           transcript: attempt.transcript,
         };
         downloadBlob(await buildInterviewWorkbook(input), interviewWorkbookFileName(input));
       }
     } catch {
-      showToast('Could not build the download. Please try again.', 'error');
+      showToast(STRINGS.candidateResult.downloadFailed, 'error');
     } finally {
       setExporting(false);
     }
@@ -763,7 +763,7 @@ function AttemptSection({
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-[var(--text)]">
               {attemptCount > 1
-                ? `Attempt ${attemptNumber} of ${attemptCount}`
+                ? STRINGS.candidateResult.attemptOf(attemptNumber, attemptCount)
                 : roundLabelOf(schedule)}
             </span>
             {date && (
@@ -801,40 +801,40 @@ function AttemptSection({
               onClick={() => setFormatOpen((open) => !open)}
               disabled={exporting}
             >
-              Download
+              {STRINGS.candidateResult.download}
             </Button>
             {formatOpen && !exporting && (
               <div className="absolute right-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--cardBg)] shadow-lg">
                 <FormatOption
                   icon={<FileText size={15} />}
-                  title="PDF"
-                  hint="Watermarked — ready to share"
+                  title={STRINGS.candidateResult.pdf}
+                  hint={STRINGS.candidateResult.pdfHint}
                   onClick={() => exportAttempt('pdf')}
                 />
                 <FormatOption
                   icon={<FileSpreadsheet size={15} />}
-                  title="Excel"
-                  hint="Scores and transcript, as data"
+                  title={STRINGS.candidateResult.excel}
+                  hint={STRINGS.candidateResult.excelHint}
                   onClick={() => exportAttempt('excel')}
                 />
               </div>
             )}
           </div>
           {schedule.recordReferences ? (
-            <RecordingPlayerButton scheduleId={schedule.id} kind="camera" label="Camera" />
+            <RecordingPlayerButton scheduleId={schedule.id} kind="camera" label={STRINGS.candidateResult.camera} />
           ) : (
             <MissingRecording
-              label="Camera"
+              label={STRINGS.candidateResult.camera}
               reason={recordingFailureFor(attempt.proctoring, 'camera')}
               inProgress={schedule.attemptStatus === 'IN_PROGRESS'}
               startedAt={recordingStartedAt(attempt.proctoring, 'camera')}
             />
           )}
           {schedule.screenRecordReferences ? (
-            <RecordingPlayerButton scheduleId={schedule.id} kind="screen" label="Shared screen" />
+            <RecordingPlayerButton scheduleId={schedule.id} kind="screen" label={STRINGS.candidateResult.sharedScreen} />
           ) : (
             <MissingRecording
-              label="Shared screen"
+              label={STRINGS.candidateResult.sharedScreen}
               reason={recordingFailureFor(attempt.proctoring, 'screen')}
               inProgress={schedule.attemptStatus === 'IN_PROGRESS'}
               startedAt={recordingStartedAt(attempt.proctoring, 'screen')}
@@ -851,10 +851,10 @@ function AttemptSection({
                 (event.details ?? '').toLowerCase().startsWith('mobile recording'),
             )) &&
             (schedule.mobileRecordReferences ? (
-              <RecordingPlayerButton scheduleId={schedule.id} kind="mobile" label="Phone" />
+              <RecordingPlayerButton scheduleId={schedule.id} kind="mobile" label={STRINGS.candidateResult.phone} />
             ) : (
               <MissingRecording
-                label="Phone"
+                label={STRINGS.candidateResult.phone}
                 reason={recordingFailureFor(attempt.proctoring, 'mobile')}
                 inProgress={schedule.attemptStatus === 'IN_PROGRESS'}
                 startedAt={recordingStartedAt(attempt.proctoring, 'mobile')}
@@ -915,13 +915,13 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Shield size={18} className="text-[var(--warning,orange)]" />
-            <CardTitle>Proctoring events ({proctoring.length})</CardTitle>
+            <CardTitle>{STRINGS.candidateResult.proctoringEvents(proctoring.length)}</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
           {proctoring.length === 0 ? (
             <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
-              Nothing was flagged during this round.
+              {STRINGS.candidateResult.nothingFlagged}
             </p>
           ) : (
             <ul className="space-y-2">
@@ -932,7 +932,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-[var(--text)]">
-                      {event.eventType?.replace(/_/g, ' ') ?? 'Event'}
+                      {event.eventType?.replace(/_/g, ' ') ?? STRINGS.candidateResult.event}
                     </p>
                     {event.details && (
                       <p className="text-xs text-[var(--textSecondary)]">{event.details}</p>
@@ -955,7 +955,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
         <CardHeader>
           <div className="flex items-center gap-2">
             <BarChart3 size={18} className="text-[var(--primary)]" />
-            <CardTitle>Scores by area</CardTitle>
+            <CardTitle>{STRINGS.candidateResult.scoresByArea}</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
@@ -964,7 +964,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
               {/* The verdict first, in words, with the grader's reasoning: which candidate is strongest and why
                   should not need a reviewer to interpret a number. */}
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
-                <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">Overall assessment</h4>
+                <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.overallAssessment}</h4>
                 <PerformanceRating
                   score={resolved.overallScore}
                   reason={resolved.summary}
@@ -973,11 +973,11 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                 />
               </div>
               <div className="border-t border-[var(--border)] pt-4">
-                <h4 className="mb-3 text-sm font-semibold text-[var(--text)]">How this score was reached</h4>
+                <h4 className="mb-3 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.howScoreReached}</h4>
                 <ScoreBreakdown evaluation={resolved} transcript={transcript} />
               </div>
               <h4 className="border-t border-[var(--border)] pt-4 text-sm font-semibold text-[var(--text)]">
-                Each area, with the reasoning
+                {STRINGS.candidateResult.eachAreaWithReasoning}
               </h4>
               {resolved.categoryScores.map((category) => (
                 <div key={category.category} className="space-y-1.5">
@@ -991,9 +991,9 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                 </div>
               ))}
               <div className="grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2">
-                <BulletList title="Strengths" items={resolved.strengths} tone="success" />
+                <BulletList title={STRINGS.candidateResult.strengths} items={resolved.strengths} tone="success" />
                 <BulletList
-                  title="Areas to improve"
+                  title={STRINGS.candidateResult.areasToImprove}
                   items={resolved.areasForImprovement}
                   tone="warning"
                 />
@@ -1001,7 +1001,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
             </div>
           ) : (
             <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
-              This round has not been scored yet. Scores appear once the interview completes.
+              {STRINGS.candidateResult.notScored}
             </p>
           )}
         </CardContent>
@@ -1012,13 +1012,13 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
         <CardHeader>
           <div className="flex items-center gap-2">
             <MessageSquare size={18} className="text-[var(--primary)]" />
-            <CardTitle>Transcript ({transcript.length})</CardTitle>
+            <CardTitle>{STRINGS.candidateResult.transcriptTitle(transcript.length)}</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
           {transcript.length === 0 ? (
             <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
-              No transcript recorded for this round.
+              {STRINGS.candidateResult.noTranscript}
             </p>
           ) : (
             <div className="space-y-3">
@@ -1115,14 +1115,14 @@ function recordingFailureFor(
 
   // Started, and then nothing was saved. Said as that, not as "never recorded": the phone did begin.
   if (kind === 'mobile' && events.some((event) => event.eventType === 'mobile_recording_started')) {
-    return 'started, but no recording was saved. The phone page was probably closed, locked or lost signal before it finished uploading.';
+    return STRINGS.candidateResult.recording.phoneStartedNotSaved;
   }
 
   // 3. Switched off by configuration: absence that is not a failure.
   const policy = latest((event) => event.eventType === 'recording_policy');
   const label = kind === 'camera' ? 'Camera recording' : kind === 'screen' ? 'Screen recording' : 'Phone recording';
   if (policy && policy.includes(`${label}: not required`)) {
-    return 'not required — switched off by configuration';
+    return STRINGS.candidateResult.recording.notRequired;
   }
   return null;
 }
@@ -1158,11 +1158,11 @@ function MissingRecording({
     return (
       <span
         className="inline-flex items-start gap-1.5 rounded-lg border border-dashed border-sky-400/60 px-2 py-1 text-xs text-sky-700 dark:text-sky-400"
-        title="The interview is still in progress. Recordings are saved in parts while it runs — the first after about ten minutes — and the rest when it ends. Nothing has failed."
+        title={STRINGS.candidateResult.recording.inProgressHint}
       >
         <VideoOff size={13} className="mt-0.5 shrink-0" />
         <span className="max-w-[22rem] truncate">
-          {label}: {startedAt ? `recording since ${startedAt}` : 'interview in progress'} — saving as it runs
+          {label}: {startedAt ? STRINGS.candidateResult.recording.since(startedAt) : STRINGS.candidateResult.recording.inProgress} — {STRINGS.candidateResult.recording.savingAsItRuns}
         </span>
       </span>
     );
@@ -1178,12 +1178,12 @@ function MissingRecording({
       // so one long failure cannot push the recording buttons off the row.
       title={
         reason ??
-        'No failure was reported, so this was most likely never recorded — the candidate may not have been asked to share, or the browser refused.'
+        STRINGS.candidateResult.recording.noFailureHint
       }
     >
       <VideoOff size={13} className="mt-0.5 shrink-0" />
       <span className="max-w-[22rem] truncate">
-        {label}: {reason ? reason.replace(/^\w+ recording /, '') : 'never recorded'}
+        {label}: {reason ? reason.replace(/^\w+ recording /, '') : STRINGS.candidateResult.recording.neverRecorded}
       </span>
     </span>
   );
@@ -1214,8 +1214,8 @@ function BulletList({
 /** How a probe turn is labelled. A new question needs no label — it is the norm. */
 const TURN_KIND_LABELS: Partial<Record<NonNullable<VoiceConversationEntryDTO['turnKind']>, string>> =
   {
-    FOLLOW_UP: 'Follow-up',
-    REPHRASE: 'Rephrased',
+    FOLLOW_UP: STRINGS.candidateResult.turn.followUp,
+    REPHRASE: STRINGS.candidateResult.turn.rephrased,
   };
 
 function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }>) {
@@ -1255,7 +1255,7 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
           <div className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-black/25 px-2 py-1">
             <ShieldAlert size={13} className="flex-shrink-0 text-white/90" />
             <span className="text-[11px] font-medium text-white/90">
-              Tried to instruct the interviewer — ignored
+              {STRINGS.candidateResult.turn.triedToInstruct}
             </span>
           </div>
         )}
@@ -1270,7 +1270,7 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
         {isCandidate && entry.codeOutput?.trim() && (
           <div className="mt-2 rounded-lg bg-black/20 p-2">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">
-              Run output
+              {STRINGS.candidateResult.turn.runOutput}
             </p>
             <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-white/90">
               {entry.codeOutput}
@@ -1285,11 +1285,11 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
             {parseServerInstant(entry.timestamp).toLocaleTimeString()}
           </span>
           {isCandidate && entry.wordsPerMinute != null && (
-            <span className="text-xs text-white/60">{Math.round(entry.wordsPerMinute)} WPM</span>
+            <span className="text-xs text-white/60">{STRINGS.candidateResult.turn.wpm(Math.round(entry.wordsPerMinute))}</span>
           )}
           {isCandidate && entry.confidenceScore != null && (
             <span className="text-xs text-white/60">
-              {Math.round(entry.confidenceScore)}% confidence
+              {STRINGS.candidateResult.turn.confidence(Math.round(entry.confidenceScore))}
             </span>
           )}
           {/* The interviewer's read on this answer, and the one number here
