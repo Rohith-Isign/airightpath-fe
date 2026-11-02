@@ -26,6 +26,7 @@ import {
 import { EmptyState } from '@/components/ui/EmptyState';
 import { RadialScore, SummaryStat, SkillBar } from '@/components/admin/result/ResultPrimitives';
 import { PerformanceRating } from '@/components/admin/result/PerformanceRating';
+import { ScoreBreakdown } from '@/components/admin/result/ScoreBreakdown';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
 import { CodeBlock } from '@/components/interview/CodeBlock';
@@ -559,9 +560,7 @@ function RoundSummaryCard({
           />
           <div className="min-w-0 flex-1 space-y-2">
             {score != null ? (
-              <div className="line-clamp-4">
-                <PerformanceRating score={score} reason={resolved?.summary} size="md" showMeaning />
-              </div>
+              <PerformanceRating score={score} reason={resolved?.summary} size="md" showMeaning />
             ) : (
               <p className="text-sm text-[var(--textSecondary)]">Not scored yet</p>
             )}
@@ -971,6 +970,13 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                   showMeaning
                 />
               </div>
+              <div className="border-t border-[var(--border)] pt-4">
+                <h4 className="mb-3 text-sm font-semibold text-[var(--text)]">How this score was reached</h4>
+                <ScoreBreakdown evaluation={resolved} transcript={transcript} />
+              </div>
+              <h4 className="border-t border-[var(--border)] pt-4 text-sm font-semibold text-[var(--text)]">
+                Each area, with the reasoning
+              </h4>
               {resolved.categoryScores.map((category) => (
                 <div key={category.category} className="space-y-1.5">
                   <SkillBar
