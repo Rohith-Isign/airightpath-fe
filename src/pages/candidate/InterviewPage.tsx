@@ -305,7 +305,7 @@ export function InterviewPage() {
     try {
       await resumeScreenRecording();
       setScreenPermission('granted');
-      showToast('Screen sharing resumed — recording has continued.', 'success');
+      showToast(STRINGS.candidateInterview.toast.screenResumed, 'success');
       voiceInterview.sendProctoringEvent(
         'screen_share_resumed',
         'Candidate resumed screen sharing',
@@ -313,8 +313,8 @@ export function InterviewPage() {
     } catch (err) {
       showToast(
         err instanceof ScreenSurfaceError
-          ? 'Share your entire screen, not a window or a tab, to carry on recording.'
-          : 'Nothing was shared. Choose a screen to carry on recording.',
+          ? STRINGS.candidateInterview.toast.reshareWrongSurface
+          : STRINGS.candidateInterview.toast.reshareNothingShared,
         'warning',
       );
     } finally {
@@ -976,9 +976,9 @@ export function InterviewPage() {
         const lost = !res.data?.connected;
         setMobileConnected(!lost);
         if (lost && !wasLost) {
-          showToast('Your phone camera has disconnected. Reopen the phone page to keep recording.', 'warning');
+          showToast(STRINGS.candidateInterview.toast.phoneDisconnected, 'warning');
         } else if (!lost && wasLost) {
-          showToast('Your phone camera is back.', 'success');
+          showToast(STRINGS.candidateInterview.toast.phoneBack, 'success');
         }
         wasLost = lost;
       } catch {
@@ -1098,8 +1098,8 @@ export function InterviewPage() {
           setScreenPermission('denied');
           showToast(
             err instanceof ScreenSurfaceError
-              ? 'Share your entire screen — not a window or a browser tab — and then press Begin again.'
-              : 'Screen sharing is required to start the interview. Choose your entire screen and press Begin again.',
+              ? STRINGS.candidateInterview.toast.beginWrongSurface
+              : STRINGS.candidateInterview.toast.beginScreenRequired,
             'warning',
           );
           return;
@@ -1122,7 +1122,7 @@ export function InterviewPage() {
         if (!document.fullscreenElement) {
           abortScreenRecording();
           setScreenPermission('prompt');
-          showToast('Enter fullscreen to begin the interview.', 'warning');
+          showToast(STRINGS.candidateInterview.toast.enterFullscreen, 'warning');
           return;
         }
       }
@@ -1196,7 +1196,7 @@ export function InterviewPage() {
           voiceInterview.sendProctoringEvent('mic_processing', describeMicProcessing(mic));
           if (mediaStream && mediaStream.getAudioTracks().length > 0 && !mic.suppressed) {
             showToast(
-              'Your browser could not turn on noise reduction for the microphone. Move somewhere quiet, or use a headset with a microphone.',
+              STRINGS.candidateInterview.toast.noiseReduction,
               'warning',
             );
           }
@@ -1297,9 +1297,9 @@ export function InterviewPage() {
   if (!interview) {
     return (
       <div className="text-center py-16">
-        <p className="text-lg text-[var(--textSecondary)]">No interview data found.</p>
+        <p className="text-lg text-[var(--textSecondary)]">{STRINGS.candidateInterview.noInterviewData}</p>
         <Button className="mt-4" onClick={() => navigate(ROUTES.CANDIDATE.INTERVIEWS)}>
-          Back to Interviews
+          {STRINGS.candidateInterview.backToInterviews}
         </Button>
       </div>
     );
@@ -1316,9 +1316,9 @@ export function InterviewPage() {
         <div className="w-16 h-16 mx-auto rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
           <Maximize className="w-8 h-8 text-amber-600 dark:text-amber-400" />
         </div>
-        <h2 className="text-xl font-bold text-[var(--text)]">Fullscreen Required</h2>
-        <p className="text-sm text-[var(--textSecondary)]">Please return to fullscreen to continue.</p>
-        <Button onClick={enterFullscreen} size="lg">Return to Fullscreen</Button>
+        <h2 className="text-xl font-bold text-[var(--text)]">{STRINGS.candidateInterview.fullscreenRequired}</h2>
+        <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateInterview.fullscreenPrompt}</p>
+        <Button onClick={enterFullscreen} size="lg">{STRINGS.candidateInterview.returnToFullscreen}</Button>
       </div>
     </div>
   );
@@ -1435,10 +1435,10 @@ export function InterviewPage() {
       <Modal
         isOpen={showRules}
         onClose={() => setShowRules(false)}
-        title="Interview Rules"
+        title={STRINGS.candidateInterview.topBar.rulesModalTitle}
         size="lg"
         contained={false}
-        footer={<Button onClick={() => setShowRules(false)}>Back to interview</Button>}
+        footer={<Button onClick={() => setShowRules(false)}>{STRINGS.candidateInterview.topBar.backToInterview}</Button>}
       >
         <ul className="space-y-3">
           {buildProctoringRules().map((rule) => (
@@ -1465,13 +1465,13 @@ export function InterviewPage() {
                   <CheckCircle2 size={36} className="mx-auto mb-2 text-emerald-500" />
                   <h2 className="text-xl font-bold text-[var(--text)]">{STRINGS.interviewEnd.submittedTitle}</h2>
                   <p className="mt-1 text-sm text-[var(--textSecondary)]">
-                    Your answers are saved. Nothing below can change that.
+                    {STRINGS.candidateInterview.answersSaved}
                   </p>
                 </>
               ) : (
                 <>
                   <Loader2 size={36} className="mx-auto mb-2 animate-spin text-blue-500" />
-                  <h2 className="text-xl font-bold text-[var(--text)]">Submitting your interview…</h2>
+                  <h2 className="text-xl font-bold text-[var(--text)]">{STRINGS.candidateInterview.submitting}</h2>
                 </>
               )}
             </div>
@@ -1481,7 +1481,7 @@ export function InterviewPage() {
                 closed first, are finished the next time the app is opened. */}
             {getStepStatus('ending') === 'done' && (
               <p className="rounded-xl bg-[var(--surface1)] p-3 text-center text-xs text-[var(--textSecondary)]">
-                Your recording is being saved in the background. You do not need to wait for it.
+                {STRINGS.candidateInterview.recordingSavingInBackground}
               </p>
             )}
 
@@ -1491,7 +1491,7 @@ export function InterviewPage() {
 
             {postCompletionStep === 'done' && (
               <Button className="w-full" onClick={() => navigate(ROUTES.CANDIDATE.INTERVIEWS)}>
-                Back to my interviews
+                {STRINGS.candidateInterview.backToMyInterviews}
               </Button>
             )}
           </div>
@@ -1506,10 +1506,10 @@ export function InterviewPage() {
           endCauseRef.current = 'candidate_ended';
           runPostCompletionFlow(false);
         }}
-        title="End Interview Early?"
-        message="This action cannot be undone. Your responses so far will be evaluated, but unanswered questions may affect your overall score."
-        confirmText="End Interview"
-        cancelText="Continue Interview"
+        title={STRINGS.candidateInterview.endEarly.title}
+        message={STRINGS.candidateInterview.endEarly.message}
+        confirmText={STRINGS.candidateInterview.endEarly.confirm}
+        cancelText={STRINGS.candidateInterview.endEarly.cancel}
         variant="warning"
       />
 
@@ -1525,27 +1525,27 @@ export function InterviewPage() {
       <div className="sticky top-0 z-20 bg-[var(--cardBg)] border-b border-[var(--border)] px-3 sm:px-4 py-2 sm:py-3">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 w-full">
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <Badge variant="info">Voice Interview</Badge>
+            <Badge variant="info">{STRINGS.candidateInterview.topBar.voiceInterview}</Badge>
             <span className="truncate text-sm text-[var(--textSecondary)]">{interview.jobPrefix}</span>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {isScreenRecording && (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
                 <Monitor size={12} className="text-red-500" />
-                <span className="text-xs text-red-600 dark:text-red-400 font-medium">Screen REC</span>
+                <span className="text-xs text-red-600 dark:text-red-400 font-medium">{STRINGS.candidateInterview.topBar.screenRec}</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               </div>
             )}
             {screenPermission === 'denied' && (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                 <Monitor size={12} className="text-amber-500" />
-                <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">Screen Off</span>
+                <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">{STRINGS.candidateInterview.topBar.screenOff}</span>
               </div>
             )}
             <div className="flex items-center gap-1">
               {voiceInterview.isWsConnected ? <Wifi size={14} className="text-emerald-500" /> : <WifiOff size={14} className="text-red-500" />}
             </div>
-            <span className="text-xs text-[var(--textSecondary)]">Q: {voiceInterview.questionsAsked}</span>
+            <span className="text-xs text-[var(--textSecondary)]">{STRINGS.candidateInterview.topBar.questionsShort(voiceInterview.questionsAsked)}</span>
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-semibold ${globalSecondsLeft <= 300 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-[var(--surface1)] text-[var(--text)]'}`}>
               {/* Counts up from 0:00, as the L2 and L3 rounds are run. The
                   deadline underneath is still a countdown to the server's
@@ -1565,32 +1565,30 @@ export function InterviewPage() {
                 <Shield size={14} /> <span className="text-xs font-semibold">{totalWarnings}</span>
               </div>
               <div className="absolute right-0 top-full mt-2 w-64 bg-[var(--cardBg)] rounded-lg shadow-lg border border-[var(--border)] p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-30">
-                <p className="text-xs font-semibold text-[var(--text)] mb-2">Warning Breakdown</p>
+                <p className="text-xs font-semibold text-[var(--text)] mb-2">{STRINGS.candidateInterview.topBar.warningBreakdown}</p>
                 <div className="space-y-1.5 text-xs text-[var(--textSecondary)]">
                   {PROCTORING_CONFIG.eyeDetection.enabled && (
-                    <div className="flex justify-between"><span>Face / eye</span><span className="font-mono">{faceWarnings}</span></div>
+                    <div className="flex justify-between"><span>{STRINGS.candidateInterview.topBar.faceEye}</span><span className="font-mono">{faceWarnings}</span></div>
                   )}
                   {PROCTORING_CONFIG.fullscreen.enabled && (
-                    <div className="flex justify-between"><span>Fullscreen exits</span><span className="font-mono">{fullscreenWarnings}</span></div>
+                    <div className="flex justify-between"><span>{STRINGS.candidateInterview.topBar.fullscreenExits}</span><span className="font-mono">{fullscreenWarnings}</span></div>
                   )}
-                  <div className="flex justify-between"><span>DevTools</span><span className="font-mono">{devToolsCount}</span></div>
+                  <div className="flex justify-between"><span>{STRINGS.candidateInterview.topBar.devTools}</span><span className="font-mono">{devToolsCount}</span></div>
                 </div>
                 <p className="mt-2 text-[11px] text-[var(--textSecondary)] border-t border-[var(--border)] pt-2">
-                  These are noted for the reviewer. They do not end your interview and they are
-                  not a score. Avoid reloading — if you do, reopen the interview and it picks up
-                  where you left off.
+                  {STRINGS.candidateInterview.topBar.warningNote}
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowRules(true)}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[var(--surface1)] text-[var(--textSecondary)] hover:bg-[var(--surface2)] hover:text-[var(--text)] text-sm font-medium transition-colors"
-              title="Interview rules"
+              title={STRINGS.candidateInterview.topBar.rulesTitle}
             >
-              <BookOpen size={14} /> <span className="hidden sm:inline">Rules</span>
+              <BookOpen size={14} /> <span className="hidden sm:inline">{STRINGS.candidateInterview.topBar.rules}</span>
             </button>
             <button onClick={() => setShowEndConfirm(true)} disabled={!!postCompletionStep} className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors">
-              <LogOut size={14} /> End
+              <LogOut size={14} /> {STRINGS.candidateInterview.topBar.end}
             </button>
           </div>
         </div>
@@ -1622,7 +1620,7 @@ export function InterviewPage() {
             />
             <div className="min-w-0 text-right">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--textTertiary)]">
-                Interviewer
+                {STRINGS.candidateInterview.chat.interviewer}
               </p>
               <p className="truncate text-sm font-semibold text-[var(--text)]">
                 {voiceInterview.interviewerName}
@@ -1649,10 +1647,10 @@ export function InterviewPage() {
               </div>
             ))}
             {voiceInterview.state === 'processing' && !voiceInterview.streamingText && (
-              <div className="flex items-center gap-2 text-[var(--textSecondary)]"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Processing your answer...</span></div>
+              <div className="flex items-center gap-2 text-[var(--textSecondary)]"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">{STRINGS.candidateInterview.chat.processing}</span></div>
             )}
             {voiceInterview.state === 'completed' && !postCompletionStep && (
-              <div className="text-center py-4"><Badge variant="success" size="lg">Interview Complete</Badge><p className="text-sm text-[var(--textSecondary)] mt-2">Generating evaluation...</p></div>
+              <div className="text-center py-4"><Badge variant="success" size="lg">{STRINGS.candidateInterview.chat.complete}</Badge><p className="text-sm text-[var(--textSecondary)] mt-2">{STRINGS.candidateInterview.chat.generatingEvaluation}</p></div>
             )}
 
               {/* Coding Editor & Compile, inline in the conversation: it follows the question it belongs to and scrolls with it.
@@ -1666,7 +1664,7 @@ export function InterviewPage() {
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <Button size="sm" variant="outline" onClick={handleCompile} disabled={compiling || !voiceInterview.codeContent.trim()}>
                       {compiling ? <Loader2 size={14} className="animate-spin mr-2" /> : <Play size={14} className="mr-2" />}
-                      Compile & Run
+                      {STRINGS.candidateInterview.chat.compileAndRun}
                     </Button>
                     {/* There was no way to submit code at all. The only route was
                         to speak and stop the mic, so a candidate who had written a
@@ -1680,7 +1678,7 @@ export function InterviewPage() {
                       }
                       leftIcon={<Send size={14} />}
                     >
-                      Submit answer
+                      {STRINGS.candidateInterview.chat.submitAnswer}
                     </Button>
                   </div>
                   {compileOutput && (
@@ -1704,7 +1702,7 @@ export function InterviewPage() {
               {voiceInterview.transcriptionError && (
                 <div className="mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-center gap-2">
                   <AlertTriangle size={14} className="text-amber-500" />
-                  <span className="text-xs text-amber-700 dark:text-amber-300">Speech not captured: {voiceInterview.transcriptionError}</span>
+                  <span className="text-xs text-amber-700 dark:text-amber-300">{STRINGS.candidateInterview.controls.speechNotCaptured(voiceInterview.transcriptionError)}</span>
                 </div>
               )}
               {/* No live captions. The words were shown as they were heard, and background noise turned into
@@ -1715,7 +1713,7 @@ export function InterviewPage() {
                 <div className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface1)] p-3">
                   <Mic size={14} className="text-emerald-500" />
                   <p className="text-sm text-[var(--textSecondary)]">
-                    Listening… speak your answer, then press submit. It may take a few seconds to process.
+                    {STRINGS.candidateInterview.controls.listening}
                   </p>
                 </div>
               )}
@@ -1733,9 +1731,9 @@ export function InterviewPage() {
                   <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${questionTimer.secondsLeft <= 10 ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' : questionTimer.secondsLeft <= 20 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'}`}>
                     <Timer size={16} className={questionTimer.secondsLeft <= 10 ? 'text-red-500 animate-pulse' : questionTimer.secondsLeft <= 20 ? 'text-amber-500' : 'text-emerald-500'} />
                     <span className={`text-lg font-mono font-bold ${questionTimer.secondsLeft <= 10 ? 'text-red-600 dark:text-red-400' : questionTimer.secondsLeft <= 20 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{questionTimer.secondsLeft}s</span>
-                    <span className={`text-xs ${questionTimer.secondsLeft <= 10 ? 'text-red-500' : questionTimer.secondsLeft <= 20 ? 'text-amber-500' : 'text-emerald-500'}`}>to answer</span>
+                    <span className={`text-xs ${questionTimer.secondsLeft <= 10 ? 'text-red-500' : questionTimer.secondsLeft <= 20 ? 'text-amber-500' : 'text-emerald-500'}`}>{STRINGS.candidateInterview.controls.toAnswer}</span>
                   </div>
-                  {questionTimer.consecutiveSkips > 0 && <span className="text-xs text-amber-500 font-medium">Skipped: {questionTimer.consecutiveSkips}/{APP_CONFIG.INTERVIEW_MAX_CONSECUTIVE_SKIPS}</span>}
+                  {questionTimer.consecutiveSkips > 0 && <span className="text-xs text-amber-500 font-medium">{STRINGS.candidateInterview.controls.skipped(questionTimer.consecutiveSkips, APP_CONFIG.INTERVIEW_MAX_CONSECUTIVE_SKIPS)}</span>}
                 </div>
               )}
               {/* The control bar.
@@ -1756,7 +1754,7 @@ export function InterviewPage() {
                     >
                       <Mic size={24} className="shrink-0" />
                       <span className="truncate text-sm font-semibold sm:text-base">
-                        {voiceInterview.isWsConnected ? 'Start answering' : 'Connecting…'}
+                        {voiceInterview.isWsConnected ? STRINGS.candidateInterview.controls.startAnswering : STRINGS.candidateInterview.controls.connecting}
                       </span>
                     </button>
                     <button
@@ -1764,7 +1762,7 @@ export function InterviewPage() {
                       className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-4 text-white transition-colors hover:bg-white/20 active:scale-[0.98] sm:px-5"
                     >
                       <Volume2 size={20} className="shrink-0" />
-                      <span className="whitespace-nowrap text-sm font-medium">Hear it again</span>
+                      <span className="whitespace-nowrap text-sm font-medium">{STRINGS.candidateInterview.controls.hearAgain}</span>
                     </button>
                   </div>
                 )}
@@ -1777,7 +1775,7 @@ export function InterviewPage() {
                       <span className="h-4 w-1 animate-pulse rounded-full bg-emerald-400 [animation-delay:300ms]" />
                     </span>
                     <span className="text-base font-medium text-white">
-                      The interviewer is speaking
+                      {STRINGS.candidateInterview.controls.interviewerSpeaking}
                     </span>
                   </div>
                 )}
@@ -1789,12 +1787,12 @@ export function InterviewPage() {
                       className="flex flex-1 items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 px-6 py-4 text-white shadow-lg ring-2 ring-rose-500/20 transition-all hover:shadow-rose-500/30 hover:shadow-xl active:scale-[0.98]"
                     >
                       <Square size={22} className="shrink-0" />
-                      <span className="truncate text-sm font-semibold sm:text-base">Stop &amp; submit</span>
+                      <span className="truncate text-sm font-semibold sm:text-base">{STRINGS.candidateInterview.controls.stopAndSubmit}</span>
                     </button>
                     <div className="flex shrink-0 items-center justify-center gap-3 px-1">
                       <span className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-400" />
-                        <span className="text-sm font-medium text-red-300">Recording</span>
+                        <span className="text-sm font-medium text-red-300">{STRINGS.candidateInterview.controls.recording}</span>
                       </span>
                       <span
                         className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-sm font-semibold ${answerSecondsLeft <= 30 ? 'bg-red-500/25 text-red-200' : answerSecondsLeft <= 60 ? 'bg-amber-500/25 text-amber-200' : 'bg-white/10 text-white'}`}
@@ -1809,7 +1807,7 @@ export function InterviewPage() {
                 {voiceInterview.state === 'processing' && (
                   <div className="flex items-center justify-center gap-2 py-3 text-slate-300">
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    <span className="text-base">The interviewer is thinking…</span>
+                    <span className="text-base">{STRINGS.candidateInterview.controls.interviewerThinking}</span>
                   </div>
                 )}
 
@@ -1818,14 +1816,14 @@ export function InterviewPage() {
                 <p className="mt-3 text-center text-xs text-slate-300 sm:text-sm">
                   {voiceInterview.state === 'active' && !voiceInterview.isPlaying &&
                     (voiceInterview.isCodingQuestion
-                      ? 'Write your code above, then tap the mic to talk through it. Stop when you are done — both are submitted together.'
-                      : 'Tap the mic when you are ready to answer.')}
+                      ? STRINGS.candidateInterview.controls.hintCodingTapMic
+                      : STRINGS.candidateInterview.controls.hintTapMic)}
                   {voiceInterview.state === 'active' && voiceInterview.isPlaying &&
-                    'Listen to the question — the mic unlocks when they finish.'}
+                    STRINGS.candidateInterview.controls.hintListen}
                   {voiceInterview.state === 'answering' &&
                     (voiceInterview.isCodingQuestion
-                      ? 'Explaining your code. Tap stop when you have finished.'
-                      : 'Speak clearly, then tap stop when you have finished.')}
+                      ? STRINGS.candidateInterview.controls.hintCodingSpeak
+                      : STRINGS.candidateInterview.controls.hintSpeak)}
                 </p>
               </div>
             </div>
@@ -1844,7 +1842,7 @@ export function InterviewPage() {
           {PROCTORING_CONFIG.recording.screen.required && (
           <div className="p-3 rounded-xl bg-[var(--surface1)] border border-[var(--border)]">
             <h3 className="text-xs font-bold text-[var(--textSecondary)] uppercase tracking-wider mb-2 flex items-center justify-between">
-              Shared Screen
+              {STRINGS.candidateInterview.sidebar.sharedScreen}
               {isScreenRecording && (
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               )}
@@ -1865,7 +1863,7 @@ export function InterviewPage() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 text-center">
                   <MonitorUp size={18} className="text-[var(--textTertiary)]" />
                   <span className="text-xs text-[var(--textTertiary)]">
-                    Screen is not being shared
+                    {STRINGS.candidateInterview.sidebar.screenNotShared}
                   </span>
                 </div>
               )}
@@ -1877,7 +1875,7 @@ export function InterviewPage() {
                 it most likely happened, and offers the fix. */}
             {screenStream ? (
               <p className="mt-2 text-xs text-[var(--textTertiary)]">
-                This is what is being recorded and sent with your interview.
+                {STRINGS.candidateInterview.sidebar.screenBeingRecorded}
               </p>
             ) : (
               <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 dark:border-amber-700/60 dark:bg-amber-900/25">
@@ -1885,12 +1883,12 @@ export function InterviewPage() {
                   <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-500" />
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">
-                      Screen sharing stopped
+                      {STRINGS.candidateInterview.sidebar.shareStopped}
                     </p>
                     <p className="mt-0.5 text-xs leading-snug text-amber-700 dark:text-amber-300">
                       {screenShareStoppedEarly
-                        ? 'You pressed Stop sharing, or the window you picked was closed. Nothing is being recorded until you share again.'
-                        : 'Your screen is not being recorded. Share it to carry on.'}
+                        ? STRINGS.candidateInterview.sidebar.shareStoppedEarly
+                        : STRINGS.candidateInterview.sidebar.shareNotRecorded}
                     </p>
                   </div>
                 </div>
@@ -1905,11 +1903,10 @@ export function InterviewPage() {
                   ) : (
                     <MonitorUp size={12} />
                   )}
-                  {resharingScreen ? 'Waiting for your choice…' : 'Share my screen again'}
+                  {resharingScreen ? STRINGS.candidateInterview.sidebar.waitingForChoice : STRINGS.candidateInterview.sidebar.shareAgain}
                 </button>
                 <p className="mt-1 text-[11px] leading-snug text-amber-700/80 dark:text-amber-300/80">
-                  What you shared before this is already saved. Pick the same screen to keep the
-                  recording consistent.
+                  {STRINGS.candidateInterview.sidebar.shareAgainNote}
                 </p>
               </div>
             )}
@@ -1924,7 +1921,7 @@ export function InterviewPage() {
               <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
             </div>
             <div className="flex items-center gap-1 text-xs text-[var(--textSecondary)]">
-              <Video size={12} /> <span>{isVideoRecording ? 'Recording' : 'Camera'}</span>
+              <Video size={12} /> <span>{isVideoRecording ? STRINGS.candidateInterview.sidebar.cameraRecording : STRINGS.candidateInterview.sidebar.camera}</span>
               {isVideoRecording && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
             </div>
           </div>
@@ -1934,7 +1931,7 @@ export function InterviewPage() {
               photo only when a second person, or nobody, is in its view. */}
           <div className="p-3 rounded-xl bg-[var(--surface1)] border border-[var(--border)]">
             <h3 className="text-xs font-bold text-[var(--textSecondary)] uppercase tracking-wider mb-2 flex items-center justify-between">
-              Phone camera
+              {STRINGS.candidateInterview.sidebar.phoneCamera}
               {mobileVerified && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
             </h3>
             <div className="flex items-center gap-2 text-sm">
@@ -1944,14 +1941,14 @@ export function InterviewPage() {
               />
               <p className={mobileVerified && !mobileSkipped && !mobileConnected ? 'font-medium text-red-600 dark:text-red-400' : mobileVerified ? 'font-medium text-emerald-600 dark:text-emerald-400' : 'text-[var(--textSecondary)]'}>
                 {mobileVerified && !mobileSkipped && !mobileConnected
-                  ? 'Disconnected — reopen the phone page'
+                  ? STRINGS.candidateInterview.sidebar.phoneDisconnected
                   : mobileVerified && !mobileSkipped
-                  ? 'Connected and recording'
+                  ? STRINGS.candidateInterview.sidebar.phoneConnectedRecording
                   : mobileSkipped
-                    ? 'Skipped — not recording'
+                    ? STRINGS.candidateInterview.sidebar.phoneSkipped
                     : mobileConnected
-                      ? 'Connected'
-                      : 'Waiting for the phone…'}
+                      ? STRINGS.candidateInterview.sidebar.phoneConnected
+                      : STRINGS.candidateInterview.sidebar.phoneWaiting}
               </p>
             </div>
 
@@ -1970,20 +1967,20 @@ export function InterviewPage() {
               {lookingAway && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <EyeOff size={14} className="text-amber-500 flex-shrink-0" />
-                  <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">Eyes back on the screen</span>
+                  <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">{STRINGS.candidateInterview.sidebar.eyesBack}</span>
                 </div>
               )}
               {multipleFaces && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
                   <Users size={14} className="text-red-500 flex-shrink-0" />
-                  <span className="text-xs text-red-600 dark:text-red-400 font-medium">More than one person in frame</span>
+                  <span className="text-xs text-red-600 dark:text-red-400 font-medium">{STRINGS.candidateInterview.sidebar.multiplePeople}</span>
                 </div>
               )}
             </div>
           )}
 
           {voiceInterview.isRecording && (
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20"><Mic size={14} className="text-red-500" /><span className="text-xs text-red-600 dark:text-red-400 font-medium">Audio Recording Active</span></div>
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20"><Mic size={14} className="text-red-500" /><span className="text-xs text-red-600 dark:text-red-400 font-medium">{STRINGS.candidateInterview.sidebar.audioActive}</span></div>
           )}
         </div>
       </div>
