@@ -101,7 +101,12 @@ export function InterviewPage() {
       // acknowledges it and asks something else. The skip is counted, so a run of them is noticed and recorded.
       // Nothing more is skipped while the "still there?" prompt is waiting on the candidate: that is how the count
       // used to run past the limit (4/3) with the interview carrying on.
-      if (stillThereOpenRef.current) return;
+      if (stillThereOpenRef.current) {
+        if (stillThereCauseRef.current !== 'idle') return;
+        // The 60-second prompt is only a nudge: the question's time ran out with it still open, so it closes and
+        // the question is skipped and counted below, like any other unanswered one.
+        setStillThereOpen(false);
+      }
       if (voiceInterview.codeContent.trim()) {
         showToast(MESSAGES.interview.answerTimeLimit, 'warning');
         void voiceInterview.submitAnswer();
@@ -597,14 +602,18 @@ export function InterviewPage() {
       // and this used to end their interview after three minutes of it. An
       // interview now finishes only on a proctoring violation, on running out
       // of time, or because the candidate said they were done.
-      if (!stillThereOpenRef.current) openStillThere('inactivity');
-    }, Math.max(APP_CONFIG.INTERVIEW_INACTIVITY_TIMEOUT_SECONDS, given + 120) * 1000);
+      // A spoken question gets the 60-second nudge. A coding question has its own long limit and the candidate
+      // is typing, which restarts this timer, so it keeps the longer check.
+      if (!stillThereOpenRef.current) openStillThere(isCodingRef.current ? 'inactivity' : 'idle');
+    }, (isCodingRef.current
+      ? Math.max(APP_CONFIG.INTERVIEW_INACTIVITY_TIMEOUT_SECONDS, given + 120)
+      : APP_CONFIG.INTERVIEW_IDLE_PROMPT_SECONDS) * 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearInactivityTimers, showToast]);
 
   // The "still there?" countdown. Unanswered, the interview is closed and submitted with what was said so far.
   useEffect(() => {
-    if (!stillThereOpen) return;
+    if (!stillThereOpen || stillThereCauseRef.current === 'idle') return;
     const id = window.setInterval(() => {
       setStillThereSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
@@ -612,7 +621,7 @@ export function InterviewPage() {
   }, [stillThereOpen]);
 
   useEffect(() => {
-    if (!stillThereOpen || stillThereSeconds > 0) return;
+    if (!stillThereOpen || stillThereSeconds > 0 || stillThereCauseRef.current === 'idle') return;
     setStillThereOpen(false);
     endCauseRef.current = stillThereCauseRef.current;
     voiceInterview.sendProctoringEvent(
@@ -631,6 +640,9 @@ export function InterviewPage() {
       startInactivityTimers();
     } else {
       clearInactivityTimers();
+      // The nudge is for a question waiting to be answered; once they start answering, or the next question is
+      // being spoken, it has done its job.
+      if (stillThereCauseRef.current === 'idle') setStillThereOpen(false);
     }
     return () => clearInactivityTimers();
   }, [
@@ -1375,6 +1387,8 @@ export function InterviewPage() {
           <Button
             onClick={() => {
               setStillThereOpen(false);
+              // The 60-second nudge is not an answer, so confirming it must not wipe the unanswered-question count.
+              if (stillThereCauseRef.current === 'idle') return;
               questionTimer.resetSkipCounter();
               startInactivityTimers();
             }}
@@ -1384,11 +1398,21 @@ export function InterviewPage() {
         }
       >
         <p className="text-sm text-[var(--textSecondary)]">
-          {stillThereCauseRef.current === 'no_response_after_skips'
-            ? 'Several questions in a row have gone unanswered.'
-            : 'We have not heard anything for a few minutes.'}{' '}
-          Please confirm you are still here. If we do not hear from you in{' '}
-          <strong>{stillThereSeconds}s</strong>, the interview will be closed and submitted with your answers so far.
+          {stillThereCauseRef.current === 'idle' ? (
+            <>
+              We have not heard an answer yet. Tap the microphone when you are ready. If the time for this question
+              runs out, it will be skipped, and after {APP_CONFIG.INTERVIEW_MAX_CONSECUTIVE_SKIPS} unanswered
+              questions in a row the interview is submitted.
+            </>
+          ) : (
+            <>
+              {stillThereCauseRef.current === 'no_response_after_skips'
+                ? 'Several questions in a row have gone unanswered.'
+                : 'We have not heard anything for a few minutes.'}{' '}
+              Please confirm you are still here. If we do not hear from you in{' '}
+              <strong>{stillThereSeconds}s</strong>, the interview will be closed and submitted with your answers so far.
+            </>
+          )}
         </p>
       </Modal>
 

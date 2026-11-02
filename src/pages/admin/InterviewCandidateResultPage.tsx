@@ -25,6 +25,7 @@ import {
 } from '@/components/admin/InterviewResultRemoval';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { RadialScore, SummaryStat, SkillBar } from '@/components/admin/result/ResultPrimitives';
+import { PerformanceRating } from '@/components/admin/result/PerformanceRating';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
 import { CodeBlock } from '@/components/interview/CodeBlock';
@@ -557,9 +558,13 @@ function RoundSummaryCard({
             status={schedule.interviewResult}
           />
           <div className="min-w-0 flex-1 space-y-2">
-            <p className="text-sm text-[var(--textSecondary)]">
-              {score != null ? `${score.toFixed(1)} / 10` : 'Not scored yet'}
-            </p>
+            {score != null ? (
+              <div className="line-clamp-4">
+                <PerformanceRating score={score} reason={resolved?.summary} size="md" showMeaning />
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--textSecondary)]">Not scored yet</p>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={resultVariant(schedule.interviewResult)} size="sm">
                 {schedule.interviewResult}
@@ -955,23 +960,28 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
         <CardContent>
           {resolved?.categoryScores?.length ? (
             <div className="space-y-4">
-              {resolved.categoryScores.map((category) => (
-                <SkillBar
-                  key={category.category}
-                  label={category.category}
-                  // Category scores are 0-10; SkillBar draws a percentage.
-                  percentage={Math.round((category.score ?? 0) * 10)}
-                  detail={`${category.score}/10`}
+              {/* The verdict first, in words, with the grader's reasoning: which candidate is strongest and why
+                  should not need a reviewer to interpret a number. */}
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
+                <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">Overall assessment</h4>
+                <PerformanceRating
+                  score={resolved.overallScore}
+                  reason={resolved.summary}
+                  size="md"
+                  showMeaning
                 />
-              ))}
-              {resolved.summary && (
-                <div className="border-t border-[var(--border)] pt-4">
-                  <h4 className="mb-1.5 text-sm font-semibold text-[var(--text)]">Summary</h4>
-                  <p className="text-sm leading-relaxed text-[var(--textSecondary)]">
-                    {resolved.summary}
-                  </p>
+              </div>
+              {resolved.categoryScores.map((category) => (
+                <div key={category.category} className="space-y-1.5">
+                  <SkillBar
+                    label={category.category}
+                    // Category scores are 0-10; SkillBar draws a percentage.
+                    percentage={Math.round((category.score ?? 0) * 10)}
+                    detail={`${category.score}/10`}
+                  />
+                  <PerformanceRating score={category.score} reason={category.feedback} showMeaning />
                 </div>
-              )}
+              ))}
               <div className="grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2">
                 <BulletList title="Strengths" items={resolved.strengths} tone="success" />
                 <BulletList

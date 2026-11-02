@@ -104,6 +104,8 @@ export const APP_CONFIG = {
   INTERVIEW_CODING_QUESTION_TIMEOUT_SECONDS: 600,
   INTERVIEW_ANSWER_TIMEOUT_SECONDS: 600,
   INTERVIEW_MAX_CONSECUTIVE_SKIPS: 3,
+  /** Silence after a question is asked before "Are you still there?" is shown; the question's own timer carries on. */
+  INTERVIEW_IDLE_PROMPT_SECONDS: 60,
   /** How long the "Are you still there?" prompt waits for a reply before the interview is closed. */
   INTERVIEW_STILL_THERE_SECONDS: 60,
 } as const;

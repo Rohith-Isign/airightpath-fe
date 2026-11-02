@@ -30,6 +30,7 @@ import { jobService } from '@/services/job.service';
 import { interviewService } from '@/services/interview.service';
 import { jobApplicationService } from '@/services/job-application.service';
 import { getAppEmail } from '@/utils/application.utils';
+import { performanceLevel } from '@/utils/performance-level.utils';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { useToast } from '@/components/ui/Toast';
 import { downloadBlob } from '@/utils/question-paper.utils';
@@ -154,7 +155,17 @@ function warningCountOf(interview: InterviewSchedule): number {
 function ScoreCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
   const score = interview.evaluation?.overallScore;
   if (score == null) return <span className="text-sm text-[var(--textTertiary)]">--</span>;
-  return <span className="font-semibold text-[var(--text)]">{score.toFixed(1)}/10</span>;
+  const level = performanceLevel(score);
+  return (
+    <span className="flex flex-col items-start gap-0.5">
+      <span className="font-semibold text-[var(--text)]">{score.toFixed(1)}/10</span>
+      {level && (
+        <Badge variant={level.variant} size="sm">
+          {level.label}
+        </Badge>
+      )}
+    </span>
+  );
 }
 
 function RoundCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
