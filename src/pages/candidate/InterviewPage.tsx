@@ -842,11 +842,26 @@ export function InterviewPage() {
   }, [voiceInterview.isCodingQuestion]);
 
   // Natural completion detection
+  // The closing reply is the last thing the candidate hears, so the submit screen waits for it: a short pause for
+  // the spoken audio to arrive and start, then until it has finished playing (capped, so a stuck player cannot
+  // hold the candidate here).
+  const [closingGraceOver, setClosingGraceOver] = useState(false);
+  const closingAudioPlaying = voiceInterview.isPlaying;
   useEffect(() => {
-    if (voiceInterview.state === 'completed' && !postCompletionStartedRef.current) {
-      runPostCompletionFlow(true);
-    }
-  }, [voiceInterview.state, runPostCompletionFlow]);
+    if (voiceInterview.state !== 'completed' || postCompletionStartedRef.current) return;
+    const grace = window.setTimeout(() => setClosingGraceOver(true), 3000);
+    const cap = window.setTimeout(() => runPostCompletionFlowRef.current(true), 30000);
+    return () => {
+      window.clearTimeout(grace);
+      window.clearTimeout(cap);
+    };
+  }, [voiceInterview.state]);
+  useEffect(() => {
+    if (voiceInterview.state !== 'completed' || postCompletionStartedRef.current) return;
+    if (!closingGraceOver || closingAudioPlaying) return;
+    const settle = window.setTimeout(() => runPostCompletionFlowRef.current(true), 1500);
+    return () => window.clearTimeout(settle);
+  }, [voiceInterview.state, closingAudioPlaying, closingGraceOver]);
 
   // ---------- Mobile Companion Integration ----------
   // Generate token when interview is ready (before start)
