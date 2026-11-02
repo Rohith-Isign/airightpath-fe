@@ -61,6 +61,27 @@ function stateOf(schedule: InterviewSchedule): RoundState {
 }
 
 /**
+ * True once the booked slot has closed and the candidate never began: the interview was missed.
+ *
+ * Worked out from the deadline each time it is asked, not stored, so it flips the moment the slot ends without a
+ * background job having to run first.
+ */
+export function isNotAttended(schedule: Pick<InterviewSchedule, 'attemptStatus' | 'deadlineTime'>): boolean {
+  return (
+    schedule.attemptStatus === 'NOT_ATTEMPTED' &&
+    !!schedule.deadlineTime &&
+    isPast(schedule.deadlineTime)
+  );
+}
+
+/** The status an admin reads for one interview: the stored one, except that a missed slot says "Not Attended". */
+export function attemptStatusLabel(
+  schedule: Pick<InterviewSchedule, 'attemptStatus' | 'deadlineTime'>,
+): string {
+  return isNotAttended(schedule) ? 'NOT ATTENDED' : schedule.attemptStatus.replace(/_/g, ' ');
+}
+
+/**
  * One candidate's interview standing, built from their schedules for a job.
  *
  * The pipeline stage says "Interview" or "Interview Done" and stops there. It

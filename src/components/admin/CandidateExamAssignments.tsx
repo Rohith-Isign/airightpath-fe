@@ -52,9 +52,9 @@ interface CandidateExamAssignmentsProps {
 }
 
 const STATE_LABEL: Record<AssignmentState, string> = {
-  sat: 'Sat',
+  sat: 'Completed',
   expired: 'Expired',
-  pending: 'Not sat yet',
+  pending: 'Not Started',
 };
 
 const STATE_VARIANT: Record<AssignmentState, 'success' | 'error' | 'warning'> = {

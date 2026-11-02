@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { ROUTES } from '@/config/routes';
 import { formatDate } from '@/utils/format.utils';
+import { isNotAttended } from '@/utils/interview-standing.utils';
 import type { InterviewSchedule } from '@/types/interview.types';
 
 /** Whether the interview's start time is still ahead. */
@@ -108,7 +109,7 @@ export function InterviewListPage() {
                         <p className="text-xs text-[var(--textSecondary)]">AI Interview</p>
                       </div>
                     </div>
-                    <span className="flex-shrink-0 whitespace-nowrap">{getStatusBadge(interview.attemptStatus)}</span>
+                    <span className="flex-shrink-0 whitespace-nowrap">{isNotAttended(interview) ? <Badge variant="error">Not Attended</Badge> : getStatusBadge(interview.attemptStatus)}</span>
                   </div>
 
                   {/* Details */}
@@ -137,7 +138,7 @@ export function InterviewListPage() {
                       leftIcon={<Play size={16} />}
                       // Shut until the start time: the server refuses an early start anyway, and a button that
                       // can only fail should not look available.
-                      disabled={interview.attemptStatus !== 'IN_PROGRESS' && opensLater(interview)}
+                      disabled={interview.attemptStatus !== 'IN_PROGRESS' && (opensLater(interview) || isNotAttended(interview))}
                       onClick={() =>
                         navigate(ROUTES.CANDIDATE.INTERVIEW, { state: { interview } })
                       }
@@ -146,7 +147,9 @@ export function InterviewListPage() {
                         ? 'Continue Interview'
                         : opensLater(interview)
                           ? 'Not open yet'
-                          : 'Start Interview'}
+                          : isNotAttended(interview)
+                            ? 'Time slot ended'
+                            : 'Start Interview'}
                     </Button>
                   )}
 

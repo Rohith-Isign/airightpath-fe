@@ -49,6 +49,7 @@ import { ROUTES } from '@/config/routes';
 import type { NavOrigin } from '@/components/ui/BackLink';
 import { interviewService, type VoiceConversationEntryDTO } from '@/services/interview.service';
 import { aiService } from '@/services/ai.service';
+import { attemptStatusLabel, isNotAttended } from '@/utils/interview-standing.utils';
 import { formatElapsedSeconds, parseServerInstant } from '@/utils/format.utils';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type {
@@ -419,7 +420,7 @@ export function InterviewCandidateResultPage() {
         <SummaryStat
           icon={<Users size={16} />}
           value={groups.length}
-          label="Rounds sat"
+          label="Rounds attended"
           hint={
             rounds.length > groups.length
               ? `${rounds.length} attempts in total`
@@ -545,8 +546,8 @@ function RoundSummaryCard({
               </p>
             )}
           </div>
-          <Badge variant={statusVariant(schedule.attemptStatus)} size="sm">
-            {schedule.attemptStatus.replace(/_/g, ' ')}
+          <Badge variant={isNotAttended(schedule) ? 'error' : statusVariant(schedule.attemptStatus)} size="sm">
+            {attemptStatusLabel(schedule)}
           </Badge>
         </div>
       </CardHeader>
@@ -773,8 +774,8 @@ function AttemptSection({
         {/* Outside the toggle: a button cannot hold buttons, and these open
             players rather than folding the section. */}
         <div className="flex flex-wrap items-center gap-2 px-2">
-          <Badge variant={statusVariant(schedule.attemptStatus)} size="sm">
-            {schedule.attemptStatus.replace(/_/g, ' ')}
+          <Badge variant={isNotAttended(schedule) ? 'error' : statusVariant(schedule.attemptStatus)} size="sm">
+            {attemptStatusLabel(schedule)}
           </Badge>
           <Badge variant={resultVariant(schedule.interviewResult)} size="sm">
             {schedule.interviewResult}

@@ -41,6 +41,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import type { JobPostDTO } from '@/types/job.types';
+import { attemptStatusLabel, isNotAttended } from '@/utils/interview-standing.utils';
 import type { InterviewSchedule, InterviewStats, InterviewRound } from '@/types/interview.types';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import {
@@ -838,8 +839,8 @@ export function InterviewResultsPage() {
 
                       <div className="flex flex-wrap items-center gap-2">
                         {showRound && <RoundCell interview={interview} />}
-                        <Badge variant={getStatusVariant(interview.attemptStatus)} size="sm">
-                          {interview.attemptStatus.replace(/_/g, ' ')}
+                        <Badge variant={isNotAttended(interview) ? 'error' : getStatusVariant(interview.attemptStatus)} size="sm">
+                          {attemptStatusLabel(interview)}
                         </Badge>
                         <ResultCell interview={interview} />
                         <CompletionCell interview={interview} />
@@ -944,8 +945,8 @@ export function InterviewResultsPage() {
                             </TableCell>
                           )}
                           <TableCell className="align-top">
-                            <Badge variant={getStatusVariant(interview.attemptStatus)} size="sm">
-                              {interview.attemptStatus.replace(/_/g, ' ')}
+                            <Badge variant={isNotAttended(interview) ? 'error' : getStatusVariant(interview.attemptStatus)} size="sm">
+                              {attemptStatusLabel(interview)}
                             </Badge>
                           </TableCell>
                           <TableCell className="align-top">

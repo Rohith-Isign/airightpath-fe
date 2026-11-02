@@ -28,7 +28,7 @@ const STATE_DISPLAY: Record<
   // Not "missed": nobody has judged the candidate yet, and the only thing this
   // state actually licenses is booking them again.
   expired: {
-    label: 'Not sat',
+    label: 'Not Attended',
     variant: 'error',
     icon: <TimerOff size={12} className="flex-shrink-0" />,
   },

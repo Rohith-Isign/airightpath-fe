@@ -66,7 +66,7 @@ function ModuleLine({ label, module }: Readonly<{ label: string; module: ModuleS
       )}
       {!module.sat && (
         <Badge variant="warning" size="sm">
-          Not sat
+          Not Started
         </Badge>
       )}
     </div>

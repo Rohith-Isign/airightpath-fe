@@ -529,12 +529,12 @@ function summaryRemarks(row: ExportCandidateRow): string | null {
 
   const aptitudeAttempts = row.aptitudeAttempts?.length ?? 0;
   const codingAttempts = row.codingAttempts?.length ?? 0;
-  if (aptitudeAttempts > 1) notes.push(`Aptitude sat ${aptitudeAttempts} times`);
-  if (codingAttempts > 1) notes.push(`Coding sat ${codingAttempts} times`);
+  if (aptitudeAttempts > 1) notes.push(`Aptitude attempted ${aptitudeAttempts} times`);
+  if (codingAttempts > 1) notes.push(`Coding attempted ${codingAttempts} times`);
 
-  if (!row.aptitudeResult) notes.push('Aptitude not sat');
+  if (!row.aptitudeResult) notes.push('Aptitude not started');
   if (!row.hasCoding) notes.push('No coding paper assigned');
-  else if (!row.codingResult) notes.push('Coding not sat');
+  else if (!row.codingResult) notes.push('Coding not started');
 
   // A percentage that could not be derived is not a zero, and the reader has to
   // be told which of the two they are looking at.

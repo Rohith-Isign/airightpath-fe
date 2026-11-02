@@ -100,7 +100,7 @@ export function RescheduleExamModal({
     >
       <div className="space-y-4">
         <p className="text-sm text-[var(--textSecondary)]">
-          {assessment.candidateEmail} has not sat this paper yet. Moving the window changes when
+          {assessment.candidateEmail} has not started this paper yet. Moving the window changes when
           they can open it.
         </p>
 

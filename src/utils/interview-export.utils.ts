@@ -1,5 +1,6 @@
 import { brandWorkbook, loadExcelJs, styleHeader } from '@/utils/results-export.utils';
 import { describeInterviewSubmission, interviewCompletionLabel } from '@/utils/interview-submission.utils';
+import { attemptStatusLabel } from '@/utils/interview-standing.utils';
 import type { InterviewSchedule } from '@/types/interview.types';
 import type { VoiceConversationEntryDTO } from '@/services/interview.service';
 
@@ -130,7 +131,7 @@ function addResultsSheet(workbook: Workbook, input: InterviewExportInput): void 
     const row = sheet.addRow([
       interview.email,
       interview.roundLabel ?? interview.round ?? '',
-      interview.attemptStatus,
+      attemptStatusLabel(interview),
       interview.interviewResult,
       interview.overriddenResult ?? '',
       interview.overriddenBy ?? '',
