@@ -52,7 +52,8 @@ import { ROUTES } from '@/config/routes';
 import type { NavOrigin } from '@/components/ui/BackLink';
 import { interviewService, type VoiceConversationEntryDTO } from '@/services/interview.service';
 import { aiService } from '@/services/ai.service';
-import { attemptStatusLabel, isNotAttended } from '@/utils/interview-standing.utils';
+import { attemptStatusLabel, isNotAssessable, isNotAttended } from '@/utils/interview-standing.utils';
+import { performanceLevel } from '@/utils/performance-level.utils';
 import { formatElapsedSeconds, parseServerInstant } from '@/utils/format.utils';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type {
@@ -314,6 +315,8 @@ export function InterviewCandidateResultPage() {
     const scored = groups
       .map((group) =>
         group.attempts
+          // A sitting nobody answered has no score to average: its 0 is "nothing to grade", not a result.
+          .filter((a) => !isNotAssessable(a.schedule))
           .map((a) => a.evaluation?.overallScore ?? a.schedule.evaluation?.overallScore)
           .find((score): score is number => score != null),
       )
@@ -398,14 +401,20 @@ export function InterviewCandidateResultPage() {
             <div className="flex flex-wrap items-center gap-2">
               {/* The standing of each round is its latest sitting; older ones
                   are read inside the round's own tab. */}
-              {groups.map((group) => (
-                <Badge
-                  key={group.key}
-                  variant={resultVariant(group.attempts[0].schedule.interviewResult)}
-                >
-                  {group.label}: {group.attempts[0].schedule.interviewResult}
-                </Badge>
-              ))}
+              {groups.map((group) => {
+                // The standing is the latest sitting that could be graded; a newer one nobody answered does not
+                // replace it with PENDING.
+                const graded = group.attempts.find((a) => !isNotAssessable(a.schedule));
+                return graded ? (
+                  <Badge key={group.key} variant={resultVariant(graded.schedule.interviewResult)}>
+                    {group.label}: {graded.schedule.interviewResult}
+                  </Badge>
+                ) : (
+                  <Badge key={group.key} variant="warning" title={STRINGS.candidateResult.notAssessableHint}>
+                    {group.label}: {STRINGS.candidateResult.notAssessable}
+                  </Badge>
+                );
+              })}
             </div>
           </div>
         </CardContent>
@@ -417,6 +426,14 @@ export function InterviewCandidateResultPage() {
           icon={<BarChart3 size={16} />}
           value={overall != null ? `${overall.toFixed(1)}/10` : '--'}
           label={STRINGS.candidateResult.overallScore}
+          badge={(() => {
+            const level = performanceLevel(overall);
+            return level ? (
+              <Badge variant={level.variant} size="sm">
+                {level.label}
+              </Badge>
+            ) : null;
+          })()}
           tone={overall == null ? 'neutral' : overall >= 6 ? 'success' : 'error'}
           hint={STRINGS.candidateResult.overallScoreHint}
         />
@@ -563,7 +580,16 @@ function RoundSummaryCard({
             status={schedule.interviewResult}
           />
           <div className="min-w-0 flex-1 space-y-2">
-            {score != null ? (
+            {isNotAssessable(schedule) ? (
+              <div className="space-y-1">
+                <Badge variant="warning" size="md">
+                  {STRINGS.candidateResult.notAssessable}
+                </Badge>
+                <p className="text-xs leading-relaxed text-[var(--textSecondary)]">
+                  {STRINGS.candidateResult.notAssessableHint}
+                </p>
+              </div>
+            ) : score != null ? (
               <PerformanceRating score={score} reason={resolved?.summary} size="md" showMeaning />
             ) : (
               <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateResult.notScoredYet}</p>

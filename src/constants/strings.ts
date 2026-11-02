@@ -191,6 +191,8 @@ export const STRINGS = {
     interviewFallback: 'Interview',
     score: 'Score',
     notScoredYet: 'Not scored yet',
+    notAssessable: 'Not assessable',
+    notAssessableHint: 'The candidate did not answer any question, so there was nothing to score.',
     duration: 'Duration',
     warnings: 'Warnings',
     questions: 'Questions',

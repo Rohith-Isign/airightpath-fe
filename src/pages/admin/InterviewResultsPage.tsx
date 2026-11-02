@@ -42,7 +42,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import type { JobPostDTO } from '@/types/job.types';
-import { attemptStatusLabel, isNotAttended } from '@/utils/interview-standing.utils';
+import { attemptStatusLabel, isNotAssessable, isNotAttended } from '@/utils/interview-standing.utils';
 import type { InterviewSchedule, InterviewStats, InterviewRound } from '@/types/interview.types';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import {
@@ -198,25 +198,6 @@ function WarningsCell({ interview }: Readonly<{ interview: InterviewSchedule }>)
  * which is the part someone opening this next actually needs to know — so the
  * AI's own verdict stays visible beside it rather than being replaced.
  */
-/**
- * Whether an interview was graded and found to have nothing to grade.
- *
- * <p>A finished interview the candidate never answered is deliberately left
- * PENDING — the grader refuses to invent a score, and whether silence means a
- * no-show, a broken microphone or a withdrawal is not something it can know.
- * But "PENDING" on a completed row reads as "the scoring has not run yet",
- * which is the one thing it does not mean. The evaluation is there; it says
- * there was nothing to assess.</p>
- */
-function isNotAssessable(interview: InterviewSchedule): boolean {
-  return (
-    interview.attemptStatus === 'COMPLETED' &&
-    interview.interviewResult === 'PENDING' &&
-    !!interview.evaluation &&
-    !interview.evaluation.recommendation
-  );
-}
-
 function ResultCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
   const overridden = interview.overriddenResult;
   if (!overridden) {

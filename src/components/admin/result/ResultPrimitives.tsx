@@ -106,12 +106,15 @@ export function SummaryStat({
   label,
   tone = 'neutral',
   hint,
+  badge,
 }: {
   icon?: ReactNode;
   value: ReactNode;
   label: string;
   tone?: StatTone;
   hint?: string;
+  /** A tag shown under the value, such as a performance level. */
+  badge?: ReactNode;
 }) {
   const color = TONE_COLOR[tone];
 
@@ -133,6 +136,7 @@ export function SummaryStat({
       <p className="text-xl font-bold leading-tight" style={{ color }}>
         {value}
       </p>
+      {badge && <div className="mt-1">{badge}</div>}
       {hint && <p className="text-[11px] mt-0.5 text-[var(--textTertiary)]">{hint}</p>}
     </div>
   );

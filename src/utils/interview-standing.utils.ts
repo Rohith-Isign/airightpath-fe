@@ -75,6 +75,25 @@ export function isNotAttended(schedule: Pick<InterviewSchedule, 'attemptStatus' 
   );
 }
 
+/**
+ * Whether an interview was graded and found to have nothing to grade.
+ *
+ * <p>A finished interview the candidate never answered is deliberately left
+ * PENDING — the grader refuses to invent a score, and whether silence means a
+ * no-show, a broken microphone or a withdrawal is not something it can know.
+ * But "PENDING" on a completed row reads as "the scoring has not run yet",
+ * which is the one thing it does not mean. The evaluation is there; it says
+ * there was nothing to assess.</p>
+ */
+export function isNotAssessable(interview: InterviewSchedule): boolean {
+  return (
+    interview.attemptStatus === 'COMPLETED' &&
+    interview.interviewResult === 'PENDING' &&
+    !!interview.evaluation &&
+    !interview.evaluation.recommendation
+  );
+}
+
 /** The status an admin reads for one interview: the stored one, except that a missed slot says "Not Attended". */
 export function attemptStatusLabel(
   schedule: Pick<InterviewSchedule, 'attemptStatus' | 'deadlineTime'>,
