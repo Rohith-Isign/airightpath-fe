@@ -1,4 +1,6 @@
 import { stampBrand } from '@/utils/answer-sheet.utils';
+import { isNotAssessable } from '@/utils/interview-standing.utils';
+import { performanceLevel } from '@/utils/performance-level.utils';
 import { describeInterviewSubmission } from '@/utils/interview-submission.utils';
 import type { InterviewSchedule, VoiceEvaluationResult } from '@/types/interview.types';
 import type { VoiceConversationEntryDTO } from '@/services/interview.service';
@@ -87,7 +89,11 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
   heading('Result');
   const score = evaluation?.overallScore;
   write(
-    score != null ? `Overall score: ${score.toFixed(1)} / 10` : 'Overall score: not scored',
+    isNotAssessable(schedule)
+      ? 'Overall score: not assessable (the candidate did not answer any question)'
+      : score != null
+      ? `Overall score: ${score.toFixed(1)} / 10 (${performanceLevel(score)?.label ?? ''})`
+      : 'Overall score: not scored',
     { size: 11, style: 'bold', gap: 2 }
   );
   if (evaluation?.recommendation) {

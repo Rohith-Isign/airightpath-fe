@@ -1,6 +1,7 @@
 import { brandWorkbook, loadExcelJs, styleHeader } from '@/utils/results-export.utils';
 import { describeInterviewSubmission, interviewCompletionLabel } from '@/utils/interview-submission.utils';
-import { attemptStatusLabel } from '@/utils/interview-standing.utils';
+import { attemptStatusLabel, isNotAssessable } from '@/utils/interview-standing.utils';
+import { performanceLevel } from '@/utils/performance-level.utils';
 import type { InterviewSchedule } from '@/types/interview.types';
 import type { VoiceConversationEntryDTO } from '@/services/interview.service';
 
@@ -109,6 +110,7 @@ const RESULT_COLUMNS = [
   { header: 'Overridden to', width: 15 },
   { header: 'Overridden by', width: 28 },
   { header: 'Score /10', width: 11 },
+  { header: 'Level', width: 18 },
   { header: 'Recommendation', width: 18 },
   { header: 'Needs review', width: 13 },
   { header: 'How it ended', width: 22 },
@@ -136,7 +138,10 @@ function addResultsSheet(workbook: Workbook, input: InterviewExportInput): void 
       interview.overriddenResult ?? '',
       interview.overriddenBy ?? '',
       // A real number, not a formatted string, so the column averages.
-      interview.evaluation?.overallScore ?? null,
+      isNotAssessable(interview) ? null : (interview.evaluation?.overallScore ?? null),
+      isNotAssessable(interview)
+        ? 'Not assessable'
+        : (performanceLevel(interview.evaluation?.overallScore)?.label ?? ''),
       interview.evaluation?.recommendation ?? '',
       interview.needsHumanReview ? 'Yes' : '',
       submission?.label ?? interviewCompletionLabel(interview.completionReason),
@@ -148,7 +153,7 @@ function addResultsSheet(workbook: Workbook, input: InterviewExportInput): void 
     ]);
 
     row.getCell(7).numFmt = '0.0';
-    [13, 14, 15].forEach((i) => {
+    [14, 15, 16].forEach((i) => {
       row.getCell(i).numFmt = 'yyyy-mm-dd hh:mm';
     });
   });
