@@ -348,6 +348,107 @@ export const STRINGS = {
     },
   },
 
+  /** Candidate → the instructions and system-check screen before an interview starts. */
+  preStart: {
+    title: 'Interview Instructions',
+    subtitle: (job: string) => `AI Voice Interview – ${job}`,
+    reading: 'Reading…',
+    stopAudioHint: 'Stop the audio narration',
+    playAudioHint: 'Read the instructions aloud again',
+    stopAudio: 'Stop audio',
+    playAudio: 'Play audio',
+    rulesTitle: 'Rules and Guidelines',
+    rulesCountdown: 'Read these through. The start button unlocks when the countdown reaches zero.',
+    systemCheck: 'System Check',
+    microphone: 'Microphone',
+    camera: 'Camera',
+    enableInSettings: 'Enable in browser settings',
+    cameraOptional: 'Optional for this interview',
+    screenShareRequested: 'Screen sharing is requested when the interview starts',
+    fullscreenActivated: 'Fullscreen is activated when the interview starts',
+    enableDevices: 'Enable Camera & Microphone',
+    captureTitlePhotoAndScan: 'Identity Photo and Room Scan',
+    captureTitlePhoto: 'Identity Photo',
+    captureTitleScan: 'Room Scan',
+    captureWhy: 'This is how we confirm who sat the interview and what was around them.',
+    captureHow:
+      'Look straight at the camera for the photo, with nobody else in frame. Then turn slowly on the spot for the room scan so the whole room is captured — it takes a few seconds, so keep turning until it finishes.',
+    allowDevicesFirst: 'Allow camera and microphone access first — this step needs both.',
+    phone: {
+      title: 'Connect Your Phone',
+      verifiedBadge: 'Verified',
+      purposeRequired: 'A second camera, showing you and your screen together. This interview requires it.',
+      purposeOptional: 'A second camera, showing you and your screen together.',
+      continueWithout: 'Continue without my phone.',
+      continueWithoutNote:
+        'The interview goes ahead with one camera, the QR code is switched off, and it is recorded that the second camera was not used.',
+      usePhone: 'Use my phone — show the QR code',
+      scanThis: 'Scan this with your phone camera',
+      tipPlacement: "Stand the phone to one side of your desk, about an arm's length away, in landscape.",
+      tipAngleBefore: 'Angle it so the camera sees ',
+      tipAngleBold: 'both you and your screen',
+      tipAngleAfter: ' in the same shot — that is the whole point of the second camera.',
+      tipPower: 'Keep it plugged in, and do not let it lock or sleep.',
+      tipTab: 'Leave the browser tab open on the phone for the whole interview.',
+      proctoringOnly: 'The phone feed is used for proctoring this interview only.',
+      connected: 'Phone connected',
+      finishRoomCheck: 'Finish the room check on your phone.',
+      verified: 'Phone verified',
+      leaveInPlace: 'Leave it exactly where it is. You can start the interview now.',
+      skipped: 'Phone skipped',
+      cannotStart: 'This interview cannot be started without a paired phone.',
+    },
+    agreement:
+      'I have read and understood all the instructions above. I agree to follow the rules and understand that violations are recorded and reviewed.',
+    beforeYouBegin: 'Before you can begin:',
+    begin: 'Begin AI Interview',
+    beginWithoutPhone: 'Begin Without a Phone',
+    blockers: {
+      micBlocked: 'Microphone access is blocked. Enable it in your browser settings, then reload.',
+      cameraBlocked: 'Camera access is blocked. Enable it in your browser settings, then reload.',
+      countdown: 'Finish reading the rules — the countdown has to reach zero.',
+      photoAndScan: 'Take your photo and complete the room scan in the system check.',
+      photoOnly: 'Take your photo in the system check.',
+      scanOnly: 'Complete the room scan in the system check.',
+      pairRequired: 'Pair your phone — this interview requires it as a second camera.',
+      pairChoice: 'Choose whether to use your phone: pair it, or tick "Continue without my phone".',
+      phoneChecking: 'Finishing the phone check…',
+      agree: 'Tick the box to confirm you have read and understood the instructions.',
+    },
+    copied: 'Copied',
+    copy: 'Copy',
+  },
+
+  /** The rules list shown before and during an interview. */
+  rules: {
+    device: 'Take this interview on a desktop or laptop with a webcam. Phones and tablets are not supported.',
+    duration: (minutes: number) =>
+      `The interview lasts up to ${minutes} minutes and ends automatically when the timer reaches ${minutes}:00. The timer counts up from 0:00.`,
+    speak:
+      'You speak with an AI interviewer. Click the microphone to answer, and stop when you are done — your answers are transcribed live.',
+    cameraOn:
+      'Your camera must stay on for the whole interview. If it is switched off or blocked, the interview cannot continue.',
+    photo: 'One photo of you is taken before the interview starts, to confirm who sat it.',
+    roomScan: 'You will be asked to turn slowly on the spot and scan your room with your camera before you begin.',
+    cameraRecorded: 'Your camera and microphone are recorded for the whole interview and stored with your answers.',
+    screenRecorded:
+      'Your screen is recorded for the whole interview. You will be asked to share it when the interview starts — share your entire screen, and do not stop the share.',
+    alone:
+      'You must be alone and facing the screen. A second face in frame, or no face at all, is recorded as a warning.',
+    fullscreen:
+      'The interview runs in fullscreen. Leaving fullscreen, or opening developer tools, is recorded as a warning.',
+    tabs: 'Do not switch tabs, windows or applications during the interview. Each switch is recorded as a warning.',
+    warnings:
+      'Warnings are recorded against your interview for a reviewer to read. They do not end it and they are not a score.',
+    noReload:
+      'Do not reload, close, or navigate away once the interview begins. If your connection drops or the page reloads, reopen the interview and it picks up where you left off — but leaving is recorded, and the clock keeps running.',
+    connection:
+      'Use a stable internet connection. If it drops, the timer keeps running — reconnect on the same device and continue.',
+    power: 'Keep your device plugged in and disable sleep. A device that sleeps mid-interview is treated as leaving it.',
+    distractions:
+      'Close other applications and silence notifications. A call or pop-up that takes focus counts as leaving the interview.',
+  },
+
   showMore: 'Show more',
   showLess: 'Show less',
 
