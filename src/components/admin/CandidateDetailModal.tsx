@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ReferralFields } from '@/components/application/ReferralFields';
 import { CandidateExamAssignments } from './CandidateExamAssignments';
+import { CandidateInterviewSchedules } from './CandidateInterviewSchedules';
 import { getAppEmail } from '@/utils/application.utils';
 import { formatServerDateTime, formatServerRelativeTime } from '@/utils/format.utils';
 import { hasReferral, referralStatusLabel } from '@/utils/referral.utils';
@@ -241,6 +242,11 @@ export function CandidateDetailModal({
             paper, nor whether this is the candidate's second go at it. */}
         {jobPrefix && (
           <CandidateExamAssignments email={getAppEmail(candidate)} jobPrefix={jobPrefix} />
+        )}
+
+        {/* The booked interview rounds, with their windows — editable until the candidate starts one. */}
+        {jobPrefix && (
+          <CandidateInterviewSchedules email={getAppEmail(candidate)} jobPrefix={jobPrefix} />
         )}
 
         {/* The whole path through this job, in order. */}

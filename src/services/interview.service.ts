@@ -86,6 +86,14 @@ export const interviewService = {
     );
   },
 
+  /** Moves the window of an interview the candidate has not started; they are emailed unless `notify` is false. */
+  rescheduleInterview(
+    id: number,
+    data: { assignedAt: string; deadlineTime: string; notify?: boolean },
+  ) {
+    return api.patch<InterviewSchedule>(ENDPOINTS.INTERVIEWS.RESCHEDULE(id), data);
+  },
+
   /**
    * The interviews a candidate still has in front of them.
    *

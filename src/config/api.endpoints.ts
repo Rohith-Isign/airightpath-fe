@@ -133,6 +133,8 @@ export const ENDPOINTS = {
     ASSIGN: "/api/interview/assign-interview",
     ASSIGN_BULK: "/api/interview/assign-interview-bulk",
     GET_ACTIVE: "/api/interview/active",
+    /** Move the window of a booked interview that has not been started. */
+    RESCHEDULE: (id: number) => `/api/interview/schedules/${id}/schedule`,
     GET_RESULTS: "/api/interview/results",
     GET_RESULT_DETAIL: (id: number) => `/api/interview/results/${id}`,
     /** Soft-remove a result from the list, with a reason, and put it back. */

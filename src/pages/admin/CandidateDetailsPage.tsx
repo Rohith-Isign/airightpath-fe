@@ -88,12 +88,8 @@ const ASSIGN_STAGES: JobApplicationStatus[] = [
  * but whether the round is still open for them, and the booking modal makes it.
  */
 const INTERVIEW_ASSIGN_STAGES: JobApplicationStatus[] = [
-  'APPLIED',
-  'SHORTLISTED',
-  'ACKNOWLEDGED',
-  'ACKNOWLEDGED_BACK' as JobApplicationStatus,
-  'RECONFIRMED',
-  'EXAM_SENT',
+  // Not before the exam has been sat: until then there is no paper to judge a candidate on, so an interview
+  // cannot be booked for them from the earlier stages.
   'EXAM_COMPLETED',
   'INTERVIEW_SCHEDULED',
   'INTERVIEW_COMPLETED',
@@ -246,7 +242,9 @@ const STAGE_ACTIONS: Record<string, BulkAction[]> = {
   ACKNOWLEDGED_BACK: ['reconfirmation', 'rejection'],
   // Exams reach candidates via Assign Assessment, not from here.
   RECONFIRMED: ['rejection'],
-  EXAM_SENT: ['rejection'],
+  // Nothing here: the exam has been assigned and the candidate has not sat it, so there is no decision to make yet.
+  // Rejecting from this stage is what the exam window and its expiry are for.
+  EXAM_SENT: [],
   // The forward step after an exam. Before this, moving someone into the
   // interview stage meant leaving Candidates for the Interview Scheduler and
   // finding them again there.
