@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
+import { useBackgroundRefresh } from '@/hooks/useBackgroundRefresh';
+import { CANDIDATE_REFRESH_MS } from '@/config/refresh.config';
 import { useRbac } from '@/hooks/useRbac';
 import { assessmentService } from '@/services/assessment.service';
 import type { Assessment } from '@/types/assessment.types';
@@ -68,14 +70,9 @@ export function PendingAssessmentsProvider({ children }: { children: ReactNode }
     fetchPending();
   }, [fetchPending]);
 
-  // Re-check when the tab regains focus, so finishing an exam in another tab —
-  // or a deadline passing while this one sat open — clears the badge.
-  useEffect(() => {
-    if (!isCandidate) return;
-    const onFocus = () => fetchPending();
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [isCandidate, fetchPending]);
+  // Re-check on a timer and whenever the tab is shown again, so something an admin sends while this page is open
+  // reaches the badge � and finishing in another tab, or a deadline passing, clears it.
+  useBackgroundRefresh(() => void fetchPending(), CANDIDATE_REFRESH_MS, isCandidate);
 
   return (
     <PendingAssessmentsContext.Provider value={{ pending, loading, refresh: fetchPending }}>

@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/Badge';
 import { ROUTES } from '@/config/routes';
 import { formatDate, formatDateTime } from '@/utils/format.utils';
 import { useNow } from '@/hooks/useNow';
+import { useBackgroundRefresh } from '@/hooks/useBackgroundRefresh';
+import { CANDIDATE_REFRESH_MS } from '@/config/refresh.config';
 import type { Assessment } from '@/types/assessment.types';
 
 export function AssessmentListPage() {
@@ -36,6 +38,17 @@ export function AssessmentListPage() {
     }
     fetchAssessments();
   }, [user?.email]);
+
+  // Quietly re-read the list, so an exam an admin sends while this page is open appears without a reload.
+  useBackgroundRefresh(async () => {
+    if (!user?.email) return;
+    try {
+      const res = await assessmentService.getCandidateAssessments(user.email, { silent: true });
+      setAssessments(res.data ?? []);
+    } catch {
+      // Keep what is on screen.
+    }
+  }, CANDIDATE_REFRESH_MS);
 
   const handleStart = (assessment: Assessment) => {
     navigate(ROUTES.CANDIDATE.INSTRUCTIONS, { state: { assessment } });

@@ -13,6 +13,7 @@ import { jobService } from '@/services/job.service';
 import { jobApplicationService } from '@/services/job-application.service';
 import { interviewService } from '@/services/interview.service';
 import { MESSAGES } from '@/config/messages';
+import { INTERVIEW_ASSIGN_STAGES } from '@/utils/interview-assign-stages';
 import type { JobPostDTO, JobApplicationDTO } from '@/types/job.types';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewRound } from '@/types/interview.types';
@@ -87,11 +88,9 @@ export function InterviewSchedulerPage() {
     setLoadingCandidates(true);
     try {
       const res = await jobApplicationService.getByPrefix(selectedPrefix);
-      // Filter to candidates who have passed assessment (EXAM_COMPLETED or later stages)
-      const eligibleStatuses = ['EXAM_COMPLETED'];
-      const eligible = (res.data ?? []).filter((c) =>
-        eligibleStatuses.includes(c.status)
-      );
+      // Everyone who has sat the exam, including those already past it: a candidate who failed a round is at a
+      // later stage and still needs the round booked again, as on the Candidates screen.
+      const eligible = (res.data ?? []).filter((c) => INTERVIEW_ASSIGN_STAGES.includes(c.status));
       setCandidates(eligible);
     } catch {
       // Error toast auto-handled by interceptor
@@ -158,7 +157,7 @@ export function InterviewSchedulerPage() {
       setQuestionsFromDate('');
       setQuestionsToDate('');
 
-      // Refresh candidate list so scheduled candidates disappear
+      // Refresh the list so the stages shown are current
       if (selectedPrefix) fetchCandidates();
     } catch {
       // Error toast auto-handled by interceptor
@@ -185,7 +184,7 @@ export function InterviewSchedulerPage() {
       <div>
         <h1 className="text-3xl font-bold text-[var(--text)]">Schedule Interview</h1>
         <p className="text-[var(--textSecondary)] mt-1">
-          Assign AI interviews to candidates who have completed their assessments
+          Assign AI interviews, or book a further attempt, for candidates who have completed their assessments
         </p>
       </div>
 
@@ -279,7 +278,7 @@ export function InterviewSchedulerPage() {
                             {c.firstName} {c.lastName}
                           </p>
                           <p className="text-xs text-[var(--textSecondary)] truncate">
-                            {c.email}
+                            {c.email} · {c.status.replaceAll('_', ' ').toLowerCase()}
                           </p>
                         </div>
                       </label>

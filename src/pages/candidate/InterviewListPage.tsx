@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/Badge';
 import { ROUTES } from '@/config/routes';
 import { formatDate } from '@/utils/format.utils';
 import { isNotAttended } from '@/utils/interview-standing.utils';
+import { useBackgroundRefresh } from '@/hooks/useBackgroundRefresh';
+import { CANDIDATE_REFRESH_MS } from '@/config/refresh.config';
 import type { InterviewSchedule } from '@/types/interview.types';
 
 /** Whether the interview's start time is still ahead. */
@@ -41,6 +43,17 @@ export function InterviewListPage() {
     }
     fetchInterviews();
   }, [user?.email]);
+
+  // Quietly re-read the list, so an interview an admin books while this page is open appears without a reload.
+  useBackgroundRefresh(async () => {
+    if (!user?.email) return;
+    try {
+      const res = await interviewService.getActiveInterviews(user.email, { silent: true });
+      setInterviews(res.data ?? []);
+    } catch {
+      // Keep what is on screen.
+    }
+  }, CANDIDATE_REFRESH_MS);
 
   const getStatusBadge = (status: string) => {
     switch (status) {

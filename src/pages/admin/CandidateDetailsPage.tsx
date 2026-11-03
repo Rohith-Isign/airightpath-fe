@@ -1,3 +1,4 @@
+import { INTERVIEW_ASSIGN_STAGES } from '@/utils/interview-assign-stages';
 import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
 import { resumeExtensionForType } from '@/utils/file.utils';
 import { useState, useEffect, useMemo } from 'react';
@@ -78,24 +79,6 @@ const ASSIGN_STAGES: JobApplicationStatus[] = [
  * admin wants in front of them while they decide the next step. Earlier stages
  * are excluded because the results screen would only have an empty row for them.
  */
-/**
- * Stages that offer the Assign Interview button.
- *
- * Every stage except Rejected. Gating interviews by stage is what made
- * re-attempts impossible before: a candidate whose L2 dropped out had already
- * been moved past the one stage that could book it, so the only route back was
- * to edit their status. The check that matters is not which stage they are in
- * but whether the round is still open for them, and the booking modal makes it.
- */
-const INTERVIEW_ASSIGN_STAGES: JobApplicationStatus[] = [
-  // Not before the exam has been sat: until then there is no paper to judge a candidate on, so an interview
-  // cannot be booked for them from the earlier stages.
-  'EXAM_COMPLETED',
-  'INTERVIEW_SCHEDULED',
-  'INTERVIEW_COMPLETED',
-  'SELECTED',
-];
-
 /**
  * Stages where the Interview column is shown unconditionally.
  *
