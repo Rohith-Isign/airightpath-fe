@@ -110,6 +110,9 @@ export function JobApplicationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramPrefix]);
 
+  /** The role the job itself names; empty when the posting has neither a role nor a title. */
+  const jobRole = job?.role?.trim() || job?.jobTitle?.trim() || '';
+
   // The role always follows the job on a new application (edit mode fills it from the saved application).
   useEffect(() => {
     if (job && !isEditMode) setValue('role', job.role || job.jobTitle || '');
@@ -267,7 +270,8 @@ export function JobApplicationPage() {
         mobileNumber: data.mobileNumber,
         experience: data.experience,
         address: data.address,
-        jobRole: data.role,
+        // A disabled field can come back empty from the form, so the job's own role is the fallback.
+        jobRole: data.role || jobRole,
         jobPrefix: job.jobPrefix,
       });
 
@@ -397,14 +401,17 @@ export function JobApplicationPage() {
               Fields marked <span className="text-[var(--error)]">*</span> are required.
             </p>
             {/* The role comes from the job being applied to, so it is shown first and cannot be edited. It is
-                read-only rather than disabled: a disabled field is left out of the submitted form data. */}
+                disabled like Email; the submit falls back to the job's role. A job that
+                names no role leaves the field open, so the candidate can still say what they are applying as. */}
             <Input
               label="Role"
               {...register('role')}
               error={errors.role?.message}
-              readOnly
-              tabIndex={-1}
-              helperText="Set by the job you are applying to"
+              // Disabled exactly like Email, so the two fixed fields look and behave the same.
+              disabled={!!jobRole}
+              autoComplete="off"
+              placeholder={jobRole ? undefined : 'Role you are applying for'}
+              helperText={jobRole ? 'Set by the job you are applying to' : undefined}
             />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
