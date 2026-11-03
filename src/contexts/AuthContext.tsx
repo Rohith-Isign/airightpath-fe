@@ -128,10 +128,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (e.data?.type === 'logout') {
         clearSession();
       } else if (e.data?.type === 'login') {
-        // Another tab logged in. Adopt the session only when this tab is still
-        // signed out — the access token is shared storage now, so holding one
-        // says nothing about whether this tab has loaded its user yet.
-        if (!isAuthenticatedRef.current) {
+        // Another tab logged in. The session cookies are shared by every tab, so
+        // from this moment this tab belongs to whoever just signed in. A signed-out
+        // tab adopts the session; a signed-in one re-reads who it is, otherwise it
+        // keeps showing the previous user (an admin's name over a candidate's
+        // session) until it is reloaded.
+        if (isAuthenticatedRef.current) {
+          void loadMe();
+        } else {
           bootstrapSession();
         }
       }
@@ -147,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authChannel?.removeEventListener('message', handleMessage);
       window.removeEventListener('auth:forceLogout', handleForceLogout);
     };
-  }, [bootstrapSession, clearSession]);
+  }, [bootstrapSession, clearSession, loadMe]);
 
   const login = useCallback(
     async (data: LoginRequest): Promise<{ roles: RoleName[] }> => {

@@ -699,8 +699,20 @@ export function AssignAssessmentPage() {
         formData.append('codingPassPercentage', String(parsePassMark(codingPassMark)));
       }
 
-      await assessmentService.assignMultipart(formData);
-      showToast(MESSAGES.admin.assign.assigned, 'success');
+      const res = await assessmentService.assignMultipart(formData);
+      // A candidate who already holds this paper, unsubmitted, is not sent a second invitation; say so rather than
+      // reporting a plain success.
+      const report = res.data as unknown as { assignedCount?: number; skippedCount?: number; message?: string };
+      if (report?.skippedCount) {
+        showToast(
+          report.assignedCount
+            ? `${report.assignedCount} assigned. ${report.skippedCount} skipped: already assigned and not yet submitted.`
+            : (report.message ?? 'Already assigned and not yet submitted.'),
+          'warning',
+        );
+      } else {
+        showToast(MESSAGES.admin.assign.assigned, 'success');
+      }
 
       // Reset form — including everything retained for the trip to another
       // module, so the next assign does not open pre-filled with the last one.
