@@ -27,6 +27,8 @@ const METER_CEILING_DB = -15;
 
 /** Weight of each new sample in the running average — low value = steady meter. */
 const SMOOTHING = 0.12;
+/** How often the readout is pushed to the screen, however often the microphone is sampled. */
+const PAINT_INTERVAL_MS = 120;
 
 /**
  * Measures background noise on a live mic stream via the Web Audio API.
@@ -46,6 +48,10 @@ export function useMicNoiseLevel(stream: MediaStream | null): UseMicNoiseLevelRe
   const loudForMsRef = useRef(0);
   const lastFrameRef = useRef(0);
   const smoothedRef = useRef(METER_FLOOR_DB);
+  // When the readout was last pushed to the screen. The meter is sampled every frame, but re-rendering the whole
+  // instructions page 60 times a second made it shimmer while scrolling.
+  const lastPaintRef = useRef(0);
+  const bandRef = useRef<NoiseBand>('quiet');
 
   useEffect(() => {
     if (!config.enabled || !stream || stream.getAudioTracks().length === 0) return;
@@ -96,13 +102,20 @@ export function useMicNoiseLevel(stream: MediaStream | null): UseMicNoiseLevelRe
           loudForMsRef.current = Math.max(loudForMsRef.current - elapsed * 2, 0);
         }
 
+        // The amber band is entered at warnDb but only left 3 dB lower, so a level hovering on the line does
+        // not flip the label (and the text under it) back and forth.
+        const moderateFloor = bandRef.current === 'moderate' ? config.warnDb - 3 : config.warnDb;
         let nextBand: NoiseBand = 'quiet';
         if (loudForMsRef.current >= config.sustainMs) nextBand = 'loud';
-        else if (smoothed >= config.warnDb) nextBand = 'moderate';
+        else if (smoothed >= moderateFloor) nextBand = 'moderate';
+        bandRef.current = nextBand;
 
-        setDb(smoothed);
-        setBand((prev) => (prev === nextBand ? prev : nextBand));
-        setMeasuring(true);
+        if (now - lastPaintRef.current >= PAINT_INTERVAL_MS) {
+          lastPaintRef.current = now;
+          setDb(smoothed);
+          setBand((prev) => (prev === nextBand ? prev : nextBand));
+          setMeasuring(true);
+        }
 
         rafId = requestAnimationFrame(tick);
       };

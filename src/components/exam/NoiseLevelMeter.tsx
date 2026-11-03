@@ -84,7 +84,8 @@ export function NoiseLevelMeter({ band, level, measuring, blocksStart }: Readonl
         <span>Noisy</span>
       </div>
 
-      <p className={`text-xs ${band === 'loud' && measuring ? style.text : 'text-[var(--textSecondary)]'}`}>
+      {/* Always room for the longest sentence, so a change of band never moves what is below the meter. */}
+      <p className={`min-h-[3.75rem] text-xs ${band === 'loud' && measuring ? style.text : 'text-[var(--textSecondary)]'}`}>
         {measuring
           ? style.help
           : 'Measuring the noise around you. Please stay quiet for a moment.'}
