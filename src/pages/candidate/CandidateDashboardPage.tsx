@@ -97,8 +97,8 @@ export function CandidateDashboardPage() {
   const completedExamCount = new Set(
     assessments.filter((a) => a.examAttended).map((a) => `${a.jobPrefix}|${a.assessmentType}`),
   ).size;
-  // One per job: applying to a job again does not make it a second job.
-  const appliedJobCount = new Set(applications.map((a) => a.jobPrefix)).size;
+  // Every application the candidate has, so the card always agrees with the "My Applications" list it links to.
+  const appliedJobCount = applications.length;
   const countOrDash = (count: number, didFail: boolean) => (didFail ? '--' : count);
 
   if (loading) {
