@@ -336,6 +336,22 @@ export function JobApplicationPage() {
     );
   }
 
+  // A submitted application is final: there is no form to change it, only the list to look at it.
+  if (isEditMode) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <CheckCircle className="w-12 h-12 mx-auto text-[var(--success)] mb-4" />
+        <h1 className="text-2xl font-bold text-[var(--text)]">You have already applied</h1>
+        <p className="mt-2 text-[var(--textSecondary)]">
+          {job.jobTitle} at {job.companyName}. A submitted application can't be edited.
+        </p>
+        <Button className="mt-6" onClick={() => navigate(ROUTES.CANDIDATE.APPLICATIONS)}>
+          View my applications
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>

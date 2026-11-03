@@ -98,21 +98,6 @@ export function MyApplicationsPage() {
     });
   }, [applications, searchQuery, filterStatus]);
 
-  const handleEdit = (app: JobApplicationDTO) => {
-    navigate(ROUTES.CANDIDATE.APPLY, {
-      state: {
-        job: {
-          jobPrefix: app.jobPrefix,
-          jobTitle: app.jobTitle ?? app.jobPrefix,
-          companyName: app.companyName ?? '',
-          applicationDeadline: app.applicationDeadline ?? '',
-          role: app.jobRole ?? '',
-        },
-        existingApplication: app,
-      },
-    });
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -246,13 +231,6 @@ export function MyApplicationsPage() {
                     >
                       View
                     </Button>
-                    <Button
-                      className="flex-1"
-                      onClick={() => handleEdit(app)}
-                      leftIcon={<FileText size={16} />}
-                    >
-                      Edit
-                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -272,9 +250,6 @@ export function MyApplicationsPage() {
             <>
               <Button variant="ghost" onClick={() => setSelectedApp(null)}>
                 Close
-              </Button>
-              <Button onClick={() => { setSelectedApp(null); handleEdit(selectedApp); }}>
-                Edit Application
               </Button>
             </>
           }
