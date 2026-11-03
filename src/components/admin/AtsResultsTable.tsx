@@ -16,6 +16,10 @@ interface AtsResultsTableProps {
   sortDirection?: 'asc' | 'desc';
   onSort: (field: AtsSortField) => void;
   onView: (candidate: JobApplicationDTO) => void;
+  /** Emails (lower-case) of the ticked rows. Omit, with the two handlers, for a table that cannot be selected from. */
+  selected?: ReadonlySet<string>;
+  onToggle?: (email: string) => void;
+  onToggleAll?: (emails: string[], checked: boolean) => void;
 }
 
 const SORT_OPTIONS: { field: AtsSortField; label: string }[] = [
@@ -123,7 +127,23 @@ export function AtsResultsTable({
   sortDirection,
   onSort,
   onView,
+  selected,
+  onToggle,
+  onToggleAll,
 }: Readonly<AtsResultsTableProps>) {
+  const selectable = !!selected && !!onToggle && !!onToggleAll;
+  const emailsShown = candidates.map((c) => getAppEmail(c).toLowerCase());
+  const allTicked = selectable && emailsShown.length > 0 && emailsShown.every((e) => selected.has(e));
+  const tick = (candidate: JobApplicationDTO) =>
+    selectable && (
+      <input
+        type="checkbox"
+        aria-label={`Select ${candidate.firstName} ${candidate.lastName}`}
+        checked={selected.has(getAppEmail(candidate).toLowerCase())}
+        onChange={() => onToggle(getAppEmail(candidate).toLowerCase())}
+        className="h-4 w-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+      />
+    );
   return (
     <>
       {/* ── Mobile / tablet: cards ─────────────────────────────────────── */}
@@ -163,6 +183,7 @@ export function AtsResultsTable({
             >
               {/* Rank + name + score */}
               <div className="flex items-start gap-3">
+                {tick(candidate)}
                 <span className="flex-shrink-0 w-8 h-8 rounded-xl bg-[var(--bgSubtle,var(--surface1))] flex items-center justify-center text-xs font-bold text-[var(--text)]">
                   {idx + 1}
                 </span>
@@ -233,6 +254,17 @@ export function AtsResultsTable({
         <Table className="table-fixed">
           <TableHeader>
             <TableRow>
+              {selectable && (
+                <TableHead className="w-10 px-3">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all shown"
+                    checked={allTicked}
+                    onChange={(e) => onToggleAll(emailsShown, e.target.checked)}
+                    className="h-4 w-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                  />
+                </TableHead>
+              )}
               <TableHead className="w-12 px-3">#</TableHead>
               <SortableHead
                 label="Candidate"
@@ -270,6 +302,7 @@ export function AtsResultsTable({
 
               return (
                 <TableRow key={candidate.id ?? getAppEmail(candidate)}>
+                  {selectable && <TableCell className="px-3 py-3 align-top">{tick(candidate)}</TableCell>}
                   <TableCell className="px-3 py-3 align-top">
                     <span className="text-sm font-bold text-[var(--text)]">#{idx + 1}</span>
                   </TableCell>

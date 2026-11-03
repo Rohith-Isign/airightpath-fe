@@ -59,6 +59,10 @@ export function AtsScreeningPage() {
   const [sortField, setSortField] = usePersistentState<SortField>('ats:sortField', 'matchPercent');
   const [sortDirection, setSortDirection] = usePersistentState<SortDirection>('ats:sortDirection', 'desc');
   const [searchQuery, setSearchQuery] = usePersistentState('ats:searchQuery', '');
+  /** Only candidates scoring at least this, as typed; empty means no limit. */
+  const [minScore, setMinScore] = useState('');
+  /** Rows ticked in the results, by lower-case email, to screen just those. */
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   // Candidates ticked on the Candidates page before coming here. Screening
   // defaults to just these — the admin already said who they meant.
@@ -173,12 +177,13 @@ export function AtsScreeningPage() {
     }
   }
 
-  async function handleScreenCandidates() {
+  async function handleScreenCandidates(emailsOverride?: string[]) {
     if (!selectedPrefix) {
       showToast(MESSAGES.admin.common.selectJobFirst, 'warning');
       return;
     }
-    const screenSelectedOnly = scope === 'selected' && scopeEmails.length > 0;
+    const emailsToScreen = emailsOverride ?? (scope === 'selected' ? scopeEmails : []);
+    const screenSelectedOnly = emailsToScreen.length > 0;
 
     setScreening(true);
     setRun(null);
@@ -186,7 +191,7 @@ export function AtsScreeningPage() {
       // Passing emails screens only those; omitting them screens the whole job.
       const res = await jobApplicationService.screen({
         jobPrefix: selectedPrefix,
-        ...(screenSelectedOnly ? { emails: scopeEmails } : {}),
+        ...(screenSelectedOnly ? { emails: emailsToScreen } : {}),
       });
       const report = res.data;
       setRun(report ?? null);
@@ -267,6 +272,12 @@ export function AtsScreeningPage() {
       list = list.filter(isAtsRejected);
     }
 
+    // Score: only those at or above the limit. A candidate with no score on record cannot meet it.
+    const limit = minScore.trim() === '' ? null : Number(minScore);
+    if (limit !== null && Number.isFinite(limit)) {
+      list = list.filter((c) => (usableAtsScore(c) ?? -1) >= limit);
+    }
+
     // Search
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -293,7 +304,7 @@ export function AtsScreeningPage() {
     });
 
     return list;
-  }, [visibleCandidates, activeTab, searchQuery, sortField, sortDirection]);
+  }, [visibleCandidates, activeTab, searchQuery, minScore, sortField, sortDirection]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -460,7 +471,7 @@ export function AtsScreeningPage() {
                 </div>
 
                 <Button
-                  onClick={handleScreenCandidates}
+                  onClick={() => handleScreenCandidates()}
                   isLoading={screening}
                   leftIcon={!screening ? <BarChart3 size={18} /> : undefined}
                   className="w-full"
@@ -594,13 +605,25 @@ export function AtsScreeningPage() {
                 </button>
               ))}
             </div>
-            <div className="w-full sm:w-64">
-              <Input
-                placeholder="Search candidates..."
-                leftIcon={<Search size={16} />}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <div className="w-full sm:w-36">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="Min score %"
+                  value={minScore}
+                  onChange={(e) => setMinScore(e.target.value)}
+                />
+              </div>
+              <div className="w-full sm:w-64">
+                <Input
+                  placeholder="Search candidates..."
+                  leftIcon={<Search size={16} />}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
@@ -613,6 +636,21 @@ export function AtsScreeningPage() {
                     ? `Just Screened (${filteredCandidates.length})`
                     : `Screening Results (${filteredCandidates.length})`}
                 </CardTitle>
+
+                {picked.size > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      isLoading={screening}
+                      onClick={() => handleScreenCandidates(Array.from(picked))}
+                    >
+                      Screen selected ({picked.size})
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+                      Clear
+                    </Button>
+                  </div>
+                )}
 
                 {/* After a scoped run the table is narrowed to those
                     candidates — say so, and offer the way back. */}
@@ -665,6 +703,22 @@ export function AtsScreeningPage() {
                   sortDirection={sortDirection}
                   onSort={toggleSort}
                   onView={setSelectedCandidate}
+                  selected={picked}
+                  onToggle={(email) =>
+                    setPicked((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(email)) next.delete(email);
+                      else next.add(email);
+                      return next;
+                    })
+                  }
+                  onToggleAll={(emails, checked) =>
+                    setPicked((prev) => {
+                      const next = new Set(prev);
+                      emails.forEach((e) => (checked ? next.add(e) : next.delete(e)));
+                      return next;
+                    })
+                  }
                 />
               )}
             </CardContent>
