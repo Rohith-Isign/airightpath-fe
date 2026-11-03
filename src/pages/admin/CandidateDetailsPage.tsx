@@ -1,4 +1,5 @@
 import { INTERVIEW_ASSIGN_STAGES } from '@/utils/interview-assign-stages';
+import { INTERVIEW_PHASES, stageOf } from '@/utils/interview-phase';
 import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
 import { resumeExtensionForType } from '@/utils/file.utils';
 import { useState, useEffect, useMemo } from 'react';
@@ -91,6 +92,7 @@ const INTERVIEW_COLUMN_STAGES: JobApplicationStatus[] = [
   'EXAM_COMPLETED',
   'INTERVIEW_SCHEDULED',
   'INTERVIEW_COMPLETED',
+  ...INTERVIEW_PHASES,
   'SELECTED',
 ];
 
@@ -98,6 +100,7 @@ const RESULT_STAGES: JobApplicationStatus[] = [
   'EXAM_COMPLETED',
   'INTERVIEW_SCHEDULED',
   'INTERVIEW_COMPLETED',
+  ...INTERVIEW_PHASES,
   'SELECTED',
 ];
 
@@ -113,6 +116,7 @@ const EXAM_STAGES: JobApplicationStatus[] = [
   'EXAM_COMPLETED',
   'INTERVIEW_SCHEDULED',
   'INTERVIEW_COMPLETED',
+  ...INTERVIEW_PHASES,
   'SELECTED',
 ];
 
@@ -125,6 +129,19 @@ const EXAM_STAGES: JobApplicationStatus[] = [
  * though — see LEGACY_STAGE.
  */
 const STAGES: JobApplicationStatus[] = [
+  'APPLIED',
+  'SHORTLISTED',
+  'ACKNOWLEDGED',
+  'RECONFIRMED',
+  'EXAM_SENT',
+  'EXAM_COMPLETED',
+  // One phase per interview round, in the order a candidate moves through them.
+  ...INTERVIEW_PHASES,
+  'SELECTED',
+];
+
+/** Statuses an application can actually hold, as opposed to the phase tabs derived from its interviews. */
+const STORED_STATUSES: JobApplicationStatus[] = [
   'APPLIED',
   'SHORTLISTED',
   'ACKNOWLEDGED',
@@ -164,6 +181,11 @@ const STAGE_LABELS: Record<string, string> = {
   // actually needs sending sits behind on Exam Completed.
   INTERVIEW_SCHEDULED: 'Interview Sent',
   INTERVIEW_COMPLETED: 'Interview Done',
+  // The interview phases: one tab per round, so L2 and L3 are tracked on their own.
+  L2_SENT: 'L2 Sent',
+  L2_DONE: 'L2 Done',
+  L3_SENT: 'L3 Sent',
+  L3_DONE: 'L3 Done',
   SELECTED: 'Selected',
   REJECTED: 'Rejected',
 };
@@ -240,6 +262,11 @@ const STAGE_ACTIONS: Record<string, BulkAction[]> = {
   EXAM_COMPLETED: ['rejection'],
   INTERVIEW_SCHEDULED: ['rejection'],
   INTERVIEW_COMPLETED: ['success', 'rejection'],
+  L2_SENT: ['rejection'],
+  // Booking the next round is on the interview buttons, which lead with the step that follows this phase.
+  L2_DONE: ['success', 'rejection'],
+  L3_SENT: ['rejection'],
+  L3_DONE: ['success', 'rejection'],
   SELECTED: ['rejection'],
 };
 
@@ -350,16 +377,40 @@ export function CandidateDetailsPage() {
     }
   }
 
+  /**
+   * Every interview booked on this job — one read, two readers.
+   *
+   * The Interview column reports where each candidate stands; the booking modal
+   * refuses to double-book a round that is still live. Both have to agree, so
+   * both come from here rather than fetching separately.
+   *
+   * Loaded for the whole job rather than the stage on screen, because that is
+   * exactly the point: a candidate sitting at "Interview" and one at "Interview
+   * Done" are the two the admin is trying to tell apart, and they live on
+   * different tabs.
+   */
+  const {
+    schedules: interviewSchedules,
+    standings: interviewStandings,
+    loading: interviewsLoading,
+    failed: interviewsFailed,
+    reload: reloadInterviews,
+  } = useJobInterviews(selectedPrefix);
+
+  /** The tab a candidate sits on: their stored status, with the interview stage split into L2 and L3 phases. */
+  const stageFor = (c: JobApplicationDTO) =>
+    stageOf(c.status, interviewStandings.get(getAppEmail(c).toLowerCase()));
+
   const filteredCandidates = candidates.filter((c) => {
     const status = c.status ?? '';
     if (activeStage === ('REJECTED' as JobApplicationStatus)) {
       return status === 'REJECTED';
     }
-    return status === activeStage;
+    return stageFor(c) === activeStage;
   });
 
   const stageCounts = STAGES.reduce<Record<string, number>>((acc, stage) => {
-    acc[stage] = candidates.filter((c) => (c.status ?? '') === stage).length;
+    acc[stage] = candidates.filter((c) => stageFor(c) === stage).length;
     return acc;
   }, {});
 
@@ -374,7 +425,7 @@ export function CandidateDetailsPage() {
   const unknownCount = candidates.filter(
     (c) =>
       !c.status ||
-      (!STAGES.includes(c.status as JobApplicationStatus) &&
+      (!STORED_STATUSES.includes(c.status as JobApplicationStatus) &&
         c.status !== 'REJECTED' &&
         c.status !== LEGACY_STAGE)
   ).length;
@@ -383,6 +434,9 @@ export function CandidateDetailsPage() {
   // no longer on screen — Ack Back once the last application has left it. Without
   // this the page opens on a stage with nothing highlighted and no rows.
   useEffect(() => {
+    // A tab remembered from before interviews were split by round.
+    if ((activeStage as string) === 'INTERVIEW_SCHEDULED') setActiveStage('L2_SENT' as JobApplicationStatus);
+    if ((activeStage as string) === 'INTERVIEW_COMPLETED') setActiveStage('L2_DONE' as JobApplicationStatus);
     if (activeStage === LEGACY_STAGE && legacyCount === 0 && !loadingCandidates) {
       setActiveStage('APPLIED');
     }
@@ -418,26 +472,6 @@ export function CandidateDetailsPage() {
   );
 
   /**
-   * Every interview booked on this job — one read, two readers.
-   *
-   * The Interview column reports where each candidate stands; the booking modal
-   * refuses to double-book a round that is still live. Both have to agree, so
-   * both come from here rather than fetching separately.
-   *
-   * Loaded for the whole job rather than the stage on screen, because that is
-   * exactly the point: a candidate sitting at "Interview" and one at "Interview
-   * Done" are the two the admin is trying to tell apart, and they live on
-   * different tabs.
-   */
-  const {
-    schedules: interviewSchedules,
-    standings: interviewStandings,
-    loading: interviewsLoading,
-    failed: interviewsFailed,
-    reload: reloadInterviews,
-  } = useJobInterviews(selectedPrefix);
-
-  /**
    * Whether the Interview column is worth a column.
    *
    * Shown from the exam onward, and on any stage where somebody on screen has
@@ -456,9 +490,35 @@ export function CandidateDetailsPage() {
       interviewStandings.get(email.toLowerCase())?.rounds.some((r) => r.round === round),
     );
 
+  /**
+   * Interviews are booked on the Schedule Interview screen, which is where start, end, prompt and eligibility
+   * live. This hands it the job, the round and who was picked, the same way Assign Assessment is reached.
+   */
+  function goToInterviewScheduler(round: InterviewRound, emails?: string[]) {
+    const who = emails ?? Array.from(selectedEmails);
+    if (who.length === 0) {
+      showToast(MESSAGES.admin.common.selectCandidate, 'warning');
+      return;
+    }
+    navigate(ROUTES.ADMIN.INTERVIEWS_SCHEDULE, {
+      state: {
+        jobPrefix: selectedPrefix,
+        emails: who,
+        round,
+        from: { label: 'Candidates', path: ROUTES.ADMIN.CANDIDATES },
+      },
+    });
+  }
+
+  /** Whether anyone selected has this round booked and not yet started, which makes the action an edit. */
+  const selectionHasPendingRound = (round: InterviewRound) =>
+    selectedEmailList.some((email) =>
+      interviewStandings.get(email.toLowerCase())?.rounds.some((r) => r.round === round && r.state === 'pending'),
+    );
+
   /** A row's own Assign / Reassign button: that one candidate, that one round. */
   function assignInterviewFor(candidate: JobApplicationDTO, round: InterviewRound) {
-    openActionModal('interview', round, [getAppEmail(candidate)]);
+    goToInterviewScheduler(round, [getAppEmail(candidate)]);
   }
 
   // Available actions for the current stage
@@ -1051,22 +1111,33 @@ export function CandidateDetailsPage() {
                   round being re-booked. */}
               {INTERVIEW_ASSIGN_STAGES.includes(activeStage) &&
                 INTERVIEW_ROUNDS.map((round) => {
-                  const again = selectionHasRound(round);
+                  // By phase first: a candidate on L2 Done has had L2, so it is a Reassign whether or not anyone is ticked
+                  // yet; on L3 Sent / L3 Done both rounds have been booked. The selection can add to that, not take away.
+                  const phaseHasRound =
+                    round === 'L2_TECHNICAL'
+                      ? (['L2_SENT', 'L2_DONE', 'L3_SENT', 'L3_DONE'] as string[]).includes(activeStage)
+                      : (['L3_SENT', 'L3_DONE'] as string[]).includes(activeStage);
+                  const again = phaseHasRound || selectionHasRound(round);
+                  const editing = selectionHasPendingRound(round);
                   const short = round === 'L2_TECHNICAL' ? 'L2' : 'L3';
+                  // The step that follows the phase being looked at leads: L2 once the exam is done, L3 once L2 is.
+                  const isNextStep =
+                    (round === 'L2_TECHNICAL' && activeStage === ('EXAM_COMPLETED' as JobApplicationStatus)) ||
+                    (round === 'L3_BEHAVIORAL' && activeStage === ('L2_DONE' as JobApplicationStatus));
                   return (
                     <Button
                       key={round}
-                      variant="outline"
+                      variant={isNextStep ? 'primary' : 'outline'}
                       size="sm"
                       leftIcon={again ? <RotateCcw size={16} /> : <Video size={16} />}
-                      onClick={() => openActionModal('interview', round)}
+                      onClick={() => goToInterviewScheduler(round)}
                       title={
                         again
                           ? `Books a further ${short} attempt. A ${short} that is still open is skipped.`
                           : `Books the ${INTERVIEW_ROUND_LABELS[round]} interview for the selected candidates.`
                       }
                     >
-                      {again ? 'Reassign' : 'Assign'} {short} Interview
+                      {isNextStep && !again ? 'Move to' : editing ? 'Edit' : again ? 'Reassign' : 'Assign'} {short} Interview
                       {selectedEmails.size > 0 ? ` (${selectedEmails.size})` : ''}
                     </Button>
                   );

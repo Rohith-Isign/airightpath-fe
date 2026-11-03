@@ -160,7 +160,7 @@ export function buildInterviewStandings(
 }
 
 /** What an admin can do about one round for one candidate, from where that round stands. */
-export type RoundAction = 'assign' | 'reassign' | null;
+export type RoundAction = 'assign' | 'edit' | 'reassign' | null;
 
 /**
  * The next step offered for a round, derived from the candidate's standing.
@@ -186,7 +186,8 @@ export function roundAction(
     return 'assign';
   }
 
-  if (own!.outstanding) return null;
+  // Booked and not yet started: nothing to book again, but the times and prompt can still be changed.
+  if (own!.outstanding) return own!.state === 'pending' ? 'edit' : null;
   const passed = own!.state === 'completed' && own!.result === 'PASSED';
   // Finished and passed, or finished and still being judged: nothing to redo.
   if (passed || (own!.state === 'completed' && own!.result === 'PENDING')) return null;

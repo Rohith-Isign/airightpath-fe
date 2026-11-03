@@ -1,17 +1,25 @@
 import type { JobApplicationStatus } from '@/types/job.types';
+import { INTERVIEW_PHASES } from '@/utils/interview-phase';
 
 /**
  * Stages from which an interview can be booked (or booked again), for the Candidates screen and the Schedule
  * Interview screen alike.
  *
- * Not before the exam has been sat: until then there is no paper to judge a candidate on. From then on the stage
- * does not matter, because a re-attempt is needed exactly where a candidate's stage has already moved past the round
- * being re-booked (a candidate who failed L2 is at Interview Completed). What matters is whether the round is still
- * open for them, and the server refuses a round that is.
+ * Every stage except Rejected. An admin can book L2 or L3 at any point, with or without an assessment: some
+ * candidates are interviewed without sitting the exam, and a candidate whose stage has moved past a round still needs
+ * that round booked again. What matters is whether the round is still open for the candidate, and the server refuses
+ * a round that is.
  */
 export const INTERVIEW_ASSIGN_STAGES: JobApplicationStatus[] = [
+  'APPLIED',
+  'SHORTLISTED',
+  'ACKNOWLEDGED',
+  'ACKNOWLEDGED_BACK' as JobApplicationStatus,
+  'RECONFIRMED',
+  'EXAM_SENT',
   'EXAM_COMPLETED',
   'INTERVIEW_SCHEDULED',
   'INTERVIEW_COMPLETED',
+  ...INTERVIEW_PHASES,
   'SELECTED',
 ];

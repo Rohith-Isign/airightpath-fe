@@ -38,7 +38,7 @@ const STATE_DISPLAY: Record<
 };
 
 /** What the round's own action button says. */
-const ACTION_LABEL = { assign: 'Assign', reassign: 'Reassign' } as const;
+const ACTION_LABEL = { assign: 'Assign', edit: 'Edit', reassign: 'Reassign' } as const;
 
 /** One round of the candidate's journey: where it stands, and the one thing that can be done next. */
 function RoundTrack({
@@ -49,7 +49,7 @@ function RoundTrack({
 }: Readonly<{
   round: InterviewRound;
   standing?: RoundStanding;
-  action: 'assign' | 'reassign' | null;
+  action: 'assign' | 'edit' | 'reassign' | null;
   onAssign?: (round: InterviewRound) => void;
 }>) {
   const display = standing ? STATE_DISPLAY[standing.state] : null;
@@ -106,7 +106,7 @@ function RoundTrack({
         <Button
           size="sm"
           variant={action === 'assign' ? 'primary' : 'outline'}
-          leftIcon={action === 'assign' ? <Video size={12} /> : <RotateCcw size={12} />}
+          leftIcon={action === 'reassign' ? <RotateCcw size={12} /> : <Video size={12} />}
           onClick={() => onAssign(round)}
         >
           {ACTION_LABEL[action]} {round === 'L2_TECHNICAL' ? 'L2' : 'L3'}

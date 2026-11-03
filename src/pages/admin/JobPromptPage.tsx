@@ -188,9 +188,11 @@ export function JobPromptPage() {
 
   // Open directly in edit mode for a job when navigated here (e.g. from Assign).
   useEffect(() => {
-    const navState = location.state as { jobPrefix?: string } | null;
+    const navState = location.state as { jobPrefix?: string; tab?: string } | null;
     if (navState?.jobPrefix) {
       openEditor(navState.jobPrefix);
+      // Straight to the prompt being worked on, e.g. the L2 prompt of the round just being booked.
+      if (navState.tab && PROMPT_TABS.some((t) => t.key === navState.tab)) setActiveTab(navState.tab);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
@@ -42,13 +43,21 @@ export function InterviewPromptPanel({
   jobPrefix,
   round,
   onConfiguredChange,
+  getReturnState,
+  originLabel = 'Schedule Interview',
 }: Readonly<{
   jobPrefix: string;
   round: InterviewRound;
+  /** What the screen needs back to look exactly as it was when the admin returns from the full editor. */
+  getReturnState?: () => unknown;
+  /** Name of this screen, for the "Back to …" link on the editor. */
+  originLabel?: string;
   /** Lets the page warn, or block, when nothing is configured. */
   onConfiguredChange?: (configured: boolean) => void;
 }>) {
   const { showToast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [prompts, setPrompts] = useState<PromptRecord[]>([]);
   const [defaults, setDefaults] = useState<DefaultPromptRecord[]>([]);
@@ -56,6 +65,25 @@ export function InterviewPromptPanel({
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
+
+  /**
+   * Opens the full prompt editor on this job's prompt for this round, in the same tab.
+   *
+   * The screen's state is written into its own history entry first (so the browser's Back button returns to it as
+   * it was) and handed to the editor's "Back to …" link (so that does too). The panel re-reads the prompt when the
+   * screen is shown again, so an edit made there is what is displayed here.
+   */
+  function openFullEditor() {
+    const returnState = getReturnState?.();
+    if (returnState !== undefined) navigate(location.pathname, { replace: true, state: returnState });
+    navigate(ROUTES.ADMIN.PROMPTS, {
+      state: {
+        jobPrefix,
+        tab: round === 'L2_TECHNICAL' ? 'interview-l2-start' : 'interview-l3-start',
+        from: { label: originLabel, path: location.pathname, state: returnState ?? location.state },
+      },
+    });
+  }
 
   const load = useCallback(async () => {
     if (!jobPrefix) return;
@@ -208,7 +236,7 @@ export function InterviewPromptPanel({
             variant="ghost"
             size="sm"
             leftIcon={<ExternalLink size={14} />}
-            onClick={() => window.open(ROUTES.ADMIN.PROMPTS, '_blank')}
+            onClick={openFullEditor}
             title="Placeholders and evaluation categories live in the full editor"
           >
             Full editor

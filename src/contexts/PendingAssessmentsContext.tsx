@@ -71,7 +71,7 @@ export function PendingAssessmentsProvider({ children }: { children: ReactNode }
   }, [fetchPending]);
 
   // Re-check on a timer and whenever the tab is shown again, so something an admin sends while this page is open
-  // reaches the badge — and finishing in another tab, or a deadline passing, clears it.
+  // reaches the badge â€” and finishing in another tab, or a deadline passing, clears it.
   useBackgroundRefresh(() => void fetchPending(), CANDIDATE_REFRESH_MS, isCandidate);
 
   return (
