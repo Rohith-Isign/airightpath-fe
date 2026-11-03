@@ -29,6 +29,8 @@ const METER_CEILING_DB = -15;
 const SMOOTHING = 0.12;
 /** How often the readout is pushed to the screen, however often the microphone is sampled. */
 const PAINT_INTERVAL_MS = 120;
+/** The longest a single frame is allowed to count for when accumulating sustained noise. */
+const MAX_FRAME_MS = 100;
 
 /**
  * Measures background noise on a live mic stream via the Web Audio API.
@@ -91,8 +93,14 @@ export function useMicNoiseLevel(stream: MediaStream | null): UseMicNoiseLevelRe
         smoothedRef.current = smoothed;
 
         const now = performance.now();
-        const elapsed = now - lastFrameRef.current;
+        // A frame that arrives late (the tab was in the background, a notification took focus) is counted as one
+        // ordinary frame, not as all the seconds it was away: otherwise one loud moment before the pause
+        // reads as noise sustained through it, and the Start button stays blocked.
+        const elapsed = Math.min(now - lastFrameRef.current, MAX_FRAME_MS);
         lastFrameRef.current = now;
+        // The browser may suspend the audio context while the page is not in front; the meter would then read
+        // its last sample forever.
+        if (audioContext && audioContext.state === 'suspended') void audioContext.resume().catch(() => {});
 
         // Time above the red threshold accumulates; anything quieter drains it
         // twice as fast, so the meter recovers quickly once the noise stops.
