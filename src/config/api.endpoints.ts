@@ -70,6 +70,7 @@ export const ENDPOINTS = {
       `/api/job-applications/filterByPrefix/${seg(prefix)}`,
     // Screening run: whole job, or only the emails passed in.
     SCREEN: "/api/job-applications/screen",
+    SCORE_CHECK: "/api/job-applications/score-check",
     SEND_ACK_MAIL: "/api/job-applications/send-ack-mail",
     SEND_REJECTION_MAIL: "/api/job-applications/send-rejection-mail",
     SEND_RECONFIRMATION_MAIL: "/api/job-applications/send-reconfirmation-mail",

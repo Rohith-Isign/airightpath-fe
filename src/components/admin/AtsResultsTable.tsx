@@ -20,6 +20,8 @@ interface AtsResultsTableProps {
   selected?: ReadonlySet<string>;
   onToggle?: (email: string) => void;
   onToggleAll?: (emails: string[], checked: boolean) => void;
+  /** Scores looked up with "Check score", by lower-case email. Shown where no stored score exists. Nothing was saved. */
+  checkedScores?: Readonly<Record<string, number>>;
 }
 
 const SORT_OPTIONS: { field: AtsSortField; label: string }[] = [
@@ -130,7 +132,10 @@ export function AtsResultsTable({
   selected,
   onToggle,
   onToggleAll,
+  checkedScores,
 }: Readonly<AtsResultsTableProps>) {
+  const scoreOf = (candidate: JobApplicationDTO) =>
+    usableAtsScore(candidate) ?? checkedScores?.[getAppEmail(candidate).toLowerCase()] ?? null;
   const selectable = !!selected && !!onToggle && !!onToggleAll;
   const emailsShown = candidates.map((c) => getAppEmail(c).toLowerCase());
   const allTicked = selectable && emailsShown.length > 0 && emailsShown.every((e) => selected.has(e));
@@ -174,7 +179,8 @@ export function AtsResultsTable({
         </div>
 
         {candidates.map((candidate, idx) => {
-          const { score, isShortlisted, shortlistLabel, scanDone } = readCandidate(candidate);
+          const { isShortlisted, shortlistLabel, scanDone } = readCandidate(candidate);
+          const score = scoreOf(candidate);
 
           return (
             <div
@@ -298,7 +304,8 @@ export function AtsResultsTable({
           </TableHeader>
           <TableBody>
             {candidates.map((candidate, idx) => {
-              const { score, isShortlisted, shortlistLabel, scanDone } = readCandidate(candidate);
+              const { isShortlisted, shortlistLabel, scanDone } = readCandidate(candidate);
+          const score = scoreOf(candidate);
 
               return (
                 <TableRow key={candidate.id ?? getAppEmail(candidate)}>

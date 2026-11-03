@@ -63,6 +63,9 @@ export function AtsScreeningPage() {
   const [minScore, setMinScore] = useState('');
   /** Rows ticked in the results, by lower-case email, to screen just those. */
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  /** Scores from "Check score": shown in the table, never saved. */
+  const [checkedScores, setCheckedScores] = useState<Record<string, number>>({});
+  const [checking, setChecking] = useState(false);
 
   // Candidates ticked on the Candidates page before coming here. Screening
   // defaults to just these — the admin already said who they meant.
@@ -220,6 +223,31 @@ export function AtsScreeningPage() {
       // by the server's own message).
     } finally {
       setScreening(false);
+    }
+  }
+
+  /** Looks up what the ticked candidates would score. Changes nothing: no stage, no stored score. */
+  async function handleCheckScores() {
+    if (!selectedPrefix || picked.size === 0) return;
+    setChecking(true);
+    try {
+      const res = await jobApplicationService.checkScores({ jobPrefix: selectedPrefix, emails: Array.from(picked) });
+      const found: Record<string, number> = {};
+      (res.data ?? []).forEach((row) => {
+        if (row.matchPercent != null) found[row.email.toLowerCase()] = row.matchPercent;
+      });
+      setCheckedScores((prev) => ({ ...prev, ...found }));
+      const missing = (res.data ?? []).filter((row) => row.matchPercent == null).length;
+      showToast(
+        missing > 0
+          ? `Scores checked. ${missing} had no readable resume. Nothing was changed.`
+          : 'Scores checked. Nothing was changed.',
+        'info',
+      );
+    } catch {
+      // Error toast auto-handled by the interceptor.
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -639,6 +667,9 @@ export function AtsScreeningPage() {
 
                 {picked.size > 0 && (
                   <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" isLoading={checking} onClick={handleCheckScores}>
+                      Check score ({picked.size})
+                    </Button>
                     <Button
                       size="sm"
                       isLoading={screening}
@@ -704,6 +735,7 @@ export function AtsScreeningPage() {
                   onSort={toggleSort}
                   onView={setSelectedCandidate}
                   selected={picked}
+                  checkedScores={checkedScores}
                   onToggle={(email) =>
                     setPicked((prev) => {
                       const next = new Set(prev);
