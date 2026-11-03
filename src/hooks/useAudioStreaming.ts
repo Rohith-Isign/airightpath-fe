@@ -43,17 +43,6 @@ const SILENCE_FLOOR = parseFloat(import.meta.env.VITE_TRANSCRIPTION_SILENCE_FLOO
  */
 const MIN_SPEECH_READINGS = parseInt(import.meta.env.VITE_TRANSCRIPTION_MIN_SPEECH_READINGS ?? '', 10) || 6;
 
-/**
- * How far above the room's own background level a reading must be to count as speech.
- *
- * A fixed floor cannot tell a fan from a voice: steady noise sits above it for the whole recording, so every
- * chunk of it was sent and Whisper made sentences out of it. The background level is tracked as the lowest the
- * sound recently fell to (see `ambientRef`), and only sound clearly above that counts.
- */
-const SPEECH_OVER_AMBIENT = parseFloat(import.meta.env.VITE_TRANSCRIPTION_SPEECH_OVER_AMBIENT ?? '') || 5;
-/** How fast the tracked background level is allowed to creep up per reading, so speech cannot raise it for long. */
-const AMBIENT_RISE_PER_READING = 0.02;
-
 /** A pause this long is a place to cut the audio without splitting a word. */
 const PAUSE_MS = 700;
 /** Past the longest chunk, a shorter pause will do. */
@@ -131,14 +120,6 @@ export function useAudioStreaming(
    * from a measurement that actually happened.
    */
   const levelObservedRef = useRef(false);
-  /**
-   * The room's background level: the lowest speech-band reading lately, allowed to rise only slowly.
-   *
-   * Speech has gaps between words and sentences, which pull this down to the room's own noise; a fan or traffic
-   * never has gaps, so it stays where the noise is and nothing above it ever shows up. Starts unset and takes the
-   * first reading, so the first words of an answer are judged against how the room sounds before they begin.
-   */
-  const ambientRef = useRef<number | null>(null);
 
   /** Send a complete audio blob to the backend via WebSocket. */
   const sendChunk = useCallback(
@@ -238,8 +219,6 @@ export function useAudioStreaming(
 
   /** Item 12: Start audio level monitoring using AnalyserNode */
   const startLevelMonitoring = useCallback((stream: MediaStream) => {
-    // A new answer, possibly in a different place or on a different microphone: learn the room again.
-    ambientRef.current = null;
     try {
       const ctx = new AudioContext();
       const analyser = ctx.createAnalyser();
@@ -282,11 +261,7 @@ export function useAudioStreaming(
         if (speechLevel > peakSinceChunkRef.current) {
           peakSinceChunkRef.current = speechLevel;
         }
-        const ambient = ambientRef.current === null
-          ? speechLevel
-          : Math.min(speechLevel, ambientRef.current + AMBIENT_RISE_PER_READING);
-        ambientRef.current = ambient;
-        if (speechLevel >= SILENCE_FLOOR && speechLevel >= ambient + SPEECH_OVER_AMBIENT) {
+        if (speechLevel >= SILENCE_FLOOR) {
           loudReadingsRef.current += 1;
           quietSinceRef.current = null;
         } else if (quietSinceRef.current === null) {

@@ -72,10 +72,8 @@ export const APP_CONFIG = {
    * minimum rather than on a timer, so a word is not split in half, and cut anyway at the maximum. An ordinary
    * answer is one call. At 32 kbit/s, three minutes is under a megabyte.
    */
-  // Cut at the next pause after this long. Short on purpose: Whisper reads about thirty seconds at a time, and in a
-  // two-minute chunk a few seconds of speech let minutes of room noise through the silence check and be transcribed.
-  AUDIO_CHUNK_SECONDS: Number(import.meta.env.VITE_AUDIO_CHUNK_MIN_SECONDS) || 20,
-  AUDIO_CHUNK_MAX_SECONDS: Number(import.meta.env.VITE_AUDIO_CHUNK_MAX_SECONDS) || 40,
+  AUDIO_CHUNK_SECONDS: Number(import.meta.env.VITE_AUDIO_CHUNK_MIN_SECONDS) || 120,
+  AUDIO_CHUNK_MAX_SECONDS: Number(import.meta.env.VITE_AUDIO_CHUNK_MAX_SECONDS) || 180,
   AUDIO_CHUNK_MIME_TYPE: "audio/webm;codecs=opus",
   /**
    * Warnings before the candidate is told their conduct is being noted.
