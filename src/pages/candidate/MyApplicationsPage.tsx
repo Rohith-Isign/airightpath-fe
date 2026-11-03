@@ -85,7 +85,13 @@ export function MyApplicationsPage() {
   }, [applications]);
 
   const filteredApplications = useMemo(() => {
-    return applications.filter((app) => {
+    // Newest first: the application made last is the first one listed. The id breaks ties and stands in when a
+    // row has no creation time.
+    const newestFirst = [...applications].sort((a, b) => {
+      const byTime = (Date.parse(b.createdAt ?? '') || 0) - (Date.parse(a.createdAt ?? '') || 0);
+      return byTime || (b.id ?? 0) - (a.id ?? 0);
+    });
+    return newestFirst.filter((app) => {
       const matchesSearch =
         !searchQuery ||
         (app.jobTitle ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
