@@ -110,6 +110,11 @@ export function JobApplicationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramPrefix]);
 
+  // The role always follows the job on a new application (edit mode fills it from the saved application).
+  useEffect(() => {
+    if (job && !isEditMode) setValue('role', job.role || job.jobTitle || '');
+  }, [job, isEditMode, setValue]);
+
   // Check deadline
   useEffect(() => {
     if (job?.applicationDeadline) {
@@ -375,6 +380,17 @@ export function JobApplicationPage() {
             <p className="text-xs text-[var(--textSecondary)]">
               Fields marked <span className="text-[var(--error)]">*</span> are required.
             </p>
+            {/* The role comes from the job being applied to, so it is shown first and cannot be edited. It is
+                read-only rather than disabled: a disabled field is left out of the submitted form data. */}
+            <Input
+              label="Role"
+              {...register('role')}
+              error={errors.role?.message}
+              readOnly
+              tabIndex={-1}
+              helperText="Set by the job you are applying to"
+            />
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
                 label="First Name"
@@ -431,14 +447,6 @@ export function JobApplicationPage() {
               {...register('address')}
               error={errors.address?.message}
               placeholder="Enter your address"
-            />
-
-            <Input
-              label="Role"
-              required
-              {...register('role')}
-              error={errors.role?.message}
-              placeholder="Applied role"
             />
 
             {/* Referral — editable on a new application; read-only when editing
