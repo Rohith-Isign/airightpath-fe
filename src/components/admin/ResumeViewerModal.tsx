@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -21,27 +21,53 @@ function kindOf(resume: ResumeView): ResumeKind {
   return 'other';
 }
 
-/** A Word document turned into HTML in the browser, so it can be read here instead of downloaded. */
+/**
+ * A Word document drawn the way Word draws it: page, margins, fonts, shaded section bars, centred headings and
+ * bullet glyphs all kept.
+ *
+ * Rendered by `docx-preview`, which lays the document out from its own styles. The earlier converter kept only the
+ * text structure (headings and lists), so a resume that is carefully formatted in Word came out as a plain list.
+ */
 function DocxPreview({ resume }: Readonly<{ resume: ResumeView }>) {
-  const [html, setHtml] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
 
   useEffect(() => {
     let cancelled = false;
-    setHtml(null);
-    setFailed(false);
+    setStatus('loading');
     (async () => {
       try {
-        // Loaded on demand: the converter is large and only Word resumes need it.
-        const [mammoth, { default: DOMPurify }] = await Promise.all([
-          import('mammoth'),
-          import('dompurify'),
-        ]);
+        // Loaded on demand: the renderer is large and only Word resumes need it.
+        const { renderAsync } = await import('docx-preview');
         const buffer = await (await fetch(resume.url)).arrayBuffer();
-        const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
-        if (!cancelled) setHtml(DOMPurify.sanitize(result.value));
+        const host = hostRef.current;
+        if (cancelled || !host) return;
+        host.innerHTML = '';
+        await renderAsync(buffer, host, undefined, {
+          className: 'docx',
+          inWrapper: true,
+          // Images are inlined, so nothing the document points at is fetched by this page.
+          useBase64URL: true,
+          breakPages: true,
+          renderHeaders: true,
+          renderFooters: true,
+          renderFootnotes: true,
+        });
+        if (cancelled) return;
+        // The document is the candidate's, not ours: only ordinary links are left clickable, and they open
+        // elsewhere. Scripts are never run by the renderer; this closes the one remaining route, a link.
+        host.querySelectorAll('a').forEach((link) => {
+          const href = link.getAttribute('href') ?? '';
+          if (/^(https?:|mailto:)/i.test(href)) {
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+          } else {
+            link.removeAttribute('href');
+          }
+        });
+        setStatus(host.textContent?.trim() ? 'ready' : 'failed');
       } catch {
-        if (!cancelled) setFailed(true);
+        if (!cancelled) setStatus('failed');
       }
     })();
     return () => {
@@ -49,23 +75,24 @@ function DocxPreview({ resume }: Readonly<{ resume: ResumeView }>) {
     };
   }, [resume.url]);
 
-  if (failed) return <NoPreview resume={resume} message="This Word document could not be previewed here." />;
-  if (html === null) {
-    return (
-      <div className="flex h-[40vh] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-[var(--primary)]" />
-      </div>
-    );
-  }
-  if (!html.trim()) {
-    return <NoPreview resume={resume} message="This Word document has no text to preview." />;
-  }
   return (
-    <div
-      className="h-[70vh] overflow-auto rounded-lg border border-[var(--border)] bg-white p-6 text-sm leading-relaxed text-black [&_h1]:mb-2 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-2 [&_table]:w-full [&_td]:border [&_td]:p-1"
-      // The HTML is sanitised above; nothing in a resume may run script on this page.
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div className="relative">
+      {status === 'failed' && (
+        <NoPreview resume={resume} message="This Word document could not be previewed here." />
+      )}
+      {status === 'loading' && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70">
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--primary)]" />
+        </div>
+      )}
+      {/* Always mounted: the renderer needs the element to draw into. Grey surround, white pages, as in Word. */}
+      <div
+        ref={hostRef}
+        className={`h-[70vh] overflow-auto rounded-lg border border-[var(--border)] bg-[#e5e7eb] ${
+          status === 'failed' ? 'hidden' : ''
+        }`}
+      />
+    </div>
   );
 }
 
