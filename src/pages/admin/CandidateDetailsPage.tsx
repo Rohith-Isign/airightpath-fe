@@ -1,3 +1,5 @@
+import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
+import { resumeExtensionForType } from '@/utils/file.utils';
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -11,8 +13,6 @@ import {
   ChevronRight,
   FileText,
   ClipboardList,
-  Download,
-  ExternalLink,
   BarChart3,
   Video,
   RotateCcw,
@@ -20,7 +20,6 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
-import { Modal } from '@/components/ui/Modal';
 import { CandidateTable } from '@/components/admin/CandidateTable';
 import { CandidateDetailModal } from '@/components/admin/CandidateDetailModal';
 import { BulkActionModal } from '@/components/admin/BulkActionModal';
@@ -320,7 +319,7 @@ export function CandidateDetailsPage() {
   const [validatingReferral, setValidatingReferral] = useState(false);
 
   // Resume viewer
-  const [resumeView, setResumeView] = useState<{ url: string; name: string } | null>(null);
+  const [resumeView, setResumeView] = useState<{ url: string; name: string; type: string } | null>(null);
   const [resumeLoading, setResumeLoading] = useState(false);
 
   useEffect(() => {
@@ -527,7 +526,12 @@ export function CandidateDetailsPage() {
     try {
       const res = await resumeService.view(email, { _skipErrorToast: true });
       const url = URL.createObjectURL(res.data);
-      setResumeView({ url, name: candidate.resumeFileName || `${email}-resume.pdf` });
+      setResumeView({
+        url,
+        // The file's own type decides how it is shown; guessing PDF put Word files in a frame that stayed blank.
+        name: candidate.resumeFileName || `${email}-resume${resumeExtensionForType(res.data.type)}`,
+        type: res.data.type,
+      });
     } catch (err) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
       showToast(
@@ -546,16 +550,6 @@ export function CandidateDetailsPage() {
       if (prev) URL.revokeObjectURL(prev.url);
       return null;
     });
-  }
-
-  function downloadResume() {
-    if (!resumeView) return;
-    const a = document.createElement('a');
-    a.href = resumeView.url;
-    a.download = resumeView.name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
   }
 
   /**
@@ -1256,37 +1250,7 @@ export function CandidateDetailsPage() {
       )}
 
       {/* Resume viewer */}
-      {resumeView && (
-        <Modal
-          isOpen={!!resumeView}
-          onClose={closeResume}
-          title={resumeView.name}
-          size="xl"
-          footer={
-            <>
-              <Button variant="ghost" onClick={closeResume}>
-                Close
-              </Button>
-              <Button
-                variant="outline"
-                leftIcon={<ExternalLink size={16} />}
-                onClick={() => window.open(resumeView.url, '_blank', 'noopener,noreferrer')}
-              >
-                Open in New Tab
-              </Button>
-              <Button leftIcon={<Download size={16} />} onClick={downloadResume}>
-                Download
-              </Button>
-            </>
-          }
-        >
-          <iframe
-            src={resumeView.url}
-            title="Resume"
-            className="w-full h-[70vh] rounded-lg border border-[var(--border)] bg-white"
-          />
-        </Modal>
-      )}
+      {resumeView && <ResumeViewerModal resume={resumeView} onClose={closeResume} />}
     </div>
   );
 }

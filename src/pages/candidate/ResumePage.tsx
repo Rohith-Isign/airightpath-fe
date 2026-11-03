@@ -1,3 +1,4 @@
+import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
 import { useState, useEffect, useCallback } from 'react';
 import {
   Upload,
@@ -6,7 +7,6 @@ import {
   Loader2,
   X,
   Download,
-  ExternalLink,
   RefreshCw,
   CheckCircle,
 } from 'lucide-react';
@@ -16,7 +16,6 @@ import { useToast } from '@/components/ui/Toast';
 import { resumeService } from '@/services/resume.service';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import {
@@ -349,37 +348,13 @@ export function ResumePage() {
         />
       )}
 
-      {/* Preview */}
-      {resumeUrl && (
-        <Modal
-          isOpen={!!resumeUrl}
+      {/* Preview. The shared viewer shows a PDF in the browser and a Word file as text: putting a Word file in an
+          iframe only makes the browser download it. */}
+      {resumeUrl && stored && (
+        <ResumeViewerModal
+          resume={{ url: resumeUrl, name: stored.name, type: stored.type }}
           onClose={closePreview}
-          title="Your Resume"
-          size="lg"
-          footer={
-            <>
-              <Button variant="ghost" onClick={closePreview}>
-                Close
-              </Button>
-              <Button
-                variant="outline"
-                leftIcon={<ExternalLink size={16} />}
-                onClick={() => window.open(resumeUrl, '_blank', 'noopener,noreferrer')}
-              >
-                Open in new tab
-              </Button>
-              <Button leftIcon={<Download size={16} />} onClick={downloadStored}>
-                Download
-              </Button>
-            </>
-          }
-        >
-          <iframe
-            src={resumeUrl}
-            title="Resume"
-            className="w-full h-[70vh] rounded-lg border border-[var(--border)]"
-          />
-        </Modal>
+        />
       )}
     </div>
   );
