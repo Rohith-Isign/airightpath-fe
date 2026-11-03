@@ -57,7 +57,7 @@ import type { JobPostDTO, JobApplicationDTO, JobApplicationStatus } from '@/type
  * been sat — and offering the button only at RECONFIRMED made the second exam
  * unassignable.
  *
- * APPLIED and SHORTLISTED are the direct route, for a recruiter who wants an
+ * APPLIED, SHORTLISTED and ACKNOWLEDGED are the direct route, for a recruiter who wants an
  * applicant examined without the ack and reconfirmation round-trip. Assigning
  * from APPLIED shortlists the candidate as part of the same action, so they are
  * recorded as shortlisted rather than skipping the stage.
@@ -65,6 +65,7 @@ import type { JobPostDTO, JobApplicationDTO, JobApplicationStatus } from '@/type
 const ASSIGN_STAGES: JobApplicationStatus[] = [
   'APPLIED',
   'SHORTLISTED',
+  'ACKNOWLEDGED',
   'RECONFIRMED',
   'EXAM_SENT',
   'EXAM_COMPLETED',
@@ -271,7 +272,7 @@ const STAGE_ACTIONS: Record<string, BulkAction[]> = {
  *   re-send the paper already sat.
  */
 function assignButtonLabel(stage: JobApplicationStatus): string {
-  if (stage === 'APPLIED' || stage === 'SHORTLISTED') return 'Send Exam Directly';
+  if (stage === 'APPLIED' || stage === 'SHORTLISTED' || stage === 'ACKNOWLEDGED') return 'Send Exam Directly';
   if (stage === 'RECONFIRMED') return 'Assign Assessment';
   return 'Assign Another Assessment';
 }
