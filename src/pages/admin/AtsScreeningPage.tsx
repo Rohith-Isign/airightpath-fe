@@ -1,3 +1,4 @@
+import { isAtsRejected, isAtsShortlisted, usableAtsScore } from '@/utils/ats-status.utils';
 import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
 import { resumeExtensionForType } from '@/utils/file.utils';
 import { useState, useEffect, useMemo } from 'react';
@@ -246,14 +247,12 @@ export function AtsScreeningPage() {
   const stats = useMemo(() => {
     const list = visibleCandidates;
     const total = list.length;
-    const shortlisted = list.filter((c) => c.status === 'SHORTLISTED').length;
-    const rejected = list.filter((c) => c.status === 'REJECTED').length;
-    const avgScore = total > 0
-      ? list.reduce((sum, c) => sum + (c.matchPercent ?? 0), 0) / total
-      : 0;
-    const topScore = total > 0
-      ? Math.max(...list.map((c) => c.matchPercent ?? 0))
-      : 0;
+    const shortlisted = list.filter(isAtsShortlisted).length;
+    const rejected = list.filter(isAtsRejected).length;
+    // Over the candidates that have a believable score only: an unscored one is not a 0.
+    const scores = list.map(usableAtsScore).filter((s): s is number => s != null);
+    const avgScore = scores.length > 0 ? scores.reduce((sum, s) => sum + s, 0) / scores.length : 0;
+    const topScore = scores.length > 0 ? Math.max(...scores) : 0;
     return { total, shortlisted, rejected, avgScore, topScore };
   }, [visibleCandidates]);
 
@@ -263,9 +262,9 @@ export function AtsScreeningPage() {
 
     // Tab filter
     if (activeTab === 'shortlisted') {
-      list = list.filter((c) => c.status === 'SHORTLISTED');
+      list = list.filter(isAtsShortlisted);
     } else if (activeTab === 'rejected') {
-      list = list.filter((c) => c.status === 'REJECTED');
+      list = list.filter(isAtsRejected);
     }
 
     // Search

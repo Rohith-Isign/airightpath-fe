@@ -1,3 +1,4 @@
+import { isAtsShortlisted, usableAtsScore } from '@/utils/ats-status.utils';
 import { ArrowUpDown, ArrowUp, ArrowDown, FileText, CheckCircle, XCircle, Eye } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
@@ -26,11 +27,9 @@ const SORT_OPTIONS: { field: AtsSortField; label: string }[] = [
 /** The three derived flags every row/card needs. */
 function readCandidate(candidate: JobApplicationDTO) {
   // Prefer the genuine shortlistStatus column; fall back to status.
-  const isShortlisted = candidate.shortlistStatus
-    ? !/not/i.test(candidate.shortlistStatus)
-    : candidate.status === 'SHORTLISTED';
+  const isShortlisted = isAtsShortlisted(candidate);
   return {
-    score: candidate.matchPercent ?? 0,
+    score: usableAtsScore(candidate),
     isShortlisted,
     shortlistLabel: candidate.shortlistStatus ?? (isShortlisted ? 'Shortlisted' : 'Rejected'),
     scanDone: candidate.atsScanStatus ? /complet/i.test(candidate.atsScanStatus) : undefined,
@@ -72,7 +71,14 @@ function SortableHead({
 }
 
 /** Score bar + percentage, shared by the table row and the mobile card. */
-function ScoreMeter({ score, className = '' }: Readonly<{ score: number; className?: string }>) {
+function ScoreMeter({ score, className = '' }: Readonly<{ score: number | null; className?: string }>) {
+  if (score === null) {
+    return (
+      <span className={`text-sm text-[var(--textTertiary)] ${className}`} title="No ATS score on record for this candidate">
+        --
+      </span>
+    );
+  }
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <div className="flex-1 min-w-0 h-2 rounded-full bg-[var(--border)] overflow-hidden">

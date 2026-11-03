@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { ROUTES } from '@/config/routes';
 import { formatDate, formatDateTime } from '@/utils/format.utils';
 import { useNow } from '@/hooks/useNow';
+import { isNotAttended } from '@/utils/interview-standing.utils';
 import type { Assessment } from '@/types/assessment.types';
 import type { InterviewSchedule } from '@/types/interview.types';
 import type { JobApplicationDTO } from '@/types/job.types';
@@ -31,6 +32,11 @@ export function CandidateDashboardPage() {
   const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
   const [applications, setApplications] = useState<JobApplicationDTO[]>([]);
   const [loading, setLoading] = useState(true);
+  /**
+   * Which lists could not be read. A failed read used to leave its list empty, so the card showed 0 for something
+   * that was simply not loaded; a card now shows "--" in that case instead of a number it does not know.
+   */
+  const [failed, setFailed] = useState({ assessments: false, interviews: false, applications: false });
 
   useEffect(() => {
     async function fetchData() {
@@ -42,14 +48,20 @@ export function CandidateDashboardPage() {
         // count taken from it could only ever be zero.
         // Applications are a separate resource — the count of assessments says
         // nothing about how many jobs were applied to.
-        const [assessRes, interviewRes, applicationRes] = await Promise.all([
+        // Independent reads: one failing must not blank the other cards.
+        const [assessRes, interviewRes, applicationRes] = await Promise.allSettled([
           assessmentService.getAllAssessmentsForCandidate(user.email),
           interviewService.getActiveInterviews(user.email),
-          jobApplicationService.getByEmail(user.email).catch(() => null),
+          jobApplicationService.getByEmail(user.email),
         ]);
-        setAssessments(assessRes.data ?? []);
-        setInterviews(interviewRes.data ?? []);
-        setApplications(applicationRes?.data ?? []);
+        setAssessments(assessRes.status === 'fulfilled' ? assessRes.value.data ?? [] : []);
+        setInterviews(interviewRes.status === 'fulfilled' ? interviewRes.value.data ?? [] : []);
+        setApplications(applicationRes.status === 'fulfilled' ? applicationRes.value.data ?? [] : []);
+        setFailed({
+          assessments: assessRes.status === 'rejected',
+          interviews: interviewRes.status === 'rejected',
+          applications: applicationRes.status === 'rejected',
+        });
       } catch {
         // Error toast auto-handled by interceptor
       } finally {
@@ -77,8 +89,17 @@ export function CandidateDashboardPage() {
   };
 
   const upcomingAssessments = assessments.filter((a) => !a.examAttended && !isExpired(a));
-  const upcomingInterviews = interviews.filter((i) => i.attemptStatus !== 'COMPLETED');
-  const completedAssessments = assessments.filter((a) => a.examAttended);
+  // Not one that is finished, and not one whose slot has already passed unstarted: that is a missed interview, not an
+  // upcoming one.
+  const upcomingInterviews = interviews.filter((i) => i.attemptStatus !== 'COMPLETED' && !isNotAttended(i));
+  // One per paper: a re-assigned paper is another row for the same job and type, and counting every row counted the
+  // same exam again each time it was sat.
+  const completedExamCount = new Set(
+    assessments.filter((a) => a.examAttended).map((a) => `${a.jobPrefix}|${a.assessmentType}`),
+  ).size;
+  // One per job: applying to a job again does not make it a second job.
+  const appliedJobCount = new Set(applications.map((a) => a.jobPrefix)).size;
+  const countOrDash = (count: number, didFail: boolean) => (didFail ? '--' : count);
 
   if (loading) {
     return (
@@ -110,7 +131,7 @@ export function CandidateDashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-[var(--textSecondary)]">Upcoming Assessments</p>
-                <p className="text-2xl font-bold text-[var(--text)]">{upcomingAssessments.length}</p>
+                <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(upcomingAssessments.length, failed.assessments)}</p>
               </div>
             </div>
           </CardContent>
@@ -124,7 +145,7 @@ export function CandidateDashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-[var(--textSecondary)]">Upcoming Interviews</p>
-                <p className="text-2xl font-bold text-[var(--text)]">{upcomingInterviews.length}</p>
+                <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(upcomingInterviews.length, failed.interviews)}</p>
               </div>
             </div>
           </CardContent>
@@ -141,7 +162,7 @@ export function CandidateDashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-[var(--textSecondary)]">Jobs Applied</p>
-                <p className="text-2xl font-bold text-[var(--text)]">{applications.length}</p>
+                <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(appliedJobCount, failed.applications)}</p>
               </div>
             </div>
           </CardContent>
@@ -155,7 +176,7 @@ export function CandidateDashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-[var(--textSecondary)]">Completed Exams</p>
-                <p className="text-2xl font-bold text-[var(--text)]">{completedAssessments.length}</p>
+                <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(completedExamCount, failed.assessments)}</p>
               </div>
             </div>
           </CardContent>
