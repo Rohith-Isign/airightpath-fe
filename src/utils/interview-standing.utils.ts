@@ -158,3 +158,37 @@ export function buildInterviewStandings(
   }
   return standings;
 }
+
+/** What an admin can do about one round for one candidate, from where that round stands. */
+export type RoundAction = 'assign' | 'reassign' | null;
+
+/**
+ * The next step offered for a round, derived from the candidate's standing.
+ *
+ * L2 is the first round: booked when nothing has been, booked again when the last attempt was missed or not passed,
+ * and nothing while an attempt is live or already passed.
+ *
+ * L3 follows L2 and is only offered once L2 has been passed: that is the move the screen exists to make, so it is
+ * put in front of the admin instead of sitting behind "Reassign". Once booked, the same rule as L2 applies.
+ */
+export function roundAction(
+  standing: CandidateInterviewStanding | undefined,
+  round: InterviewRound,
+): RoundAction {
+  const find = (r: InterviewRound) => standing?.rounds.find((x) => x.round === r);
+  const own = find(round);
+
+  if (round === 'L3_BEHAVIORAL') {
+    const l2 = find('L2_TECHNICAL');
+    const l2Passed = l2?.state === 'completed' && l2.result === 'PASSED';
+    if (!own) return l2Passed ? 'assign' : null;
+  } else if (!own) {
+    return 'assign';
+  }
+
+  if (own!.outstanding) return null;
+  const passed = own!.state === 'completed' && own!.result === 'PASSED';
+  // Finished and passed, or finished and still being judged: nothing to redo.
+  if (passed || (own!.state === 'completed' && own!.result === 'PENDING')) return null;
+  return 'reassign';
+}

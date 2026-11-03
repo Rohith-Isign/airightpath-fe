@@ -35,6 +35,7 @@ import { jobService } from '@/services/job.service';
 import { jobApplicationService } from '@/services/job-application.service';
 import { interviewService } from '@/services/interview.service';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
+import { INTERVIEW_ROUNDS } from '@/utils/interview-standing.utils';
 import type { InterviewRound } from '@/types/interview.types';
 import { resumeService } from '@/services/resume.service';
 import axios from 'axios';
@@ -449,14 +450,16 @@ export function CandidateDetailsPage() {
     candidates.some((c) => interviewStandings.has(getAppEmail(c).toLowerCase()));
 
   /**
-   * Whether this selection has sat, or been booked for, anything before.
-   *
-   * Decides the button's word. "Assign" on someone who already has two attempts
-   * on record reads as a first booking and hides the history the admin needs.
-   */
-  const selectionHasInterviews = selectedEmailList.some((email) =>
-    interviewStandings.has(email.toLowerCase()),
-  );
+   * Whether anyone in the selection already has this round on record, which makes the booking a re-attempt. */
+  const selectionHasRound = (round: InterviewRound) =>
+    selectedEmailList.some((email) =>
+      interviewStandings.get(email.toLowerCase())?.rounds.some((r) => r.round === round),
+    );
+
+  /** A row's own Assign / Reassign button: that one candidate, that one round. */
+  function assignInterviewFor(candidate: JobApplicationDTO, round: InterviewRound) {
+    openActionModal('interview', round, [getAppEmail(candidate)]);
+  }
 
   // Available actions for the current stage
   const availableActions = STAGE_ACTIONS[activeStage] ?? [];
@@ -481,8 +484,14 @@ export function CandidateDetailsPage() {
     }
   };
 
-  function openActionModal(action: BulkAction) {
-    if (selectedEmails.size === 0) {
+  /**
+   * @param round   for an interview, which round to open the booking on
+   * @param emails  who the action is for, when that is not the current selection (a single row's own button)
+   */
+  function openActionModal(action: BulkAction, round?: InterviewRound, emails?: string[]) {
+    if (emails) {
+      setSelectedEmails(new Set(emails));
+    } else if (selectedEmails.size === 0) {
       showToast(MESSAGES.admin.common.selectCandidate, 'warning');
       return;
     }
@@ -492,7 +501,7 @@ export function CandidateDetailsPage() {
     setModalStartDateTime(action === 'interview' ? nowDateTimeLocal() : '');
     setModalContent('');
     if (action === 'interview') {
-      setModalRound('L2_TECHNICAL');
+      setModalRound(round ?? 'L2_TECHNICAL');
       // Cleared, not carried over: the picker reports the real figure once it
       // has read this job's attempts, and a stale one would decide who gets
       // booked this time.
@@ -1040,22 +1049,28 @@ export function CandidateDetailsPage() {
                   every stage but Rejected, because a re-attempt is needed
                   exactly where the candidate's stage has already moved past the
                   round being re-booked. */}
-              {INTERVIEW_ASSIGN_STAGES.includes(activeStage) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  leftIcon={selectionHasInterviews ? <RotateCcw size={16} /> : <Video size={16} />}
-                  onClick={() => openActionModal('interview')}
-                  title={
-                    selectionHasInterviews
-                      ? 'Books a further attempt. Rounds that are still open are skipped.'
-                      : 'Books an interview for the selected candidates.'
-                  }
-                >
-                  {selectionHasInterviews ? 'Reassign Interview' : 'Assign Interview'}
-                  {selectedEmails.size > 0 ? ` (${selectedEmails.size})` : ''}
-                </Button>
-              )}
+              {INTERVIEW_ASSIGN_STAGES.includes(activeStage) &&
+                INTERVIEW_ROUNDS.map((round) => {
+                  const again = selectionHasRound(round);
+                  const short = round === 'L2_TECHNICAL' ? 'L2' : 'L3';
+                  return (
+                    <Button
+                      key={round}
+                      variant="outline"
+                      size="sm"
+                      leftIcon={again ? <RotateCcw size={16} /> : <Video size={16} />}
+                      onClick={() => openActionModal('interview', round)}
+                      title={
+                        again
+                          ? `Books a further ${short} attempt. A ${short} that is still open is skipped.`
+                          : `Books the ${INTERVIEW_ROUND_LABELS[round]} interview for the selected candidates.`
+                      }
+                    >
+                      {again ? 'Reassign' : 'Assign'} {short} Interview
+                      {selectedEmails.size > 0 ? ` (${selectedEmails.size})` : ''}
+                    </Button>
+                  );
+                })}
               {/* Once the paper has been sat, the score is the next thing an
                   admin looks at — this is the shortcut to it for the whole job,
                   with the per-row action going straight to one scorecard. */}
@@ -1135,6 +1150,11 @@ export function CandidateDetailsPage() {
                   standingsLoading={standingsLoading}
                   interviewStandings={showInterviewStandings ? interviewStandings : undefined}
                   interviewStandingsLoading={interviewsLoading}
+                  onAssignInterview={
+                    INTERVIEW_ASSIGN_STAGES.includes(activeStage) || showInterviewStandings
+                      ? assignInterviewFor
+                      : undefined
+                  }
                 />
               )}
             </CardContent>

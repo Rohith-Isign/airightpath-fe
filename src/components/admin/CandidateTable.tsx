@@ -7,6 +7,7 @@ import { ReferralTag } from './ReferralTag';
 import { AssessmentStanding } from './AssessmentStanding';
 import { InterviewStanding } from './InterviewStanding';
 import type { JobApplicationDTO } from '@/types/job.types';
+import type { InterviewRound } from '@/types/interview.types';
 import type { CandidateStanding } from '@/utils/scoreboard.utils';
 import type { CandidateInterviewStanding } from '@/utils/interview-standing.utils';
 
@@ -52,6 +53,8 @@ interface CandidateTableProps {
   interviewStandings?: Map<string, CandidateInterviewStanding>;
   /** The interviews are still arriving, so absence isn't reported as fact. */
   interviewStandingsLoading?: boolean;
+  /** Books (or re-books) one interview round for one candidate, straight from their row. */
+  onAssignInterview?: (candidate: JobApplicationDTO, round: InterviewRound) => void;
 }
 
 const CHECKBOX_CLASS =
@@ -80,6 +83,7 @@ export function CandidateTable({
   onView,
   onViewResult,
   onViewInterviewResult,
+  onAssignInterview,
   statusLabels,
   standings,
   standingsLoading,
@@ -181,6 +185,7 @@ export function CandidateTable({
                   <InterviewStanding
                     standing={interviewStandings.get(email.toLowerCase())}
                     loading={interviewStandingsLoading}
+                    onAssign={onAssignInterview && ((round) => onAssignInterview(candidate, round))}
                   />
                 </div>
               )}
@@ -310,6 +315,7 @@ export function CandidateTable({
                       <InterviewStanding
                         standing={interviewStandings.get(email.toLowerCase())}
                         loading={interviewStandingsLoading}
+                        onAssign={onAssignInterview && ((round) => onAssignInterview(candidate, round))}
                       />
                     </TableCell>
                   )}
