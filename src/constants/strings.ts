@@ -552,8 +552,8 @@ export const STRINGS = {
   /** The rules list shown before and during an interview. */
   rules: {
     device: 'Take this interview on a desktop or laptop with a webcam. Phones and tablets are not supported.',
-    duration: (minutes: number) =>
-      `The interview lasts up to ${minutes} minutes and ends automatically when the timer reaches ${minutes}:00. The timer counts up from 0:00.`,
+    duration:
+      'There is no fixed time limit. The timer shows how long you have been in the interview; the interview ends when the interviewer has covered everything, or when you end it.',
     speak:
       'You speak with an AI interviewer. Click the microphone to answer, and stop when you are done — your answers are transcribed live.',
     cameraOn:

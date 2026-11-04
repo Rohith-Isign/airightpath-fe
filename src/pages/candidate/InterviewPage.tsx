@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
-import { useTimer } from '@/hooks/useTimer';
+import { useElapsed } from '@/hooks/useElapsed';
 import { useVoiceInterview } from '@/hooks/useVoiceInterview';
 import { useQuestionTimer } from '@/hooks/useQuestionTimer';
 import { useMediaRecorder } from '@/hooks/useMediaRecorder';
@@ -191,40 +191,9 @@ export function InterviewPage() {
   const stillThereCauseRef = useRef('no_response');
   const runPostCompletionFlowRef = useRef<(skip: boolean) => void>(() => { });
 
-  // Global timer
-  const { secondsLeft: globalSecondsLeft, start: startGlobalTimer, startAt: startGlobalTimerAt } = useTimer({
-    initialSeconds: APP_CONFIG.INTERVIEW_TIMER_MINUTES * 60,
-    autoStart: false,
-    onExpire: () => {
-      endCauseRef.current = 'time_up';
-      showToast(MESSAGES.interview.timeUp, 'warning');
-      runPostCompletionFlowRef.current(false);
-    },
-  });
-
-  // Said before the clock runs out, not only when it has. The interview ends the moment the timer does, in the
-  // middle of an answer if that is where the candidate is, and the only notice used to be the one at the end.
-  const timeNoticesRef = useRef({ five: false, one: false });
-  useEffect(() => {
-    const running = ['active', 'answering', 'processing'].includes(voiceInterview.state);
-    if (!running || globalSecondsLeft <= 0) return;
-    if (globalSecondsLeft <= 300 && !timeNoticesRef.current.five) {
-      timeNoticesRef.current.five = true;
-      showToast(MESSAGES.interview.fiveMinutesLeft, 'warning');
-    }
-    if (globalSecondsLeft <= 60 && !timeNoticesRef.current.one) {
-      timeNoticesRef.current.one = true;
-      showToast(MESSAGES.interview.oneMinuteLeft, 'warning');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalSecondsLeft, voiceInterview.state]);
-
-  // Elapsed, for display. Derived from the countdown rather than kept as a
-  // second clock so the two can never disagree, and so a reload — which
-  // re-anchors the countdown to the server's deadline — resumes the count-up
-  // where it really was instead of from zero.
-  const totalInterviewSeconds = APP_CONFIG.INTERVIEW_TIMER_MINUTES * 60;
-  const elapsedSeconds = Math.min(totalInterviewSeconds, Math.max(0, totalInterviewSeconds - globalSecondsLeft));
+  // How long the interview has been running. It only counts up: nothing ends the interview because of the time it
+  // has taken. It ends when the interviewer has covered what it needs to, or when the candidate ends it.
+  const { elapsedSeconds, startAt: startElapsedAt } = useElapsed();
 
   const segmentMs = APP_CONFIG.RECORDING_SEGMENT_MINUTES > 0
     ? APP_CONFIG.RECORDING_SEGMENT_MINUTES * 60_000
@@ -1226,24 +1195,10 @@ export function InterviewPage() {
           );
         }
       }
-      // Started only now that capture is under way (a failed camera or screen
-      // is caught above, so it cannot skip this). It used to start first, and
-      // a deadline already in the past (the candidate coming back after the
-      // server had timed the interview out) expired it before either recorder
-      // existed — ending the interview with "nothing was captured" for both.
-      // Anchored to the server's deadline where it sends one. The clock used
-      // to be a fresh countdown of the configured length, so a reload handed
-      // the candidate another full interview — and a backgrounded tab or a
-      // closed laptop made it run slow, because a throttled interval simply
-      // stops counting. parseServerInstant reads a bare stamp as UTC; a
-      // deadline that has already passed expires immediately, which is the
-      // honest answer rather than time the server will not honour.
-      const deadline = started?.expiresAt ? parseServerInstant(started.expiresAt) : null;
-      if (deadline && !Number.isNaN(deadline.getTime())) {
-        startGlobalTimerAt(deadline.getTime());
-      } else {
-        startGlobalTimer();
-      }
+      // Started only now that capture is under way. Anchored to the start the server recorded, so reloading the
+      // page does not set the clock back to zero.
+      const startedAtMs = started?.startedAt ? parseServerInstant(started.startedAt).getTime() : NaN;
+      startElapsedAt(Number.isNaN(startedAtMs) ? undefined : startedAtMs);
     } catch (err) {
       console.error(err);
     }
@@ -1546,7 +1501,7 @@ export function InterviewPage() {
               {voiceInterview.isWsConnected ? <Wifi size={14} className="text-emerald-500" /> : <WifiOff size={14} className="text-red-500" />}
             </div>
             <span className="text-xs text-[var(--textSecondary)]">{STRINGS.candidateInterview.topBar.questionsShort(voiceInterview.questionsAsked)}</span>
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-semibold ${globalSecondsLeft <= 300 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-[var(--surface1)] text-[var(--text)]'}`}>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-semibold bg-[var(--surface1)] text-[var(--text)]">
               {/* Counts up from 0:00, as the L2 and L3 rounds are run. The
                   deadline underneath is still a countdown to the server's
                   expiry — only what is shown is elapsed time, and the red

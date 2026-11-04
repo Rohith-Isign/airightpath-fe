@@ -14,7 +14,6 @@ import {
   BatteryCharging,
   BellOff,
 } from 'lucide-react';
-import { APP_CONFIG } from '@/config/app.config';
 import { PROCTORING_CONFIG } from '@/config/proctoring.config';
 
 /** One rule as the instructions and the interview screen both render it. */
@@ -43,7 +42,7 @@ export function buildProctoringRules(): ProctoringRule[] {
   });
   rules.push({
     icon: <Clock size={18} />,
-    text: STRINGS.rules.duration(APP_CONFIG.INTERVIEW_TIMER_MINUTES),
+    text: STRINGS.rules.duration,
   });
   rules.push({
     icon: <Mic size={18} />,

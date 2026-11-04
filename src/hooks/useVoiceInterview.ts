@@ -538,7 +538,7 @@ export function useVoiceInterview() {
         setState("active");
         // Returned rather than exposed as state: the caller is already awaiting
         // this, and a flag it has to watch for separately is a flag it can miss.
-        return { resumed: !!response.resumed, expiresAt: response.expiresAt };
+        return { resumed: !!response.resumed, expiresAt: response.expiresAt, startedAt: response.startedAt };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error("Failed to start interview:", err);

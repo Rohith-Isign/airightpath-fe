@@ -297,6 +297,8 @@ export interface VoiceStartResponse {
    * restart it. Optional only for older servers that do not send it.
    */
   expiresAt?: string;
+  /** When the interview began, so a reloaded screen shows the true elapsed time. */
+  startedAt?: string;
   firstQuestion: string;
   interviewerName: string;
   firstQuestionAudio: string | null; // base64 mp3
