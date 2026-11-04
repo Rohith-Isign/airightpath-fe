@@ -22,6 +22,7 @@ import { formatDate, formatDateTime } from '@/utils/format.utils';
 import { useNow } from '@/hooks/useNow';
 import { isNotAttended } from '@/utils/interview-standing.utils';
 import type { Assessment } from '@/types/assessment.types';
+import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewSchedule } from '@/types/interview.types';
 import type { JobApplicationDTO } from '@/types/job.types';
 
@@ -294,7 +295,14 @@ export function CandidateDashboardPage() {
                   className="flex items-center justify-between p-4 rounded-lg bg-[var(--surface1)] border border-[var(--border)]"
                 >
                   <div>
-                    <p className="font-medium text-[var(--text)]">{interview.jobPrefix}</p>
+                    <p className="font-medium text-[var(--text)]">
+                      {interview.jobPrefix}
+                      {INTERVIEW_ROUND_LABELS[interview.round] && (
+                        <span className="ml-2 text-xs font-normal text-[var(--textSecondary)]">
+                          {INTERVIEW_ROUND_LABELS[interview.round]}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-sm text-[var(--textSecondary)]">
                       {STRINGS.candidateDashboard.deadline(
                         interview.deadlineTime ? formatDate(interview.deadlineTime) : STRINGS.candidateDashboard.noDeadline,

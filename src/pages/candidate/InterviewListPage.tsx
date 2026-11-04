@@ -12,6 +12,7 @@ import { formatDate } from '@/utils/format.utils';
 import { isNotAttended } from '@/utils/interview-standing.utils';
 import { useBackgroundRefresh } from '@/hooks/useBackgroundRefresh';
 import { CANDIDATE_REFRESH_MS } from '@/config/refresh.config';
+import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewSchedule } from '@/types/interview.types';
 
 /** Whether the interview's start time is still ahead. */
@@ -120,7 +121,11 @@ export function InterviewListPage() {
                         <h3 className="break-words font-semibold text-[var(--text)]" title={interview.jobPrefix}>
                           {interview.jobPrefix}
                         </h3>
-                        <p className="text-xs text-[var(--textSecondary)]">{STRINGS.myInterviews.cardSubtitle}</p>
+                        <p className="text-xs text-[var(--textSecondary)]">
+                          {INTERVIEW_ROUND_LABELS[interview.round]
+                            ? STRINGS.myInterviews.cardSubtitleFor(INTERVIEW_ROUND_LABELS[interview.round])
+                            : STRINGS.myInterviews.cardSubtitle}
+                        </p>
                       </div>
                     </div>
                     <span className="flex-shrink-0 whitespace-nowrap">{isNotAttended(interview) ? <Badge variant="error">{STRINGS.interviewStatus.notAttended}</Badge> : getStatusBadge(interview.attemptStatus)}</span>

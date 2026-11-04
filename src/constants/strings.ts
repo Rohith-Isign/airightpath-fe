@@ -30,6 +30,8 @@ export const STRINGS = {
     emptyTitle: 'No interviews scheduled',
     emptyBody: 'You will see your interviews here once they are assigned.',
     cardSubtitle: 'AI Interview',
+    /** The round, then the kind of interview: "L2 — Technical · AI Interview". */
+    cardSubtitleFor: (roundLabel: string) => `${roundLabel} · AI Interview`,
     opens: 'Opens',
     assigned: 'Assigned',
     deadline: 'Deadline',
