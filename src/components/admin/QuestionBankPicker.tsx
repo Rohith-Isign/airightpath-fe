@@ -53,7 +53,10 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
   const [scope, setScope] = useState<'THIS' | 'ALL'>('THIS');
   const otherJobs = scope === 'ALL';
   const unusedOnly = show === 'UNUSED';
-  const [perLevel, setPerLevel] = useState('2');
+  // Coding is picked per difficulty level; an aptitude paper is simply a number of questions, so the figure means
+  // "in total" there. Asking for 30 and getting 90 (30 from each of three levels) is what this guards against.
+  const perLevelMode = type === 'CODING';
+  const [perLevel, setPerLevel] = useState(perLevelMode ? '2' : '30');
   const [pickKind, setPickKind] = useState<'UNUSED' | 'ASSIGNED' | 'ALL'>('UNUSED');
 
   useEffect(() => {
@@ -72,6 +75,7 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
         setScope(all.some((q) => q.jobPrefix === jobPrefix && q.timesAssigned === 0) ? 'THIS' : 'ALL');
         setShow('UNUSED');
         setDifficulty('ALL');
+        setPerLevel(type === 'CODING' ? '2' : '30');
       })
       .catch(() => !cancelled && setFailed(true))
       .finally(() => !cancelled && setLoading(false));
@@ -109,8 +113,9 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
     });
 
   /**
-   * N never-assigned questions from each difficulty level, easiest first, never more than the number of
-   * questions asked for. Questions with no level only count when no question has one.
+   * Coding: N questions from each difficulty level, easiest first.
+   * Aptitude: N questions in total, spread across the levels in turn, easiest first.
+   * Questions with no level only count when no question has one.
    */
   const fillPerLevel = () => {
     const n = Math.max(1, Math.floor(Number(perLevel) || 0));
@@ -121,12 +126,16 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
       (a, b) => rankOf(a) - rankOf(b) || a.localeCompare(b),
     );
     const byLevel = levels.map((level) =>
-      pickFrom.filter((q) => (q.difficulty || 'Unspecified') === level).slice(0, n).map((q) => q.id),
+      pickFrom
+        .filter((q) => (q.difficulty || 'Unspecified') === level)
+        .slice(0, perLevelMode ? n : undefined)
+        .map((q) => q.id),
     );
-    const limit = Infinity;
+    const limit = perLevelMode ? Infinity : n;
+    const rounds = perLevelMode ? n : Math.max(0, ...byLevel.map((list) => list.length));
     const ids: number[] = [];
     // One from each level in turn, so a short count still spans the levels instead of exhausting the first.
-    for (let round = 0; round < n && ids.length < limit; round++) {
+    for (let round = 0; round < rounds && ids.length < limit; round++) {
       for (const list of byLevel) {
         if (round < list.length && ids.length < limit) ids.push(list[round]);
       }
@@ -195,10 +204,10 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
             min={1}
             value={perLevel}
             onChange={(e) => setPerLevel(e.target.value)}
-            aria-label="Questions per level"
+            aria-label={perLevelMode ? 'Questions per level' : 'Number of questions'}
             className="h-9 w-16 rounded border border-[var(--border)] bg-transparent px-2"
           />
-          <span>from each level, taken from</span>
+          <span>{perLevelMode ? 'from each level, taken from' : 'questions in total, taken from'}</span>
           <div className="w-52">
             <Select
               aria-label="Kind of question to pick"
@@ -215,11 +224,19 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
             size="sm"
             disabled={quickPool.length === 0}
             onClick={fillPerLevel}
-            title="Replaces the selection with this many questions from each difficulty level"
+            title={
+              perLevelMode
+                ? 'Replaces the selection with this many questions from each difficulty level'
+                : 'Replaces the selection with this many questions in total, spread across the difficulty levels'
+            }
           >
             Pick
           </Button>
-          <span className="text-xs text-[var(--textSecondary)]">The number of questions follows from this.</span>
+          <span className="text-xs text-[var(--textSecondary)]">
+            {perLevelMode
+              ? 'The number of questions follows from this.'
+              : 'Spread across the difficulty levels, easiest first.'}
+          </span>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
