@@ -42,6 +42,28 @@ export const STRINGS = {
     viewSummary: 'View Summary',
   },
 
+  /** The candidate's "My Assessments" list. */
+  myAssessments: {
+    title: 'My Assessments',
+    emptyTitle: 'No assessments assigned',
+    emptyBody: 'Check back later for new assessment assignments.',
+    columnType: 'Type',
+    columnJob: 'Job',
+    columnStarts: 'Starts',
+    columnDeadline: 'Deadline',
+    columnStatus: 'Status',
+    columnAction: 'Action',
+    assigned: 'Assigned',
+    starts: 'Starts',
+    deadline: 'Deadline',
+    start: 'Start',
+    completed: 'Completed',
+    expired: 'Expired',
+    attended: 'Attended',
+    scheduled: 'Scheduled',
+    pending: 'Pending',
+  },
+
   /** Assessment (exam paper) states. */
   assessmentStatus: {
     notStarted: 'Not Started',
