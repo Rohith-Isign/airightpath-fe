@@ -194,7 +194,41 @@ export function ExamIdentityCheck({
     [target, candidateEmail, persist, showToast]
   );
 
+  // The face status as it is at this instant. The countdown below runs for seconds from a callback made at the
+  // click, so it has to read the live value, not the one the click saw.
+  const faceStatusRef = useRef(faceStatus);
+  faceStatusRef.current = faceStatus;
+
+  const stopCountdown = useCallback(() => {
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    countdownTimerRef.current = null;
+    setCountdown(0);
+  }, []);
+
+  // A face that leaves the frame while the timer runs ends the timer: the shot is only wanted of a person in view.
+  useEffect(() => {
+    if (status !== 'countdown' || !faceCheckEnabled) return;
+    if (faceStatus === 'none' || faceStatus === 'multiple') {
+      stopCountdown();
+      setStatus('idle');
+      showToast(
+        faceStatus === 'multiple' ? MESSAGES.examSetup.photoMultipleFaces : MESSAGES.examSetup.photoFaceLost,
+        faceStatus === 'multiple' ? 'error' : 'warning',
+      );
+    }
+  }, [status, faceStatus, faceCheckEnabled, stopCountdown, showToast]);
+
   const takePhoto = useCallback(async () => {
+    // The check that counts is the one made now, at the moment of capture, not the one made before the countdown:
+    // otherwise covering the camera after pressing the button still gets a photo, of nobody.
+    if (faceCheckEnabled && faceStatusRef.current !== 'single') {
+      setStatus('idle');
+      showToast(
+        faceStatusRef.current === 'multiple' ? MESSAGES.examSetup.photoMultipleFaces : MESSAGES.examSetup.photoFaceLost,
+        faceStatusRef.current === 'multiple' ? 'error' : 'warning',
+      );
+      return;
+    }
     setStatus('capturing');
 
     const blob = await captureVideoFrame(videoRef.current, { maxWidth: photoConfig.maxWidth });
@@ -209,7 +243,7 @@ export function ExamIdentityCheck({
     setPhotoUrl(trackUrl(URL.createObjectURL(blob)));
 
     await uploadPhoto(blob);
-  }, [photoConfig.maxWidth, photoUrl, showToast, trackUrl, uploadPhoto, videoRef]);
+  }, [faceCheckEnabled, photoConfig.maxWidth, photoUrl, showToast, trackUrl, uploadPhoto, videoRef]);
 
   const retryPhotoUpload = useCallback(() => {
     const blob = photoBlobRef.current;

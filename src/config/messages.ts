@@ -73,6 +73,7 @@ export const MESSAGES = {
     photoCaptured: 'Photo captured.',
     photoUploadFailed: "We couldn't save your photo. Please try again.",
     photoNoFace: 'No face detected. Please centre your face in the frame and try again.',
+    photoFaceLost: 'Your face left the frame, so no photo was taken. Look at the camera and try again.',
     photoMultipleFaces: 'More than one person is visible. Only you may be in frame.',
     secondPersonPresent: 'Another person is visible in your camera. Please sit alone to continue.',
     tooNoisy: 'Your surroundings are too noisy. Please move somewhere quieter and try again.',
