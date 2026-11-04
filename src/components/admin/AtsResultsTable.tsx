@@ -1,4 +1,5 @@
-import { isAtsShortlisted, usableAtsScore } from '@/utils/ats-status.utils';
+import { STRINGS } from '@/constants/strings';
+import { isAtsShortlisted, movedOnStage, usableAtsScore } from '@/utils/ats-status.utils';
 import { ArrowUpDown, ArrowUp, ArrowDown, FileText, CheckCircle, XCircle, Eye } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
@@ -39,6 +40,7 @@ function readCandidate(candidate: JobApplicationDTO) {
     isShortlisted,
     shortlistLabel: candidate.shortlistStatus ?? (isShortlisted ? 'Shortlisted' : 'Rejected'),
     scanDone: candidate.atsScanStatus ? /complet/i.test(candidate.atsScanStatus) : undefined,
+    movedOn: movedOnStage(candidate),
   };
 }
 
@@ -114,6 +116,18 @@ function ShortlistBadge({
   );
 }
 
+/** Where the candidate has been taken since screening, so a low score beside "Shortlisted" is explained. */
+function MovedOnBadge({ stage }: Readonly<{ stage: string | null }>) {
+  if (!stage) return null;
+  return (
+    <span title={STRINGS.atsScreening.movedOnHint}>
+      <Badge variant="primary" size="sm">
+        {STRINGS.atsScreening.movedOn(stage)}
+      </Badge>
+    </span>
+  );
+}
+
 /**
  * ATS screening results.
  *
@@ -179,7 +193,7 @@ export function AtsResultsTable({
         </div>
 
         {candidates.map((candidate, idx) => {
-          const { isShortlisted, shortlistLabel, scanDone } = readCandidate(candidate);
+          const { isShortlisted, shortlistLabel, scanDone, movedOn } = readCandidate(candidate);
           const score = scoreOf(candidate);
 
           return (
@@ -240,6 +254,7 @@ export function AtsResultsTable({
                   </Badge>
                 )}
                 <ShortlistBadge isShortlisted={isShortlisted} label={shortlistLabel} />
+                <MovedOnBadge stage={movedOn} />
                 <Button
                   variant="outline"
                   size="sm"
@@ -304,7 +319,7 @@ export function AtsResultsTable({
           </TableHeader>
           <TableBody>
             {candidates.map((candidate, idx) => {
-              const { isShortlisted, shortlistLabel, scanDone } = readCandidate(candidate);
+              const { isShortlisted, shortlistLabel, scanDone, movedOn } = readCandidate(candidate);
           const score = scoreOf(candidate);
 
               return (
@@ -357,6 +372,7 @@ export function AtsResultsTable({
                   <TableCell className="px-3 py-3 align-top">
                     <div className="flex flex-col items-start gap-1">
                       <ShortlistBadge isShortlisted={isShortlisted} label={shortlistLabel} />
+                      <MovedOnBadge stage={movedOn} />
                       {candidate.atsScanStatus && (
                         <Badge variant={scanDone ? 'info' : 'warning'} size="sm">
                           {candidate.atsScanStatus}

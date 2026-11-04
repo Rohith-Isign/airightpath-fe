@@ -98,6 +98,21 @@ export const STRINGS = {
     } as Record<string, string>,
   },
 
+  /** ATS screening results: where a screened candidate has gone since. */
+  atsScreening: {
+    movedOn: (stage: string) => `Moved on: ${stage}`,
+    movedOnHint: 'Already moved past screening by an admin, so the ATS result below is for reference only.',
+    stages: {
+      ACKNOWLEDGED: 'Acknowledged',
+      RECONFIRMED: 'Reconfirmed',
+      EXAM_SENT: 'Exam Sent',
+      EXAM_COMPLETED: 'Exam Completed',
+      INTERVIEW_SCHEDULED: 'Interview Sent',
+      INTERVIEW_COMPLETED: 'Interview Done',
+      SELECTED: 'Selected',
+    } as Record<string, string>,
+  },
+
   /** The candidate's dashboard. */
   candidateDashboard: {
     welcome: (firstName: string) => `Welcome back, ${firstName}!`,
