@@ -24,6 +24,24 @@ export const STRINGS = {
     notOpenYet: 'Not open yet',
   },
 
+  /** The candidate's "My Interviews" list. */
+  myInterviews: {
+    title: 'My Interviews',
+    emptyTitle: 'No interviews scheduled',
+    emptyBody: 'You will see your interviews here once they are assigned.',
+    cardSubtitle: 'AI Interview',
+    opens: 'Opens',
+    assigned: 'Assigned',
+    deadline: 'Deadline',
+    noDeadline: 'No deadline',
+    result: 'Result',
+    notAttempted: 'Not Attempted',
+    passed: 'Passed',
+    failed: 'Failed',
+    pending: 'Pending',
+    viewSummary: 'View Summary',
+  },
+
   /** Assessment (exam paper) states. */
   assessmentStatus: {
     notStarted: 'Not Started',
