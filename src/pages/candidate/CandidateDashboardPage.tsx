@@ -10,6 +10,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { STRINGS } from '@/constants/strings';
 import { assessmentService } from '@/services/assessment.service';
 import { interviewService } from '@/services/interview.service';
 import { jobApplicationService } from '@/services/job-application.service';
@@ -114,10 +115,10 @@ export function CandidateDashboardPage() {
       {/* Welcome Section */}
       <div>
         <h1 className="text-3xl font-bold text-[var(--text)]">
-          Welcome back, {user?.firstName || 'Candidate'}!
+          {STRINGS.candidateDashboard.welcome(user?.firstName || STRINGS.candidateDashboard.defaultName)}
         </h1>
         <p className="mt-2 text-[var(--textSecondary)]">
-          Here is an overview of your activities and upcoming events.
+          {STRINGS.candidateDashboard.intro}
         </p>
       </div>
 
@@ -130,7 +131,7 @@ export function CandidateDashboardPage() {
                 <ClipboardCheck className="w-6 h-6 text-[var(--primary)]" />
               </div>
               <div>
-                <p className="text-sm text-[var(--textSecondary)]">Upcoming Assessments</p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateDashboard.upcomingAssessments}</p>
                 <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(upcomingAssessments.length, failed.assessments)}</p>
               </div>
             </div>
@@ -144,7 +145,7 @@ export function CandidateDashboardPage() {
                 <Video className="w-6 h-6 text-[var(--accent)]" />
               </div>
               <div>
-                <p className="text-sm text-[var(--textSecondary)]">Upcoming Interviews</p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateDashboard.upcomingInterviews}</p>
                 <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(upcomingInterviews.length, failed.interviews)}</p>
               </div>
             </div>
@@ -161,7 +162,7 @@ export function CandidateDashboardPage() {
                 <Briefcase className="w-6 h-6 text-[var(--success)]" />
               </div>
               <div>
-                <p className="text-sm text-[var(--textSecondary)]">Jobs Applied</p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateDashboard.jobsApplied}</p>
                 <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(appliedJobCount, failed.applications)}</p>
               </div>
             </div>
@@ -175,7 +176,7 @@ export function CandidateDashboardPage() {
                 <Trophy className="w-6 h-6 text-[var(--warning)]" />
               </div>
               <div>
-                <p className="text-sm text-[var(--textSecondary)]">Completed Exams</p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateDashboard.completedExams}</p>
                 <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(completedExamCount, failed.assessments)}</p>
               </div>
             </div>
@@ -190,7 +191,7 @@ export function CandidateDashboardPage() {
             <CardTitle>
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="w-5 h-5 text-[var(--primary)]" />
-                Upcoming Assessments
+                {STRINGS.candidateDashboard.upcomingAssessments}
               </div>
             </CardTitle>
             <Button
@@ -199,14 +200,14 @@ export function CandidateDashboardPage() {
               rightIcon={<ArrowRight size={16} />}
               onClick={() => navigate(ROUTES.CANDIDATE.ASSESSMENTS)}
             >
-              View All
+              {STRINGS.candidateDashboard.viewAll}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {upcomingAssessments.length === 0 ? (
             <p className="text-[var(--textSecondary)] text-center py-8">
-              No upcoming assessments.
+              {STRINGS.candidateDashboard.noUpcomingAssessments}
             </p>
           ) : (
             <div className="space-y-3">
@@ -232,15 +233,15 @@ export function CandidateDashboardPage() {
                       </p>
                       <p className="text-sm text-[var(--textSecondary)]">
                         {startsLater(assessment)
-                          ? `Opens: ${formatDateTime(assessment.startTime!)}`
-                          : `Deadline: ${formatDate(assessment.deadline)}`}
+                          ? STRINGS.candidateDashboard.opens(formatDateTime(assessment.startTime!))
+                          : STRINGS.candidateDashboard.deadline(formatDate(assessment.deadline))}
                       </p>
                     </div>
                   </div>
                   {startsLater(assessment) ? (
                     <span className="flex-shrink-0 flex items-center gap-1.5 text-sm text-[var(--textSecondary)]">
                       <Clock size={14} />
-                      Scheduled
+                      {STRINGS.candidateDashboard.scheduled}
                     </span>
                   ) : (
                     <Button
@@ -250,7 +251,7 @@ export function CandidateDashboardPage() {
                         navigate(ROUTES.CANDIDATE.INSTRUCTIONS, { state: { assessment } })
                       }
                     >
-                      Start
+                      {STRINGS.candidateDashboard.start}
                     </Button>
                   )}
                 </div>
@@ -267,7 +268,7 @@ export function CandidateDashboardPage() {
             <CardTitle>
               <div className="flex items-center gap-2">
                 <Video className="w-5 h-5 text-[var(--primary)]" />
-                Upcoming Interviews
+                {STRINGS.candidateDashboard.upcomingInterviews}
               </div>
             </CardTitle>
             <Button
@@ -276,14 +277,14 @@ export function CandidateDashboardPage() {
               rightIcon={<ArrowRight size={16} />}
               onClick={() => navigate(ROUTES.CANDIDATE.INTERVIEWS)}
             >
-              View All
+              {STRINGS.candidateDashboard.viewAll}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {upcomingInterviews.length === 0 ? (
             <p className="text-[var(--textSecondary)] text-center py-8">
-              No upcoming interviews.
+              {STRINGS.candidateDashboard.noUpcomingInterviews}
             </p>
           ) : (
             <div className="space-y-3">
@@ -295,7 +296,9 @@ export function CandidateDashboardPage() {
                   <div>
                     <p className="font-medium text-[var(--text)]">{interview.jobPrefix}</p>
                     <p className="text-sm text-[var(--textSecondary)]">
-                      Deadline: {interview.deadlineTime ? formatDate(interview.deadlineTime) : 'No deadline'}
+                      {STRINGS.candidateDashboard.deadline(
+                        interview.deadlineTime ? formatDate(interview.deadlineTime) : STRINGS.candidateDashboard.noDeadline,
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -317,7 +320,7 @@ export function CandidateDashboardPage() {
                         navigate(ROUTES.CANDIDATE.INTERVIEW, { state: { interview } })
                       }
                     >
-                      Start
+                      {STRINGS.candidateDashboard.start}
                     </Button>
                   </div>
                 </div>
