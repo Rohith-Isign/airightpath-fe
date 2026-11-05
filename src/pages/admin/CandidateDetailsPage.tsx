@@ -1,4 +1,5 @@
 import { INTERVIEW_ASSIGN_STAGES } from '@/utils/interview-assign-stages';
+import { STRINGS } from '@/constants/strings';
 import { INTERVIEW_PHASES, stageOf } from '@/utils/interview-phase';
 import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
 import { resumeExtensionForType } from '@/utils/file.utils';
@@ -161,34 +162,7 @@ const STORED_STATUSES: JobApplicationStatus[] = [
  */
 const LEGACY_STAGE = 'ACKNOWLEDGED_BACK' as JobApplicationStatus;
 
-const STAGE_LABELS: Record<string, string> = {
-  APPLIED: 'Applied',
-  SHORTLISTED: 'Shortlisted',
-  ACKNOWLEDGED: 'Acknowledged',
-  // Named after the status, not the action waiting on it. Calling this tab
-  // "Reconfirm" put three different things called reconfirm on one screen —
-  // this tab, the "Reconfirmed" stage next to it, and the Send Reconfirmation
-  // button inside it — and a recruiter could not tell which one they were on.
-  ACKNOWLEDGED_BACK: 'Ack Back',
-  RECONFIRMED: 'Reconfirmed',
-  EXAM_SENT: 'Exam Sent',
-  EXAM_COMPLETED: 'Exam Completed',
-  // "Interview Sent", not "Interview". A candidate lands on this stage because
-  // an interview was booked and mailed to them — it is the exact mirror of
-  // "Exam Sent" — but the tab said "Interview", which reads as the stage where
-  // interviewing happens. So the one tab that means "already sent" was the tab
-  // an admin went to looking for people still to send to, and the pool that
-  // actually needs sending sits behind on Exam Completed.
-  INTERVIEW_SCHEDULED: 'Interview Sent',
-  INTERVIEW_COMPLETED: 'Interview Done',
-  // The interview phases: one tab per round, so L2 and L3 are tracked on their own.
-  L2_SENT: 'L2 Sent',
-  L2_DONE: 'L2 Done',
-  L3_SENT: 'L3 Sent',
-  L3_DONE: 'L3 Done',
-  SELECTED: 'Selected',
-  REJECTED: 'Rejected',
-};
+const STAGE_LABELS: Record<string, string> = STRINGS.candidatesAdmin.stages;
 
 // "Send Exam Link" used to live here. Assigning an assessment is the single way
 // an exam reaches a candidate now, so a second route that only mailed a link —
@@ -211,11 +185,11 @@ const BULK_ACTION_CONFIG: Record<
   BulkAction,
   { label: string; hasDateTime: boolean; icon: React.ReactNode }
 > = {
-  ack: { label: 'Send Ack Mail', hasDateTime: true, icon: <Mail size={16} /> },
-  rejection: { label: 'Send Rejection', hasDateTime: false, icon: <XCircle size={16} /> },
-  reconfirmation: { label: 'Send Reconfirmation', hasDateTime: false, icon: <RefreshCw size={16} /> },
-  success: { label: 'Send Success', hasDateTime: false, icon: <CheckCircle size={16} /> },
-  failure: { label: 'Send Failure', hasDateTime: false, icon: <AlertTriangle size={16} /> },
+  ack: { label: STRINGS.candidatesAdmin.bulk.ack, hasDateTime: true, icon: <Mail size={16} /> },
+  rejection: { label: STRINGS.candidatesAdmin.bulk.rejection, hasDateTime: false, icon: <XCircle size={16} /> },
+  reconfirmation: { label: STRINGS.candidatesAdmin.bulk.reconfirmation, hasDateTime: false, icon: <RefreshCw size={16} /> },
+  success: { label: STRINGS.candidatesAdmin.bulk.success, hasDateTime: false, icon: <CheckCircle size={16} /> },
+  failure: { label: STRINGS.candidatesAdmin.bulk.failure, hasDateTime: false, icon: <AlertTriangle size={16} /> },
   // The only action here that creates something rather than sending a message:
   // it books the interview and advances the candidate's stage. The date/time is
   // the deadline by which they must sit it, so it is required, not optional.
@@ -225,7 +199,7 @@ const BULK_ACTION_CONFIG: Record<
   // being booked. The round is now picked inside the modal, next to the count of
   // who it can actually be booked for — which is the only place that count can
   // be honest, because it depends on the round.
-  interview: { label: 'Assign Interview', hasDateTime: true, icon: <Video size={16} /> },
+  interview: { label: STRINGS.candidatesAdmin.bulk.interview, hasDateTime: true, icon: <Video size={16} /> },
 };
 
 /**
@@ -280,9 +254,9 @@ const STAGE_ACTIONS: Record<string, BulkAction[]> = {
  *   re-send the paper already sat.
  */
 function assignButtonLabel(stage: JobApplicationStatus): string {
-  if (stage === 'APPLIED' || stage === 'SHORTLISTED' || stage === 'ACKNOWLEDGED') return 'Send Exam Directly';
-  if (stage === 'RECONFIRMED') return 'Assign Assessment';
-  return 'Assign Another Assessment';
+  if (stage === 'APPLIED' || stage === 'SHORTLISTED' || stage === 'ACKNOWLEDGED') return STRINGS.candidatesAdmin.sendExamDirectly;
+  if (stage === 'RECONFIRMED') return STRINGS.candidatesAdmin.assignAssessment;
+  return STRINGS.candidatesAdmin.assignAnotherAssessment;
 }
 
 export function CandidateDetailsPage() {
@@ -505,7 +479,7 @@ export function CandidateDetailsPage() {
         jobPrefix: selectedPrefix,
         emails: who,
         round,
-        from: { label: 'Candidates', path: ROUTES.ADMIN.CANDIDATES },
+        from: { label: STRINGS.candidatesAdmin.backTo, path: ROUTES.ADMIN.CANDIDATES },
       },
     });
   }
@@ -615,7 +589,7 @@ export function CandidateDetailsPage() {
     writePersistentValue('ats:selectedPrefix', selectedPrefix);
     writePersistentValue('ats:scopeEmails', Array.from(selectedEmails));
     navigate(ROUTES.ADMIN.ATS, {
-      state: { from: { label: 'Candidates', path: ROUTES.ADMIN.CANDIDATES } },
+      state: { from: { label: STRINGS.candidatesAdmin.backTo, path: ROUTES.ADMIN.CANDIDATES } },
     });
   }
 
@@ -709,13 +683,13 @@ export function CandidateDetailsPage() {
       state: {
         jobPrefix: selectedPrefix,
         emails: Array.from(selectedEmails),
-        from: { label: 'Candidates', path: ROUTES.ADMIN.CANDIDATES },
+        from: { label: STRINGS.candidatesAdmin.backTo, path: ROUTES.ADMIN.CANDIDATES },
       },
     });
   }
 
   /** Where the results screens should send the admin back to. */
-  const resultsOrigin = { label: 'Candidates', path: ROUTES.ADMIN.CANDIDATES };
+  const resultsOrigin = { label: STRINGS.candidatesAdmin.backTo, path: ROUTES.ADMIN.CANDIDATES };
 
   /**
    * Open Assessment Results for this job.
@@ -890,7 +864,7 @@ export function CandidateDetailsPage() {
   }
 
   const jobOptions = [
-    { value: '', label: 'Select a job' },
+    { value: '', label: STRINGS.candidatesAdmin.selectJobOption },
     ...jobs.map((j) => ({ value: j.jobPrefix, label: `${j.jobTitle} (${j.jobPrefix})` })),
   ];
 
@@ -908,9 +882,9 @@ export function CandidateDetailsPage() {
       <BackLink />
 
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text)]">Candidate Details</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text)]">{STRINGS.candidatesAdmin.title}</h1>
         <p className="text-[var(--textSecondary)] mt-1">
-          Track and manage candidates through the recruitment pipeline
+          {STRINGS.candidatesAdmin.subtitle}
         </p>
       </div>
 
@@ -919,20 +893,20 @@ export function CandidateDetailsPage() {
         <CardContent>
           <div className="max-w-md">
             <Select
-              label="Select Job"
+              label={STRINGS.candidatesAdmin.selectJob}
               options={jobOptions}
               searchable
-              searchPlaceholder="Search by job title or prefix..."
+              searchPlaceholder={STRINGS.candidatesAdmin.jobSearchPlaceholder}
               value={selectedPrefix}
               onChange={(e) => setSelectedPrefix(e.target.value)}
             />
           </div>
           {selectedPrefix && !loadingCandidates && (
             <p className="mt-2 text-sm text-[var(--textSecondary)]">
-              Total candidates: <strong>{candidates.length}</strong>
+              {STRINGS.candidatesAdmin.totalCandidates} <strong>{candidates.length}</strong>
               {unknownCount > 0 && (
                 <span className="ml-2 text-amber-500">
-                  ({unknownCount} with unrecognized status)
+                  {STRINGS.candidatesAdmin.unrecognizedStatus(unknownCount)}
                 </span>
               )}
             </p>
@@ -991,7 +965,7 @@ export function CandidateDetailsPage() {
                         setActiveStage(LEGACY_STAGE);
                         setSelectedEmails(new Set());
                       }}
-                      title="Retired stage — acknowledging now moves a candidate straight to Reconfirmed"
+                      title={STRINGS.candidatesAdmin.ackBackHint}
                       className={`
                         flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200
                         ${activeStage === LEGACY_STAGE
@@ -1000,7 +974,7 @@ export function CandidateDetailsPage() {
                         }
                       `}
                     >
-                      <span className="text-xs font-semibold whitespace-nowrap">Ack Back</span>
+                      <span className="text-xs font-semibold whitespace-nowrap">{STAGE_LABELS.ACKNOWLEDGED_BACK}</span>
                       <span
                         className={`text-lg font-bold ${activeStage === LEGACY_STAGE ? 'text-white' : 'text-amber-600'}`}
                       >
@@ -1025,7 +999,7 @@ export function CandidateDetailsPage() {
                         }
                       `}
                     >
-                      <span className="text-xs font-semibold whitespace-nowrap">Rejected</span>
+                      <span className="text-xs font-semibold whitespace-nowrap">{STAGE_LABELS.REJECTED}</span>
                       <span className={`text-lg font-bold ${activeStage === ('REJECTED' as JobApplicationStatus) ? 'text-white' : 'text-red-500'}`}>
                         {rejectedCount}
                       </span>
@@ -1053,8 +1027,8 @@ export function CandidateDetailsPage() {
                     onClick={handleScreenAts}
                   >
                     {selectedEmails.size > 0
-                      ? `Screen ${selectedEmails.size} Selected with ATS`
-                      : 'Screen with ATS'}
+                      ? STRINGS.candidatesAdmin.screenSelectedWithAts(selectedEmails.size)
+                      : STRINGS.candidatesAdmin.screenWithAts}
                   </Button>
                   <Button
                     variant="outline"
@@ -1063,7 +1037,7 @@ export function CandidateDetailsPage() {
                     isLoading={shortlisting}
                     onClick={() => handleShortlist(Array.from(selectedEmails))}
                   >
-                    Shortlist Selected
+                    {STRINGS.candidatesAdmin.shortlistSelected}
                   </Button>
                 </>
               )}
@@ -1079,7 +1053,7 @@ export function CandidateDetailsPage() {
                     isLoading={shortlisting}
                     onClick={() => handleShortlist(Array.from(selectedEmails), true)}
                   >
-                    Shortlist Anyway
+                    {STRINGS.candidatesAdmin.shortlistAnyway}
                   </Button>
                   <Button
                     variant="outline"
@@ -1088,8 +1062,8 @@ export function CandidateDetailsPage() {
                     onClick={handleScreenAts}
                   >
                     {selectedEmails.size > 0
-                      ? `Re-screen ${selectedEmails.size} with ATS`
-                      : 'Re-screen with ATS'}
+                      ? STRINGS.candidatesAdmin.rescreenSelectedWithAts(selectedEmails.size)
+                      : STRINGS.candidatesAdmin.rescreenWithAts}
                   </Button>
                 </>
               )}
@@ -1133,11 +1107,20 @@ export function CandidateDetailsPage() {
                       onClick={() => goToInterviewScheduler(round)}
                       title={
                         again
-                          ? `Books a further ${short} attempt. A ${short} that is still open is skipped.`
-                          : `Books the ${INTERVIEW_ROUND_LABELS[round]} interview for the selected candidates.`
+                          ? STRINGS.candidatesAdmin.reassignHint(short)
+                          : STRINGS.candidatesAdmin.assignHint(INTERVIEW_ROUND_LABELS[round])
                       }
                     >
-                      {isNextStep && !again ? 'Move to' : editing ? 'Edit' : again ? 'Reassign' : 'Assign'} {short} Interview
+                      {STRINGS.candidatesAdmin.interviewButton(
+                        isNextStep && !again
+                          ? STRINGS.candidatesAdmin.verbMoveTo
+                          : editing
+                            ? STRINGS.candidatesAdmin.verbEdit
+                            : again
+                              ? STRINGS.candidatesAdmin.verbReassign
+                              : STRINGS.candidatesAdmin.verbAssign,
+                        short,
+                      )}
                       {selectedEmails.size > 0 ? ` (${selectedEmails.size})` : ''}
                     </Button>
                   );
@@ -1152,7 +1135,7 @@ export function CandidateDetailsPage() {
                   leftIcon={<BarChart3 size={16} />}
                   onClick={handleViewResults}
                 >
-                  View Assessment Results
+                  {STRINGS.candidatesAdmin.viewAssessmentResults}
                 </Button>
               )}
               {availableActions.map((key) => {
@@ -1185,7 +1168,7 @@ export function CandidateDetailsPage() {
                 </CardTitle>
                 {filteredCandidates.length > 0 && (
                   <span className="text-sm text-[var(--textSecondary)]">
-                    {selectedEmails.size} selected
+                    {STRINGS.candidatesAdmin.selectedCount(selectedEmails.size)}
                   </span>
                 )}
               </div>
@@ -1198,8 +1181,8 @@ export function CandidateDetailsPage() {
               ) : filteredCandidates.length === 0 ? (
                 <EmptyState
                   icon={<Users size={48} />}
-                  title="No candidates"
-                  description={`No candidates found in the "${STAGE_LABELS[activeStage]}" stage for this job.`}
+                  title={STRINGS.candidatesAdmin.noCandidatesTitle}
+                  description={STRINGS.candidatesAdmin.noCandidatesBody(STAGE_LABELS[activeStage])}
                 />
               ) : (
                 <CandidateTable

@@ -30,6 +30,7 @@ import {
   JobListPager,
 } from '@/components/jobs/JobListControls';
 import { ROUTES } from '@/config/routes';
+import { STRINGS } from '@/constants/strings';
 import { formatDate } from '@/utils/format.utils';
 import { useJobListing, isJobExpired } from '@/hooks/useJobListing';
 import type { JobPostDTO, JobApplicationDTO } from '@/types/job.types';
@@ -92,12 +93,12 @@ export function EventsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text)]">Available Jobs</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text)]">{STRINGS.jobEvents.title}</h1>
 
       {/* Search, type and status filters */}
       <JobListFilters
         listing={listing}
-        searchPlaceholder="Search jobs by title, company, skills, location..."
+        searchPlaceholder={STRINGS.jobEvents.searchPlaceholder}
       />
 
       {/* Results Count */}
@@ -107,9 +108,9 @@ export function EventsPage() {
       {listing.filtered.length === 0 ? (
         <div className="text-center py-16">
           <Briefcase className="w-12 h-12 mx-auto text-[var(--textTertiary)] mb-4" />
-          <p className="text-lg font-medium text-[var(--text)]">No jobs found</p>
+          <p className="text-lg font-medium text-[var(--text)]">{STRINGS.jobEvents.emptyTitle}</p>
           <p className="text-[var(--textSecondary)] mt-1">
-            Try adjusting your search, type or status filter.
+            {STRINGS.jobEvents.emptyBody}
           </p>
         </div>
       ) : (
@@ -139,7 +140,7 @@ export function EventsPage() {
                         <Badge variant="success" size="sm" className="flex-shrink-0">
                           <span className="flex items-center gap-1">
                             <CheckCircle size={12} />
-                            Applied
+                            {STRINGS.jobEvents.applied}
                           </span>
                         </Badge>
                       )}
@@ -158,7 +159,7 @@ export function EventsPage() {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-[var(--textSecondary)] min-w-0">
                         <Clock size={14} className="flex-shrink-0" />
-                        <span className="truncate">{job.experience} experience</span>
+                        <span className="truncate">{STRINGS.jobEvents.experienceSuffix(job.experience)}</span>
                       </div>
                       <div className={`flex items-center gap-2 text-sm min-w-0 ${expired ? 'text-red-500 dark:text-red-400 font-medium' : 'text-[var(--textSecondary)]'}`}>
                         {expired ? (
@@ -168,8 +169,8 @@ export function EventsPage() {
                         )}
                         <span className="truncate">
                           {expired
-                            ? `Expired: ${formatDate(job.applicationDeadline)}`
-                            : `Deadline: ${formatDate(job.applicationDeadline)}`}
+                            ? STRINGS.jobEvents.expired(formatDate(job.applicationDeadline))
+                            : STRINGS.jobEvents.deadline(formatDate(job.applicationDeadline))}
                         </span>
                       </div>
                     </div>
@@ -206,7 +207,7 @@ export function EventsPage() {
                         onClick={() => handleViewDetails(job)}
                         leftIcon={<Eye size={15} />}
                       >
-                        Details
+                        {STRINGS.jobEvents.details}
                       </Button>
                       {applied ? (
                         <Button
@@ -216,11 +217,11 @@ export function EventsPage() {
                           onClick={() => handleApply(job)}
                           leftIcon={<CheckCircle size={15} />}
                         >
-                          View Application
+                          {STRINGS.jobEvents.viewApplication}
                         </Button>
                       ) : expired ? (
                         <Button size="sm" className="w-full min-w-0" disabled>
-                          Deadline Passed
+                          {STRINGS.jobEvents.deadlinePassed}
                         </Button>
                       ) : (
                         <Button
@@ -228,7 +229,7 @@ export function EventsPage() {
                           className="w-full min-w-0"
                           onClick={() => handleApply(job)}
                         >
-                          Apply Now
+                          {STRINGS.jobEvents.applyNow}
                         </Button>
                       )}
                     </div>
@@ -248,12 +249,12 @@ export function EventsPage() {
         <Modal
           isOpen={!!selectedJob}
           onClose={() => setSelectedJob(null)}
-          title="Job Details"
+          title={STRINGS.jobEvents.detailsTitle}
           size="lg"
           footer={
             <>
               <Button variant="ghost" onClick={() => setSelectedJob(null)}>
-                Close
+                {STRINGS.jobEvents.close}
               </Button>
               {isJobApplied(selectedJob) ? (
                 <Button
@@ -263,7 +264,7 @@ export function EventsPage() {
                   }}
                   leftIcon={<CheckCircle size={16} />}
                 >
-                  View Application
+                  {STRINGS.jobEvents.viewApplication}
                 </Button>
               ) : !isDeadlinePassed(selectedJob.applicationDeadline) ? (
                 <Button
@@ -272,7 +273,7 @@ export function EventsPage() {
                     handleApply(selectedJob);
                   }}
                 >
-                  Apply Now
+                  {STRINGS.jobEvents.applyNow}
                 </Button>
               ) : null}
             </>
@@ -298,7 +299,7 @@ export function EventsPage() {
                   <Badge variant="success" size="sm">
                     <span className="flex items-center gap-1">
                       <CheckCircle size={12} />
-                      Applied
+                      {STRINGS.jobEvents.applied}
                     </span>
                   </Badge>
                 )}
@@ -311,28 +312,28 @@ export function EventsPage() {
               <div className="flex items-center gap-2 text-sm">
                 <MapPin size={16} className="text-[var(--primary)] flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-[var(--textTertiary)] text-xs">Location</p>
+                  <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.location}</p>
                   <p className="text-[var(--text)] font-medium break-words">{selectedJob.location}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Briefcase size={16} className="text-[var(--primary)] flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-[var(--textTertiary)] text-xs">Job Type</p>
+                  <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.jobType}</p>
                   <p className="text-[var(--text)] font-medium break-words">{selectedJob.jobType}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Clock size={16} className="text-[var(--primary)] flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-[var(--textTertiary)] text-xs">Experience</p>
+                  <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.experience}</p>
                   <p className="text-[var(--text)] font-medium break-words">{selectedJob.experience}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <GraduationCap size={16} className="text-[var(--primary)] flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-[var(--textTertiary)] text-xs">Education</p>
+                  <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.education}</p>
                   <p className="text-[var(--text)] font-medium break-words">{selectedJob.education}</p>
                 </div>
               </div>
@@ -340,7 +341,7 @@ export function EventsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <DollarSign size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Salary Range</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.salaryRange}</p>
                     <p className="text-[var(--text)] font-medium break-words">{selectedJob.salaryRange}</p>
                   </div>
                 </div>
@@ -349,7 +350,7 @@ export function EventsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Users size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Openings</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.openings}</p>
                     <p className="text-[var(--text)] font-medium break-words">{selectedJob.numberOfOpenings}</p>
                   </div>
                 </div>
@@ -358,7 +359,7 @@ export function EventsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Building2 size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Industry</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.industry}</p>
                     <p className="text-[var(--text)] font-medium break-words">{selectedJob.industry}</p>
                   </div>
                 </div>
@@ -367,7 +368,7 @@ export function EventsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <FileText size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Department</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.department}</p>
                     <p className="text-[var(--text)] font-medium break-words">{selectedJob.department}</p>
                   </div>
                 </div>
@@ -376,7 +377,7 @@ export function EventsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Mail size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Contact</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.jobEvents.contact}</p>
                     <p className="text-[var(--text)] font-medium break-words">{selectedJob.contactEmail}</p>
                   </div>
                 </div>
@@ -392,14 +393,14 @@ export function EventsPage() {
               )}
               <span className={`text-sm font-medium ${isDeadlinePassed(selectedJob.applicationDeadline) ? 'text-red-600 dark:text-red-400' : 'text-[var(--text)]'}`}>
                 {isDeadlinePassed(selectedJob.applicationDeadline)
-                  ? `Application Deadline Passed: ${formatDate(selectedJob.applicationDeadline)}`
-                  : `Application Deadline: ${formatDate(selectedJob.applicationDeadline)}`}
+                  ? STRINGS.jobEvents.applicationDeadlinePassed(formatDate(selectedJob.applicationDeadline))
+                  : STRINGS.jobEvents.applicationDeadline(formatDate(selectedJob.applicationDeadline))}
               </span>
             </div>
 
             {/* Job Description */}
             <div>
-              <h4 className="text-sm font-semibold text-[var(--text)] mb-2">Job Description</h4>
+              <h4 className="text-sm font-semibold text-[var(--text)] mb-2">{STRINGS.jobEvents.jobDescription}</h4>
               <p className="text-sm text-[var(--textSecondary)] whitespace-pre-wrap leading-relaxed">
                 {selectedJob.jobDescription}
               </p>
@@ -408,7 +409,7 @@ export function EventsPage() {
             {/* Key Skills */}
             {selectedJob.keySkills && (
               <div>
-                <h4 className="text-sm font-semibold text-[var(--text)] mb-2">Key Skills</h4>
+                <h4 className="text-sm font-semibold text-[var(--text)] mb-2">{STRINGS.jobEvents.keySkills}</h4>
                 <div className="flex flex-wrap gap-2">
                   {selectedJob.keySkills.split(',').map((skill, index) => (
                     <Badge key={index} variant="secondary" size="sm">
@@ -422,7 +423,7 @@ export function EventsPage() {
             {/* Role */}
             {selectedJob.role && (
               <div>
-                <h4 className="text-sm font-semibold text-[var(--text)] mb-2">Role</h4>
+                <h4 className="text-sm font-semibold text-[var(--text)] mb-2">{STRINGS.jobEvents.role}</h4>
                 <p className="text-sm text-[var(--textSecondary)]">{selectedJob.role}</p>
               </div>
             )}
