@@ -9,7 +9,9 @@ export const passwordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters')
   .regex(/^[A-Z]/, 'Password must start with an uppercase letter')
-  .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one special character');
+  // The same set the server accepts (Users / UsersDto / CreateStaffUserRequest), so a password that passes here is
+  // never refused there: includes _ - + = [ ] ; ' \ / which this check used to leave out.
+  .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>?/]/, 'Password must contain at least one special character');
 
 /** A first or last name: letters, spaces, apostrophes, hyphens and full stops, starting with a letter. */
 const nameRule = /^\p{L}[\p{L}\p{M}\s'.-]*$/u;
