@@ -39,6 +39,30 @@ export interface ScreeningResultRow {
   reason?: string | null;
 }
 
+/** One part of an ATS score (GET /api/job-applications/{id}/score-breakdown). */
+export interface ScoreBreakdownPart {
+  name: string;
+  /** How well the resume does on this part, 0 to 100. */
+  score: number;
+  /** This part's share of the total, in percent; the shares add to 100. */
+  weight: number;
+  /** What this part adds to the final score. */
+  points: number;
+  note: string;
+}
+
+/** Why a candidate's ATS score is what it is. `percent` is null when the resume could not be read (see `note`). */
+export interface ScoreBreakdown {
+  percent: number | null;
+  /** The score saved by the last screening run; differs from `percent` if the job or resume changed since. */
+  storedPercent: number | null;
+  threshold: number;
+  parts: ScoreBreakdownPart[];
+  matchedSkills: string[];
+  missingSkills: string[];
+  note: string | null;
+}
+
 export interface ScreeningRun {
   jobPrefix: string;
   /** Shortlist cut-off the run used, as a percentage. */
