@@ -90,6 +90,23 @@ export function hasNegativeNumber(value: string): boolean {
 
 const NO_NEGATIVE = 'Enter a number of zero or more; negative values are not allowed';
 
+/**
+ * Experience and salary are short free text ("3-5 years", "Fresher", "10-15 LPA", "5,00,000"), so they take letters,
+ * digits, spaces and the few marks those use, and nothing else: "!@#$%" is not an amount of anything.
+ */
+const EXPERIENCE_CHARS = /[^A-Za-z0-9 .+\-\u2013]/g;
+const SALARY_CHARS = /[^A-Za-z0-9 .,+\-\u2013\u20B9$/]/g;
+
+/** What an Experience box keeps of what was typed or pasted; used as the user types. */
+export const sanitizeExperience = (value: string) => value.replace(EXPERIENCE_CHARS, '');
+/** What a Salary box keeps of what was typed or pasted; used as the user types. */
+export const sanitizeSalary = (value: string) => value.replace(SALARY_CHARS, '');
+
+const NO_SPECIAL = 'Use only letters, numbers, spaces and . + - (no symbols such as ! @ # $ %)';
+const NEEDS_NUMBER = 'Enter the experience as a number, for example 3 or 3-5 years (or write Fresher)';
+const hasNoSpecialChars = (v: string) => sanitizeExperience(v) === v;
+const hasNumberOrFresher = (v: string) => /\d/.test(v) || /fresher/i.test(v);
+
 export const jobPostSchema = z.object({
   // The prefix becomes part of the web address of a dozen pages, so it is checked as it
   // is typed rather than after the server refuses it. Same rule as the backend.
@@ -111,11 +128,15 @@ export const jobPostSchema = z.object({
     .string()
     .trim()
     .min(1, 'Experience is required')
+    .refine(hasNoSpecialChars, NO_SPECIAL)
+    .refine(hasNumberOrFresher, NEEDS_NUMBER)
     .refine((v) => !hasNegativeNumber(v), NO_NEGATIVE),
   education: z.string().trim().min(1, 'Education is required'),
   salaryRange: z
     .string()
     .optional()
+    .refine((v) => !v || sanitizeSalary(v) === v, 'Use only letters, numbers, spaces and . , + - (no symbols such as ! @ # %)')
+    .refine((v) => !v || !v.trim() || /\d/.test(v), 'Enter the salary as a number, for example 10-15 LPA')
     .refine((v) => !v || !hasNegativeNumber(v), NO_NEGATIVE),
   jobType: z.string().min(1, 'Please select a job type'),
   industry: z.string().optional(),
@@ -177,6 +198,8 @@ export const jobApplicationSchema = z.object({
   experience: z
     .string()
     .min(1, 'Experience is required')
+    .refine(hasNoSpecialChars, NO_SPECIAL)
+    .refine(hasNumberOrFresher, NEEDS_NUMBER)
     .refine((v) => !hasNegativeNumber(v), NO_NEGATIVE),
   address: z.string().min(1, 'Address is required'),
   role: z.string().min(1, 'Role is required'),

@@ -12,7 +12,7 @@ import {
   Loader2,
   Pencil,
 } from "lucide-react";
-import { jobPostSchema, jobEditSchema } from "@/config/validation";
+import { jobPostSchema, jobEditSchema, sanitizeExperience, sanitizeSalary } from "@/config/validation";
 import {
   jobService,
   isEndpointMissing,
@@ -407,6 +407,10 @@ export function JobPostFormPage() {
                   placeholder="e.g. 3-5 years"
                   error={errors.experience?.message}
                   {...register("experience")}
+                  onChange={(e) => {
+                    e.target.value = sanitizeExperience(e.target.value);
+                    void register("experience").onChange(e);
+                  }}
                 />
               </div>
 
@@ -425,6 +429,10 @@ export function JobPostFormPage() {
                   helperText="Optional"
                   error={errors.salaryRange?.message}
                   {...register("salaryRange")}
+                  onChange={(e) => {
+                    e.target.value = sanitizeSalary(e.target.value);
+                    void register("salaryRange").onChange(e);
+                  }}
                 />
               </div>
 
