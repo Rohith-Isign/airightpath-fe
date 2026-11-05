@@ -201,11 +201,13 @@ export const STRINGS = {
   jobList: {
     allTypes: 'All Types',
     statusActive: 'Active',
+    statusClosingSoon: 'Closing Soon',
     statusExpired: 'Expired',
     statusAll: 'All Status',
     jobsAll: 'jobs',
     jobsActive: 'active jobs',
     jobsExpired: 'expired jobs',
+    jobsClosingSoon: 'jobs closing soon',
     showing: (from: number, to: number, total: number, label: string) =>
       `Showing ${from}–${to} of ${total} ${label}`,
   },

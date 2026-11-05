@@ -7,6 +7,11 @@ interface FileUploadProps {
   accept?: string;
   maxSizeBytes?: number;
   multiple?: boolean;
+  /**
+   * The selected files, when the page owns them (to restore them after a refresh, or to clear them from outside).
+   * Leave it out and the component keeps its own list.
+   */
+  value?: File[];
   error?: string;
   helperText?: string;
   onChange?: (files: File[]) => void;
@@ -26,6 +31,7 @@ export function FileUpload({
   accept,
   maxSizeBytes = 10 * 1024 * 1024,
   multiple = false,
+  value,
   error,
   helperText,
   onChange,
@@ -34,7 +40,8 @@ export function FileUpload({
   className = '',
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [ownFiles, setFiles] = useState<File[]>([]);
+  const files = value ?? ownFiles;
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
