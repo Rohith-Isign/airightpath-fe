@@ -505,6 +505,8 @@ export const STRINGS = {
     assessedOnly: (score: string) => `On the assessed areas only: ${score} / 10`,
     reEvaluate: 'Re-evaluate with AI',
     reEvaluating: 'Re-evaluating…',
+    reEvaluateTitle: 'Re-evaluate this interview?',
+    reEvaluatingNote: 'The AI is grading the interview again. This can take up to a minute; this window closes when it is done.',
     reEvaluateConfirm:
       'The AI will grade this interview again from its transcript and replace the current score and recommendation. A reviewer override is kept. Continue?',
     reEvaluated: 'Evaluation updated.',

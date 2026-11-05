@@ -1,4 +1,5 @@
 import { STRINGS } from '@/constants/strings';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -255,8 +256,13 @@ export function InterviewCandidateResultPage() {
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const shownEmail = registeredEmail ?? email;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /**
+   * Reads everything again. `silent` leaves the page on screen while it does: the sittings keep which of them are
+   * open and where the page is scrolled to, instead of the whole page being replaced by a spinner and rebuilt with
+   * only the newest sitting open.
+   */
+  const load = useCallback(async (silent?: boolean) => {
+    if (!silent) setLoading(true);
     setLoadError(null);
     try {
       const [res, appsRes] = await Promise.all([
@@ -522,7 +528,8 @@ export function InterviewCandidateResultPage() {
                 // A full reload rather than patching the row: removing a
                 // sitting changes the candidate's overall average and which
                 // attempt is the current one, and both are derived here.
-                onRemoved={load}
+                onRemoved={() => load()}
+                onRefresh={() => load(true)}
               />
             ),
           )}
@@ -761,23 +768,33 @@ function AttemptSection({
   attempt,
   defaultOpen,
   onRemoved,
-}: Readonly<{ attempt: RoundAttempt; defaultOpen: boolean; onRemoved: () => void }>) {
+  onRefresh,
+}: Readonly<{
+  attempt: RoundAttempt;
+  defaultOpen: boolean;
+  /** After a sitting is removed: the whole page is read again. */
+  onRemoved: () => void;
+  /** After a sitting is graded again: the data is read again without disturbing the page. */
+  onRefresh: () => void;
+}>) {
   const { showToast } = useToast();
   const [open, setOpen] = useState(defaultOpen);
   const [exporting, setExporting] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
   const [reEvaluating, setReEvaluating] = useState(false);
+  const [confirmReEvaluate, setConfirmReEvaluate] = useState(false);
   const { schedule, attemptNumber, attemptCount } = attempt;
 
   /** Has the AI grade this interview again and shows the new result. */
   async function reEvaluate() {
-    if (reEvaluating || !window.confirm(STRINGS.scoreBreakdown.reEvaluateConfirm)) return;
+    if (reEvaluating) return;
     setReEvaluating(true);
     try {
       await interviewService.reEvaluate(schedule.id);
       showToast(STRINGS.scoreBreakdown.reEvaluated, 'success');
-      // The same full reload as after a removal: the whole page is read again from the server.
-      onRemoved();
+      // Read again without a spinner, so this sitting stays open where it is.
+      onRefresh();
+      setConfirmReEvaluate(false);
     } catch {
       // Error toast auto-handled by the interceptor
     } finally {
@@ -840,11 +857,27 @@ function AttemptSection({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface1)]">
+      {confirmReEvaluate && (
+        <ConfirmDialog
+          isOpen
+          variant="warning"
+          title={STRINGS.scoreBreakdown.reEvaluateTitle}
+          confirmText={STRINGS.scoreBreakdown.reEvaluate}
+          isLoading={reEvaluating}
+          onClose={() => !reEvaluating && setConfirmReEvaluate(false)}
+          onConfirm={reEvaluate}
+          message={
+            reEvaluating ? STRINGS.scoreBreakdown.reEvaluatingNote : STRINGS.scoreBreakdown.reEvaluateConfirm
+          }
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2 px-2 py-2 sm:px-3">
         <button
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-[var(--bgMuted,var(--surface2))]"
+          // A floor on the width: without one the title was squeezed to nothing whenever the badges and buttons
+          // beside it filled the row, and the buttons then wrapped underneath it instead of the title keeping its line.
+          className="flex min-w-[12rem] flex-1 items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-[var(--bgMuted,var(--surface2))]"
         >
           <ChevronDown
             size={16}
@@ -887,7 +920,7 @@ function AttemptSection({
             <Button
               variant="ghost"
               size="sm"
-              onClick={reEvaluate}
+              onClick={() => setConfirmReEvaluate(true)}
               disabled={reEvaluating}
               leftIcon={reEvaluating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               title={STRINGS.scoreBreakdown.reEvaluateConfirm}
