@@ -606,7 +606,7 @@ export function InterviewPage() {
     // Restarted on every keystroke in the editor, because the code length is a
     // dependency: someone typing is plainly still present, and the check exists
     // to notice an empty chair.
-    if (voiceInterview.state === 'active' && !voiceInterview.isPlaying) {
+    if (voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking) {
       startInactivityTimers();
     } else {
       clearInactivityTimers();
@@ -617,7 +617,7 @@ export function InterviewPage() {
     return () => clearInactivityTimers();
   }, [
     voiceInterview.state,
-    voiceInterview.isPlaying,
+    voiceInterview.isInterviewerSpeaking,
     voiceInterview.codeContent.length,
     startInactivityTimers,
     clearInactivityTimers,
@@ -1683,7 +1683,7 @@ export function InterviewPage() {
                   <span className="text-xs text-[var(--textTertiary)] w-8 text-right">{voiceInterview.audioLevel ?? 0}%</span>
                 </div>
               )}
-              {questionTimer.isTimerActive && voiceInterview.state === 'active' && !voiceInterview.isPlaying && (
+              {questionTimer.isTimerActive && voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking && (
                 <div className="mb-3 flex items-center justify-center gap-3">
                   <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${questionTimer.secondsLeft <= 10 ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' : questionTimer.secondsLeft <= 20 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'}`}>
                     <Timer size={16} className={questionTimer.secondsLeft <= 10 ? 'text-red-500 animate-pulse' : questionTimer.secondsLeft <= 20 ? 'text-amber-500' : 'text-emerald-500'} />
@@ -1702,7 +1702,7 @@ export function InterviewPage() {
                   big enough to hit, and sits on its own surface so it reads as
                   the place you act rather than more page. */}
               <div className="mx-auto w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900 p-3 shadow-xl sm:p-4 dark:bg-slate-950">
-                {voiceInterview.state === 'active' && !voiceInterview.isPlaying && (
+                {voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking && (
                   <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
                     <button
                       onClick={() => { if (!voiceInterview.isWsConnected) showToast(MESSAGES.interview.stillConnecting, 'info'); else voiceInterview.startAnswering(); }}
@@ -1724,7 +1724,7 @@ export function InterviewPage() {
                   </div>
                 )}
 
-                {voiceInterview.state === 'active' && voiceInterview.isPlaying && (
+                {voiceInterview.state === 'active' && voiceInterview.isInterviewerSpeaking && (
                   <div className="flex items-center justify-center gap-3 py-3">
                     <span className="flex gap-1">
                       <span className="h-4 w-1 animate-pulse rounded-full bg-emerald-400" />
@@ -1780,11 +1780,11 @@ export function InterviewPage() {
                 {/* Readable rather than a 12px aside. This is the instruction
                     that tells a candidate what to do next. */}
                 <p className="mt-3 text-center text-xs text-slate-300 sm:text-sm">
-                  {voiceInterview.state === 'active' && !voiceInterview.isPlaying &&
+                  {voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking &&
                     (voiceInterview.isCodingQuestion
                       ? STRINGS.candidateInterview.controls.hintCodingTapMic
                       : STRINGS.candidateInterview.controls.hintTapMic)}
-                  {voiceInterview.state === 'active' && voiceInterview.isPlaying &&
+                  {voiceInterview.state === 'active' && voiceInterview.isInterviewerSpeaking &&
                     STRINGS.candidateInterview.controls.hintListen}
                   {voiceInterview.state === 'answering' &&
                     (voiceInterview.isCodingQuestion

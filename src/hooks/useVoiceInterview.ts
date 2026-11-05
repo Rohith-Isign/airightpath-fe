@@ -44,6 +44,25 @@ function withCurrentTurn(
 export function useVoiceInterview() {
   // State
   const [state, setState] = useState<VoiceInterviewState>("pre-start");
+
+  /**
+   * The interviewer has answered in text but its voice has not started yet.
+   *
+   * The reply text arrives first and the spoken audio a moment later. In that gap nothing was playing, so the
+   * "Start answering" button came back, and a candidate who pressed it talked over the interviewer (and cut its voice
+   * off). While this is true the interviewer counts as speaking: the mic stays locked until the voice has played.
+   */
+  const [awaitingInterviewerAudio, setAwaitingInterviewerAudio] = useState(false);
+  const awaitingAudioTimerRef = useRef<number | null>(null);
+  /** Whether any voice has arrived for the turn in progress: it can come before the reply text does. */
+  const audioArrivedRef = useRef(false);
+  const clearAwaitingAudio = useCallback(() => {
+    if (awaitingAudioTimerRef.current) {
+      window.clearTimeout(awaitingAudioTimerRef.current);
+      awaitingAudioTimerRef.current = null;
+    }
+    setAwaitingInterviewerAudio(false);
+  }, []);
   /** Why the interview ended, when the server said: "ai_closed", "question_limit", or the reason text of a forced end. */
   const [endReason, setEndReason] = useState<string | null>(null);
   const [scheduleId, setScheduleId] = useState<number | null>(null);
@@ -272,6 +291,8 @@ export function useVoiceInterview() {
           if (msg.audio) {
             questionAudioRef.current.set(msg.chunkIndex, msg.audio);
           }
+          audioArrivedRef.current = true;
+          clearAwaitingAudio();
           enqueueAudioRef.current(msg.audio, msg.text, msg.isLast);
         },
       );
@@ -397,6 +418,17 @@ export function useVoiceInterview() {
           }
 
           setQuestionsAsked(msg.questionsAsked);
+
+          // The reply is on screen; its voice follows. Keep the mic locked until it has played, unless it came first
+          // or this was the last turn. A timeout releases the lock if no voice ever arrives (TTS down).
+          if (msg.response && !msg.isComplete && !msg.terminated && !audioArrivedRef.current) {
+            setAwaitingInterviewerAudio(true);
+            if (awaitingAudioTimerRef.current) window.clearTimeout(awaitingAudioTimerRef.current);
+            awaitingAudioTimerRef.current = window.setTimeout(() => {
+              awaitingAudioTimerRef.current = null;
+              setAwaitingInterviewerAudio(false);
+            }, 10_000);
+          }
 
           if (msg.isComplete || msg.terminated) {
             setEndReason((prev) => prev ?? (msg.reason ? String(msg.reason) : msg.terminated ? "terminated" : "ai_closed"));
@@ -556,6 +588,9 @@ export function useVoiceInterview() {
 
   // Start answering (recording)
   const startAnswering = useCallback(async () => {
+    // The mic opens only when the interviewer has finished speaking. It used to interrupt the voice instead, which put
+    // the candidate's words on top of the interviewer's and cut the question short.
+    if (audioPlayback.isPlaying || awaitingInterviewerAudio) return;
     transcriptRef.current = "";
     wordTimestampsRef.current = [];
     doneChunksRef.current = new Set();
@@ -563,13 +598,9 @@ export function useVoiceInterview() {
     chunkTextsRef.current = new Map();
     setCurrentTranscript("");
 
-    // Interrupt any playing audio
-    audioPlayback.stopPlayback();
-    sendToInterview("interrupt", { reason: "candidate_speaking" });
-
     await audioStreaming.startRecording();
     setState("answering");
-  }, [audioStreaming, audioPlayback, sendToInterview]);
+  }, [audioStreaming, audioPlayback, awaitingInterviewerAudio]);
 
   /**
    * Notices an interview that ended without the page being told.
@@ -789,6 +820,8 @@ export function useVoiceInterview() {
       }
       sendToInterview("submit-answer", payload);
 
+      audioArrivedRef.current = false;
+      clearAwaitingAudio();
       setError(null);
       setState("processing");
 
@@ -839,6 +872,8 @@ export function useVoiceInterview() {
       skipped: true,
     });
 
+    audioArrivedRef.current = false;
+    clearAwaitingAudio();
     setState("processing");
 
     // Start safety timeout
@@ -1033,6 +1068,8 @@ export function useVoiceInterview() {
     // Audio state
     isRecording: audioStreaming.isRecording,
     isPlaying: audioPlayback.isPlaying,
+    /** The interviewer is speaking, or is about to: its text is shown and its voice has not played yet. */
+    isInterviewerSpeaking: audioPlayback.isPlaying || awaitingInterviewerAudio,
     amplitude: audioPlayback.amplitude,
     audioLevel: audioStreaming.audioLevel,
     /**
