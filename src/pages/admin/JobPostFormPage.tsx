@@ -1,29 +1,41 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Send, Briefcase, CheckCircle, Save, ArrowLeft, Loader2 } from 'lucide-react';
-import { jobPostSchema, jobEditSchema } from '@/config/validation';
-import { jobService, isEndpointMissing, createdJobPrefix } from '@/services/job.service';
-import { extractApiError } from '@/services/api.service';
-import { useToast } from '@/components/ui/Toast';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
-import { Textarea } from '@/components/ui/Textarea';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { ShareJobLink } from '@/components/admin/ShareJobLink';
-import { MESSAGES } from '@/config/messages';
-import { ROUTES } from '@/config/routes';
-import { JOB_TYPES, canonicalJobType } from '@/utils/job.utils';
-import type { JobPostDTO } from '@/types/job.types';
+import { useState, useEffect, useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Send,
+  Briefcase,
+  CheckCircle,
+  Save,
+  ArrowLeft,
+  Loader2,
+  Pencil,
+} from "lucide-react";
+import { jobPostSchema, jobEditSchema } from "@/config/validation";
+import {
+  jobService,
+  isEndpointMissing,
+  createdJobPrefix,
+} from "@/services/job.service";
+import { extractApiError } from "@/services/api.service";
+import { useToast } from "@/components/ui/Toast";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
+import { ShareJobLink } from "@/components/admin/ShareJobLink";
+import { MESSAGES } from "@/config/messages";
+import { ROUTES } from "@/config/routes";
+import { JOB_TYPES, canonicalJobType } from "@/utils/job.utils";
+import type { JobPostDTO } from "@/types/job.types";
 
 type JobPostFormData = z.infer<typeof jobPostSchema>;
 
 // Single source of truth — the same list the dashboard and filters group by.
 const JOB_TYPE_OPTIONS = [
-  { value: '', label: 'Select job type' },
+  { value: "", label: "Select job type" },
   ...JOB_TYPES.map((t) => ({ value: t, label: t })),
 ];
 
@@ -35,49 +47,49 @@ function localDateToday(): string {
 }
 
 // Keystrokes that would produce a non-integer opening count.
-const BLOCKED_NUMBER_KEYS = new Set(['.', ',', 'e', 'E', '+', '-']);
+const BLOCKED_NUMBER_KEYS = new Set([".", ",", "e", "E", "+", "-"]);
 
 const EMPTY_FORM: JobPostFormData = {
-  jobPrefix: '',
-  jobTitle: '',
-  companyName: '',
-  location: '',
-  jobDescription: '',
-  keySkills: '',
-  experience: '',
-  education: '',
-  salaryRange: '',
-  jobType: '',
-  industry: '',
-  department: '',
-  role: '',
+  jobPrefix: "",
+  jobTitle: "",
+  companyName: "",
+  location: "",
+  jobDescription: "",
+  keySkills: "",
+  experience: "",
+  education: "",
+  salaryRange: "",
+  jobType: "",
+  industry: "",
+  department: "",
+  role: "",
   numberOfOpenings: 1,
-  applicationDeadline: '',
+  applicationDeadline: "",
 };
 
 /** The deadline arrives as a LocalDate or an ISO timestamp — the input wants `YYYY-MM-DD`. */
 function toDateInput(value?: string): string {
-  if (!value) return '';
+  if (!value) return "";
   return value.slice(0, 10);
 }
 
 function toFormValues(job: JobPostDTO): JobPostFormData {
   return {
-    jobPrefix: job.jobPrefix ?? '',
-    jobTitle: job.jobTitle ?? '',
-    companyName: job.companyName ?? '',
-    location: job.location ?? '',
-    jobDescription: job.jobDescription ?? '',
-    keySkills: job.keySkills ?? '',
-    experience: job.experience ?? '',
-    education: job.education ?? '',
-    salaryRange: job.salaryRange ?? '',
+    jobPrefix: job.jobPrefix ?? "",
+    jobTitle: job.jobTitle ?? "",
+    companyName: job.companyName ?? "",
+    location: job.location ?? "",
+    jobDescription: job.jobDescription ?? "",
+    keySkills: job.keySkills ?? "",
+    experience: job.experience ?? "",
+    education: job.education ?? "",
+    salaryRange: job.salaryRange ?? "",
     // Canonicalised so a legacy "Full-time" preselects the "Full-Time" option
     // and saving writes the standard spelling back.
-    jobType: job.jobType?.trim() ? canonicalJobType(job.jobType) : '',
-    industry: job.industry ?? '',
-    department: job.department ?? '',
-    role: job.role ?? '',
+    jobType: job.jobType?.trim() ? canonicalJobType(job.jobType) : "",
+    industry: job.industry ?? "",
+    department: job.department ?? "",
+    role: job.role ?? "",
     numberOfOpenings: job.numberOfOpenings ?? 1,
     applicationDeadline: toDateInput(job.applicationDeadline),
   };
@@ -94,6 +106,8 @@ export function JobPostFormPage() {
   const location = useLocation();
   const { jobPrefix: editPrefix } = useParams<{ jobPrefix: string }>();
   const isEdit = !!editPrefix;
+  // The same form, read-only: the whole job as it was filled in, with Edit one click away.
+  const isView = isEdit && location.pathname.endsWith("/view");
 
   const [submitting, setSubmitting] = useState(false);
   // Job prefix of the most recently created job — drives the share-link panel.
@@ -109,17 +123,23 @@ export function JobPostFormPage() {
   // A job saved with a type outside the standard list keeps it as an extra
   // option — otherwise the select would silently blank an unrecognised value.
   const jobTypeOptions = useMemo(() => {
-    const current = job?.jobType?.trim() ? canonicalJobType(job.jobType) : '';
+    const current = job?.jobType?.trim() ? canonicalJobType(job.jobType) : "";
     const isCustom = !!current && !JOB_TYPES.some((t) => t === current);
     return isCustom
-      ? [...JOB_TYPE_OPTIONS, { value: current, label: `${current} (existing)` }]
+      ? [
+          ...JOB_TYPE_OPTIONS,
+          { value: current, label: `${current} (existing)` },
+        ]
       : JOB_TYPE_OPTIONS;
   }, [job?.jobType]);
 
   // An expired posting keeps its original deadline so a typo fix doesn't force
   // the admin to reopen applications.
   const schema = useMemo(
-    () => (isEdit ? jobEditSchema(toDateInput(job?.applicationDeadline)) : jobPostSchema),
+    () =>
+      isEdit
+        ? jobEditSchema(toDateInput(job?.applicationDeadline))
+        : jobPostSchema,
     [isEdit, job?.applicationDeadline],
   );
 
@@ -130,7 +150,7 @@ export function JobPostFormPage() {
     formState: { errors, isValid, isDirty },
   } = useForm<JobPostFormData>({
     resolver: zodResolver(schema),
-    mode: 'onChange',
+    mode: "onChange",
     defaultValues: job ? toFormValues(job) : EMPTY_FORM,
   });
 
@@ -145,7 +165,7 @@ export function JobPostFormPage() {
         const found = (res.data ?? []).find((j) => j.jobPrefix === editPrefix);
         if (cancelled) return;
         if (!found) {
-          showToast(MESSAGES.admin.jobPost.notFound, 'error');
+          showToast(MESSAGES.admin.jobPost.notFound, "error");
           navigate(ROUTES.ADMIN.JOBS);
           return;
         }
@@ -169,7 +189,8 @@ export function JobPostFormPage() {
     // form's validity state slips (schema + min attribute already guard the UI).
     // On an edit, an untouched already-past deadline is allowed through.
     const unchangedDeadline =
-      isEdit && data.applicationDeadline === toDateInput(job?.applicationDeadline);
+      isEdit &&
+      data.applicationDeadline === toDateInput(job?.applicationDeadline);
     const deadline = new Date(`${data.applicationDeadline}T00:00:00`);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -177,7 +198,7 @@ export function JobPostFormPage() {
       Number.isNaN(deadline.getTime()) ||
       (!unchangedDeadline && deadline.getTime() < today.getTime())
     ) {
-      showToast(MESSAGES.admin.jobPost.deadlineInPast, 'error');
+      showToast(MESSAGES.admin.jobPost.deadlineInPast, "error");
       return;
     }
 
@@ -185,19 +206,23 @@ export function JobPostFormPage() {
     try {
       if (isEdit) {
         if (job?.id == null) {
-          showToast(MESSAGES.admin.jobPost.updateNoId, 'error');
+          showToast(MESSAGES.admin.jobPost.updateNoId, "error");
           return;
         }
         // The prefix is the key applications and assessments hang off — send the
         // stored one back untouched.
-        await jobService.updateJob(job.id, { ...job, ...data, jobPrefix: job.jobPrefix });
-        showToast(MESSAGES.admin.jobPost.updated, 'success');
+        await jobService.updateJob(job.id, {
+          ...job,
+          ...data,
+          jobPrefix: job.jobPrefix,
+        });
+        showToast(MESSAGES.admin.jobPost.updated, "success");
         navigate(ROUTES.ADMIN.JOBS);
         return;
       }
 
       const created = await jobService.createJob(data);
-      showToast(MESSAGES.admin.jobPost.posted, 'success');
+      showToast(MESSAGES.admin.jobPost.posted, "success");
       // The server's prefix, never the typed one: it upper-cases the input and
       // appends the next id, so `data.jobPrefix` addresses no job that exists
       // and the shareable link built from it 404s for every candidate sent it.
@@ -213,7 +238,7 @@ export function JobPostFormPage() {
           isEndpointMissing(error)
             ? MESSAGES.admin.jobPost.updateUnavailable
             : extractApiError(error).message,
-          'error',
+          "error",
         );
       }
       // Create errors are toasted by the API interceptor.
@@ -245,12 +270,18 @@ export function JobPostFormPage() {
 
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text)]">
-          {isEdit ? 'Edit Job Post' : 'Create Job Post'}
+          {isView
+            ? "View Job Post"
+            : isEdit
+              ? "Edit Job Post"
+              : "Create Job Post"}
         </h1>
         <p className="text-[var(--textSecondary)] mt-1">
-          {isEdit
-            ? `Update the details of ${job?.jobPrefix ?? editPrefix}. Changes apply to the live posting immediately.`
-            : 'Fill in the details below to create a new job posting'}
+          {isView
+            ? `All the details of ${job?.jobPrefix ?? editPrefix}, as posted.`
+            : isEdit
+              ? `Update the details of ${job?.jobPrefix ?? editPrefix}. Changes apply to the live posting immediately.`
+              : "Fill in the details below to create a new job posting"}
         </p>
       </div>
 
@@ -258,11 +289,18 @@ export function JobPostFormPage() {
         <Card>
           <CardContent>
             <div className="flex items-start gap-3 pt-5">
-              <CheckCircle size={22} className="mt-0.5 flex-shrink-0 text-green-500" />
+              <CheckCircle
+                size={22}
+                className="mt-0.5 flex-shrink-0 text-green-500"
+              />
               <div className="min-w-0 flex-1 space-y-3">
                 <div>
                   <p className="font-semibold text-[var(--text)]">
-                    Job <span className="text-[var(--primary)]">{createdPrefix}</span> created
+                    Job{" "}
+                    <span className="text-[var(--primary)]">
+                      {createdPrefix}
+                    </span>{" "}
+                    created
                   </p>
                   <p className="text-sm text-[var(--textSecondary)]">
                     Share this link so candidates can apply directly.
@@ -291,215 +329,261 @@ export function JobPostFormPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* Row 1 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Job Prefix"
-                required
-                placeholder="e.g. DEV-2024-001"
-                // Applications, assessments and results are all filed under the
-                // prefix — renaming it would orphan them. `readOnly` rather than
-                // `disabled` so the value still posts back and stays copyable.
-                readOnly={isEdit}
-                className={isEdit ? 'opacity-60 cursor-not-allowed' : ''}
-                helperText={
-                  isEdit
-                    ? 'Cannot be changed after creation'
-                    : 'Letters, numbers, hyphens (-) and underscores (_) only. A number is added automatically, e.g. DEV-2024 becomes DEV-2024-001.'
-                }
-                error={errors.jobPrefix?.message}
-                {...register('jobPrefix')}
-              />
-              <Input
-                label="Job Title"
-                required
-                placeholder="e.g. Senior Software Engineer"
-                error={errors.jobTitle?.message}
-                {...register('jobTitle')}
-              />
-            </div>
+            {/* A disabled fieldset switches off every field inside it, so the view cannot drift from the form. */}
+            <fieldset
+              disabled={isView}
+              className="m-0 min-w-0 space-y-6 border-0 p-0"
+            >
+              {/* Row 1 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Job Prefix"
+                  required
+                  placeholder="e.g. DEV-2024-001"
+                  // Applications, assessments and results are all filed under the
+                  // prefix — renaming it would orphan them. `readOnly` rather than
+                  // `disabled` so the value still posts back and stays copyable.
+                  readOnly={isEdit}
+                  className={isEdit ? "opacity-60 cursor-not-allowed" : ""}
+                  helperText={
+                    isEdit
+                      ? "Cannot be changed after creation"
+                      : "Letters, numbers, hyphens (-) and underscores (_) only. A number is added automatically, e.g. DEV-2024 becomes DEV-2024-001."
+                  }
+                  error={errors.jobPrefix?.message}
+                  {...register("jobPrefix")}
+                />
+                <Input
+                  label="Job Title"
+                  required
+                  placeholder="e.g. Senior Software Engineer"
+                  error={errors.jobTitle?.message}
+                  {...register("jobTitle")}
+                />
+              </div>
 
-            {/* Row 2 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Company Name"
-                required
-                placeholder="e.g. Acme Corp"
-                error={errors.companyName?.message}
-                {...register('companyName')}
-              />
-              <Input
-                label="Location"
-                required
-                placeholder="e.g. Hyderabad, India"
-                error={errors.location?.message}
-                {...register('location')}
-              />
-            </div>
+              {/* Row 2 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Company Name"
+                  required
+                  placeholder="e.g. Acme Corp"
+                  error={errors.companyName?.message}
+                  {...register("companyName")}
+                />
+                <Input
+                  label="Location"
+                  required
+                  placeholder="e.g. Hyderabad, India"
+                  error={errors.location?.message}
+                  {...register("location")}
+                />
+              </div>
 
-            {/* Job Description */}
-            <Textarea
-              label="Job Description"
-              required
-              resizable={false}
-              placeholder="Provide a detailed job description..."
-              maxLength={3000}
-              showCharCount
-              error={errors.jobDescription?.message}
-              {...register('jobDescription')}
-            />
+              {/* Job Description */}
+              <Textarea
+                label="Job Description"
+                required
+                resizable={false}
+                placeholder="Provide a detailed job description..."
+                maxLength={3000}
+                showCharCount
+                error={errors.jobDescription?.message}
+                {...register("jobDescription")}
+              />
 
-            {/* Row 3 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Skills"
-                required
-                placeholder="e.g. React, Node.js, TypeScript"
-                error={errors.keySkills?.message}
-                {...register('keySkills')}
-              />
-              <Input
-                label="Experience"
-                required
-                placeholder="e.g. 3-5 years"
-                error={errors.experience?.message}
-                {...register('experience')}
-              />
-            </div>
+              {/* Row 3 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Skills"
+                  required
+                  placeholder="e.g. React, Node.js, TypeScript"
+                  error={errors.keySkills?.message}
+                  {...register("keySkills")}
+                />
+                <Input
+                  label="Experience"
+                  required
+                  placeholder="e.g. 3-5 years"
+                  error={errors.experience?.message}
+                  {...register("experience")}
+                />
+              </div>
 
-            {/* Row 4 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Education"
-                required
-                placeholder="e.g. B.Tech in CS"
-                error={errors.education?.message}
-                {...register('education')}
-              />
-              <Input
-                label="Salary"
-                placeholder="e.g. 10-15 LPA"
-                helperText="Optional"
-                error={errors.salaryRange?.message}
-                {...register('salaryRange')}
-              />
-            </div>
+              {/* Row 4 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Education"
+                  required
+                  placeholder="e.g. B.Tech in CS"
+                  error={errors.education?.message}
+                  {...register("education")}
+                />
+                <Input
+                  label="Salary"
+                  placeholder="e.g. 10-15 LPA"
+                  helperText="Optional"
+                  error={errors.salaryRange?.message}
+                  {...register("salaryRange")}
+                />
+              </div>
 
-            {/* Row 5 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Select
-                label="Job Type"
-                required
-                options={jobTypeOptions}
-                error={errors.jobType?.message}
-                {...register('jobType')}
-              />
-              <Input
-                label="Industry"
-                placeholder="e.g. Information Technology"
-                helperText="Optional"
-                error={errors.industry?.message}
-                {...register('industry')}
-              />
-            </div>
+              {/* Row 5 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Select
+                  label="Job Type"
+                  required
+                  options={jobTypeOptions}
+                  error={errors.jobType?.message}
+                  {...register("jobType")}
+                />
+                <Input
+                  label="Industry"
+                  placeholder="e.g. Information Technology"
+                  helperText="Optional"
+                  error={errors.industry?.message}
+                  {...register("industry")}
+                />
+              </div>
 
-            {/* Row 6 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Department"
-                required
-                placeholder="e.g. Engineering"
-                helperText="Used to categorise the job in reporting and candidate search"
-                error={errors.department?.message}
-                {...register('department')}
-              />
-              <Input
-                label="Role"
-                required
-                placeholder="e.g. Backend Developer"
-                helperText="The role or category this job belongs to. The Job Title above is the name shown everywhere."
-                error={errors.role?.message}
-                {...register('role')}
-              />
-            </div>
+              {/* Row 6 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Department"
+                  required
+                  placeholder="e.g. Engineering"
+                  helperText="Used to categorise the job in reporting and candidate search"
+                  error={errors.department?.message}
+                  {...register("department")}
+                />
+                <Input
+                  label="Role"
+                  required
+                  placeholder="e.g. Backend Developer"
+                  helperText="The role or category this job belongs to. The Job Title above is the name shown everywhere."
+                  error={errors.role?.message}
+                  {...register("role")}
+                />
+              </div>
 
-            {/* Row 7 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Number of Openings"
-                required
-                type="number"
-                min={1}
-                step={1}
-                inputMode="numeric"
-                placeholder="e.g. 3"
-                helperText="Whole numbers only"
-                onKeyDown={(e) => {
-                  if (BLOCKED_NUMBER_KEYS.has(e.key)) e.preventDefault();
-                }}
-                error={errors.numberOfOpenings?.message}
-                {...register('numberOfOpenings', { valueAsNumber: true })}
-              />
-              <Input
-                label="Application Deadline"
-                required
-                type="date"
-                // An expired posting may keep its own past date; any new date
-                // must still be today or later.
-                min={isEdit ? undefined : minDeadline}
-                helperText={isEdit ? 'Keep as-is, or pick today or later' : 'Today or later'}
-                error={errors.applicationDeadline?.message}
-                {...register('applicationDeadline')}
-              />
-            </div>
+              {/* Row 7 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Number of Openings"
+                  required
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 3"
+                  helperText="Whole numbers only"
+                  onKeyDown={(e) => {
+                    if (BLOCKED_NUMBER_KEYS.has(e.key)) e.preventDefault();
+                  }}
+                  error={errors.numberOfOpenings?.message}
+                  {...register("numberOfOpenings", { valueAsNumber: true })}
+                />
+                <Input
+                  label="Application Deadline"
+                  required
+                  type="date"
+                  // An expired posting may keep its own past date; any new date
+                  // must still be today or later.
+                  min={isEdit ? undefined : minDeadline}
+                  helperText={
+                    isEdit
+                      ? "Keep as-is, or pick today or later"
+                      : "Today or later"
+                  }
+                  error={errors.applicationDeadline?.message}
+                  {...register("applicationDeadline")}
+                />
+              </div>
+            </fieldset>
 
             {/* Submit */}
-            <div className="flex flex-col sm:items-end gap-2 pt-4 border-t border-[var(--border)]">
-              {!isValid && (
-                <p className="text-sm text-[var(--textSecondary)]">
-                  Fill in all required fields (<span className="text-[var(--error)]">*</span>) to
-                  enable {isEdit ? 'saving' : 'posting'}.
-                </p>
-              )}
-              {isEdit && isValid && !isDirty && (
-                <p className="text-sm text-[var(--textSecondary)]">
-                  Change a field to enable saving.
-                </p>
-              )}
-              {/* Stacked on a phone, inline from sm up, so three actions never
-                  run off the edge. */}
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 w-full">
+            {isView ? (
+              <div className="flex flex-col-reverse gap-3 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => (isEdit ? navigate(ROUTES.ADMIN.JOBS) : reset())}
-                  className="w-full sm:w-auto"
-                  disabled={submitting}
+                  onClick={() => navigate(ROUTES.ADMIN.JOBS)}
                 >
-                  {isEdit ? 'Cancel' : 'Reset'}
+                  Back to Job Events
                 </Button>
-                {isEdit && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => reset(job ? toFormValues(job) : EMPTY_FORM)}
-                    className="w-full sm:w-auto"
-                    disabled={submitting || !isDirty}
-                  >
-                    Revert Changes
-                  </Button>
-                )}
                 <Button
-                  type="submit"
-                  className="w-full sm:w-auto"
-                  isLoading={submitting}
-                  disabled={!isValid || submitting || (isEdit && !isDirty)}
-                  leftIcon={!submitting ? (isEdit ? <Save size={16} /> : <Send size={16} />) : undefined}
+                  type="button"
+                  leftIcon={<Pencil size={16} />}
+                  onClick={() =>
+                    navigate(ROUTES.ADMIN.jobsEdit(editPrefix!), {
+                      state: { job },
+                    })
+                  }
                 >
-                  {isEdit ? 'Save Changes' : 'Post Job'}
+                  Edit Job
                 </Button>
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-col sm:items-end gap-2 pt-4 border-t border-[var(--border)]">
+                {!isValid && (
+                  <p className="text-sm text-[var(--textSecondary)]">
+                    Fill in all required fields (
+                    <span className="text-[var(--error)]">*</span>) to enable{" "}
+                    {isEdit ? "saving" : "posting"}.
+                  </p>
+                )}
+                {isEdit && isValid && !isDirty && (
+                  <p className="text-sm text-[var(--textSecondary)]">
+                    Change a field to enable saving.
+                  </p>
+                )}
+                {/* Stacked on a phone, inline from sm up, so three actions never
+                  run off the edge. */}
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 w-full">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      isEdit ? navigate(ROUTES.ADMIN.JOBS) : reset()
+                    }
+                    className="w-full sm:w-auto"
+                    disabled={submitting}
+                  >
+                    {isEdit ? "Cancel" : "Reset"}
+                  </Button>
+                  {isEdit && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        reset(job ? toFormValues(job) : EMPTY_FORM)
+                      }
+                      className="w-full sm:w-auto"
+                      disabled={submitting || !isDirty}
+                    >
+                      Revert Changes
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    className="w-full sm:w-auto"
+                    isLoading={submitting}
+                    disabled={!isValid || submitting || (isEdit && !isDirty)}
+                    leftIcon={
+                      !submitting ? (
+                        isEdit ? (
+                          <Save size={16} />
+                        ) : (
+                          <Send size={16} />
+                        )
+                      ) : undefined
+                    }
+                  >
+                    {isEdit ? "Save Changes" : "Post Job"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </form>
         </CardContent>
       </Card>
