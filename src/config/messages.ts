@@ -124,6 +124,8 @@ export const MESSAGES = {
     resumed: 'Picking up where you left off — your earlier answers are saved.',
     roomSecondPerson: (count: number) =>
       `${count} people visible on your phone camera. You must be alone for this interview.`,
+    tabSwitch: (count: number) =>
+      `You left the interview tab (${count}). Stay on this page for the whole interview; it is recorded for the reviewer.`,
     fullscreenExit: (count: number) =>
       `Fullscreen exit detected (${count}). Please return to fullscreen.`,
     faceNotDetected: 'Face not detected. Please stay in front of the camera.',

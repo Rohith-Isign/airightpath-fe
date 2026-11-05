@@ -17,6 +17,7 @@ import { useScreenRecorder, ScreenSurfaceError } from '@/hooks/useScreenRecorder
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { useFaceDetection } from '@/hooks/useFaceDetection';
 import { useDevToolsDetection } from '@/hooks/useDevToolsDetection';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { aiService } from '@/services/ai.service';
 import { extractApiError } from '@/services/api.service';
@@ -342,6 +343,19 @@ export function InterviewPage() {
     },
   });
 
+
+  // Leaving the interview tab or window. Recorded and warned, never ended: the same rule as every other conduct flag
+  // here, a reviewer reads them. Counted only once the interview is running, so the screen-share picker and the
+  // browser's own permission prompts before it do not count.
+  const tabSwitchesRef = useRef(0);
+  usePageVisibility({
+    onHidden: () => {
+      if (!PROCTORING_CONFIG.tabSwitch.enabled || !interviewRunningRef.current) return;
+      tabSwitchesRef.current += 1;
+      showToast(MESSAGES.interview.tabSwitch(tabSwitchesRef.current), 'warning');
+      voiceInterview.sendProctoringEvent('tab_switch', `Left the interview tab (${tabSwitchesRef.current})`);
+    },
+  });
 
   // DevTools detection
   const { detectionCount: devToolsCount } = useDevToolsDetection();
