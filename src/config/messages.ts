@@ -179,11 +179,6 @@ export const MESSAGES = {
       deadlineBeforeStart: 'Deadline must be after the start time.',
       minutesPerQuestionInvalid: (min: number, max: number) =>
         `Time per question must be between ${min} and ${max} minutes.`,
-      // Generation reads a per-job prompt. Without one the server 404s, which
-      // the interceptor renders as a generic "couldn't be found" — true, but it
-      // names neither what is missing nor how to fix it.
-      promptMissing: (type: string) =>
-        `No ${type} prompt is set up for this job yet. Use "Create Prompt" to add one, then generate again.`,
       assigned: 'Assessment assigned successfully!',
     },
     atsBatch: {

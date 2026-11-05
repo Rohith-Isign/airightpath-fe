@@ -513,31 +513,6 @@ export function AssignAssessmentPage() {
     }
   }
 
-  /**
-   * Whether this job has a prompt of the given type, checked before generating.
-   *
-   * Generation is driven by a per-job prompt; without one the server 404s and
-   * the admin is told the "requested item couldn't be found", which names
-   * neither the prompt nor the screen that fixes it. Asking first turns that
-   * into a specific instruction — and avoids a pointless AI call.
-   *
-   * Best-effort: if the lookup itself fails we return true and let the
-   * generate attempt proceed, so a blip in this check never blocks real work.
-   */
-  async function hasPromptFor(promptType: 'APTITUDE' | 'CODING'): Promise<boolean> {
-    try {
-      // Read fresh rather than trusting `configuredPromptTypes` — that is
-      // refreshed on job change and window focus, so a prompt created in
-      // another tab without refocusing this one would read as missing and
-      // block a generate that would have worked.
-      const types = await fetchPromptTypes(selectedPrefix);
-      setConfiguredPromptTypes(types);
-      return types.has(promptType);
-    } catch {
-      return true;
-    }
-  }
-
   async function handleGenerateAptitude() {
     if (!selectedPrefix) {
       showToast(MESSAGES.admin.common.selectJobFirst, 'warning');
@@ -547,10 +522,8 @@ export function AssignAssessmentPage() {
     generation.aptitude = true;
     notifyGeneration();
     try {
-      if (!(await hasPromptFor('APTITUDE'))) {
-        showToast(MESSAGES.admin.assign.promptMissing('aptitude'), 'warning');
-        return;
-      }
+      // No check for a saved prompt first: a job with none runs on the built-in default, as the server does, so
+      // blocking here on "no prompt" stopped a generation that would have worked.
       const res = await assessmentService.generateQuestions(selectedPrefix);
       const json = JSON.stringify(res.data, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
@@ -561,8 +534,8 @@ export function AssignAssessmentPage() {
       paperCache.aptitude = { file, source: 'ai' };
       showToast(MESSAGES.admin.assign.aptitudeGenerated, 'success');
     } catch {
-      // Error toast auto-handled by interceptor. If the prompt isn't configured,
-      // the admin can click "Create Prompt" to set it up on the Prompts screen.
+      // Error toast auto-handled by interceptor. A job without its own prompt uses the built-in default;
+      // "Customise Prompt" opens the Prompts screen to give the job its own.
     } finally {
       generation.aptitude = false;
       notifyGeneration();
@@ -578,10 +551,6 @@ export function AssignAssessmentPage() {
     generation.coding = true;
     notifyGeneration();
     try {
-      if (!(await hasPromptFor('CODING'))) {
-        showToast(MESSAGES.admin.assign.promptMissing('coding'), 'warning');
-        return;
-      }
       const res = await assessmentService.generateCodingQuestions(selectedPrefix);
       const json = JSON.stringify(res.data, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
@@ -859,7 +828,7 @@ export function AssignAssessmentPage() {
                       disabled={submitting}
                       title="Reuse another job's prompt or create/edit this job's prompt"
                     >
-                      {configuredPromptTypes.has('APTITUDE') ? 'Edit Prompt' : 'Create Prompt'}
+                      {configuredPromptTypes.has('APTITUDE') ? 'Edit Prompt' : 'Customise Prompt'}
                     </Button>
                   </div>
 
@@ -993,7 +962,7 @@ export function AssignAssessmentPage() {
                       disabled={submitting}
                       title="Reuse another job's prompt or create/edit this job's prompt"
                     >
-                      {configuredPromptTypes.has('CODING') ? 'Edit Prompt' : 'Create Prompt'}
+                      {configuredPromptTypes.has('CODING') ? 'Edit Prompt' : 'Customise Prompt'}
                     </Button>
                   </div>
 
