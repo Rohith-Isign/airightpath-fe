@@ -42,7 +42,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import type { JobPostDTO } from '@/types/job.types';
-import { attemptStatusLabel, isNotAssessable, isNotAttended } from '@/utils/interview-standing.utils';
+import { attemptStatusLabel, isNotAssessable, isNotAttended, resultDisplay } from '@/utils/interview-standing.utils';
 import type { InterviewSchedule, InterviewStats, InterviewRound } from '@/types/interview.types';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import {
@@ -213,9 +213,11 @@ function ResultCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
       );
     }
     return (
-      <Badge variant={getResultVariant(interview.interviewResult)} size="sm">
-        {interview.interviewResult}
-      </Badge>
+      <span title={resultDisplay(interview).hint}>
+        <Badge variant={getResultVariant(interview.interviewResult)} size="sm">
+          {resultDisplay(interview).label}
+        </Badge>
+      </span>
     );
   }
   return (

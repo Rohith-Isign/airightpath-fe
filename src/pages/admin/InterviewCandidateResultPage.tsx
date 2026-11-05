@@ -56,7 +56,7 @@ import { ROUTES } from '@/config/routes';
 import type { NavOrigin } from '@/components/ui/BackLink';
 import { interviewService, type VoiceConversationEntryDTO } from '@/services/interview.service';
 import { aiService } from '@/services/ai.service';
-import { attemptStatusLabel, isNotAssessable, isNotAttended } from '@/utils/interview-standing.utils';
+import { attemptStatusLabel, isNotAssessable, isNotAttended, resultDisplay } from '@/utils/interview-standing.utils';
 import { performanceLevel } from '@/utils/performance-level.utils';
 import { formatElapsedSeconds, parseServerInstant } from '@/utils/format.utils';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
@@ -413,11 +413,18 @@ export function InterviewCandidateResultPage() {
               {groups.map((group) => {
                 // The standing is the latest sitting that could be graded; a newer one nobody answered does not
                 // replace it with PENDING.
-                const graded = group.attempts.find((a) => !isNotAssessable(a.schedule));
+                // The final status of a round is the newest sitting that ended in a pass or a fail; a later sitting that
+                // was missed or gave no verdict does not overwrite it.
+                const decided = group.attempts.find(
+                  (a) => a.schedule.interviewResult === 'PASSED' || a.schedule.interviewResult === 'FAILED',
+                );
+                const graded = decided ?? group.attempts.find((a) => !isNotAssessable(a.schedule));
                 return graded ? (
-                  <Badge key={group.key} variant={resultVariant(graded.schedule.interviewResult)}>
-                    {group.label}: {graded.schedule.interviewResult}
-                  </Badge>
+                  <span key={group.key} title={resultDisplay(graded.schedule).hint}>
+                    <Badge variant={resultVariant(graded.schedule.interviewResult)}>
+                      {group.label}: {resultDisplay(graded.schedule).label}
+                    </Badge>
+                  </span>
                 ) : (
                   <Badge key={group.key} variant="warning" title={STRINGS.candidateResult.notAssessableHint}>
                     {group.label}: {STRINGS.candidateResult.notAssessable}
@@ -517,14 +524,12 @@ export function InterviewCandidateResultPage() {
       ) : (
         <div className="space-y-4">
           {(groups.find((group) => group.key === activeTab)?.attempts ?? []).map(
-            (attempt, index) => (
+            (attempt) => (
               <AttemptSection
                 key={attempt.schedule.id}
                 attempt={attempt}
-                // The newest sitting is the one being decided on, so it opens;
-                // earlier ones stay folded rather than burying it under a
-                // transcript that has already been superseded.
-                defaultOpen={index === 0}
+                // Every sitting starts folded: the admin sees the whole list and opens the one they want.
+                defaultOpen={false}
                 // A full reload rather than patching the row: removing a
                 // sitting changes the candidate's overall average and which
                 // attempt is the current one, and both are derived here.
@@ -605,9 +610,11 @@ function RoundSummaryCard({
               <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateResult.notScoredYet}</p>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={resultVariant(schedule.interviewResult)} size="sm">
-                {schedule.interviewResult}
-              </Badge>
+              <span title={resultDisplay(schedule).hint}>
+                <Badge variant={resultVariant(schedule.interviewResult)} size="sm">
+                  {resultDisplay(schedule).label}
+                </Badge>
+              </span>
               {recommendation && (
                 <Badge variant={recommendationVariant(recommendation)} size="sm">
                   {recommendation.replace(/_/g, ' ')}
@@ -903,9 +910,11 @@ function AttemptSection({
           <Badge variant={isNotAttended(schedule) ? 'error' : statusVariant(schedule.attemptStatus)} size="sm">
             {attemptStatusLabel(schedule)}
           </Badge>
-          <Badge variant={resultVariant(schedule.interviewResult)} size="sm">
-            {schedule.interviewResult}
-          </Badge>
+          <span title={resultDisplay(schedule).hint}>
+            <Badge variant={resultVariant(schedule.interviewResult)} size="sm">
+              {resultDisplay(schedule).label}
+            </Badge>
+          </span>
           <Badge variant="info" size="sm">{interviewCompletionLabel(schedule.completionReason)}</Badge>
           {/* Two separate recordings: the candidate's camera and the screen
               they shared. For a coding round the screen is the only evidence of

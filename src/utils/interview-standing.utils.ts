@@ -159,6 +159,24 @@ export function buildInterviewStandings(
   return standings;
 }
 
+/**
+ * How an interview's result is shown: PASSED or FAILED once there is a verdict, and "INCOMPLETE" for a finished
+ * interview that has none. PENDING on a finished interview used to read as "still waiting", when what it means is that
+ * the grading found too little evidence to call it (or never ran); the hint says which.
+ */
+export function resultDisplay(
+  schedule: Pick<InterviewSchedule, 'attemptStatus' | 'interviewResult' | 'evaluation'>,
+): { label: string; hint?: string } {
+  if (schedule.attemptStatus === 'COMPLETED' && schedule.interviewResult === 'PENDING') {
+    const evaluated = !!schedule.evaluation;
+    return {
+      label: STRINGS.scoreBreakdown.noVerdict,
+      hint: evaluated ? STRINGS.scoreBreakdown.noVerdictInsufficient : STRINGS.scoreBreakdown.noVerdictNotGraded,
+    };
+  }
+  return { label: schedule.interviewResult };
+}
+
 /** What an admin can do about one round for one candidate, from where that round stands. */
 export type RoundAction = 'assign' | 'edit' | 'reassign' | null;
 

@@ -5,7 +5,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { INTERVIEW_PHASES, stageOf } from '@/utils/interview-phase';
 import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
 import { resumeExtensionForType } from '@/utils/file.utils';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Loader2,
@@ -272,7 +272,12 @@ export function CandidateDetailsPage() {
   const [candidates, setCandidates] = useState<JobApplicationDTO[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
   const [loadingJobs, setLoadingJobs] = useState(true);
-  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  // Loading is derived from which job's candidates are in hand, not toggled by the fetch: a flag set inside an effect
+  // is one render late, and that render showed the last job's people (or "No candidates") before the spinner came.
+  const [loadedPrefix, setLoadedPrefix] = useState('');
+  const loadingCandidates = !!selectedPrefix && loadedPrefix !== selectedPrefix;
+  const latestPrefix = useRef(selectedPrefix);
+  latestPrefix.current = selectedPrefix;
 
   // Modal state
   const [modalAction, setModalAction] = useState<BulkAction | null>(null);
@@ -320,11 +325,8 @@ export function CandidateDetailsPage() {
   }, [resumeView]);
 
   useEffect(() => {
-    if (selectedPrefix) {
-      fetchCandidates();
-    } else {
-      setCandidates([]);
-    }
+    setCandidates([]);
+    if (selectedPrefix) fetchCandidates();
     setSelectedEmails(new Set());
   }, [selectedPrefix]);
 
@@ -342,15 +344,15 @@ export function CandidateDetailsPage() {
 
   async function fetchCandidates() {
     if (!selectedPrefix) return;
-    setLoadingCandidates(true);
+    const prefix = selectedPrefix;
     try {
-      const res = await jobApplicationService.getByPrefix(selectedPrefix);
-      const data = res.data ?? [];
-      setCandidates(data);
+      const res = await jobApplicationService.getByPrefix(prefix);
+      // A slow answer for a job the admin has already left must not overwrite the one now on screen.
+      if (latestPrefix.current === prefix) setCandidates(res.data ?? []);
     } catch {
       // Error toast auto-handled by interceptor
     } finally {
-      setLoadingCandidates(false);
+      if (latestPrefix.current === prefix) setLoadedPrefix(prefix);
     }
   }
 
@@ -966,10 +968,11 @@ export function CandidateDetailsPage() {
               onChange={(e) => setSelectedPrefix(e.target.value)}
             />
           </div>
-          {selectedPrefix && !loadingCandidates && (
-            <p className="mt-2 text-sm text-[var(--textSecondary)]">
-              {STRINGS.candidatesAdmin.totalCandidates} <strong>{candidates.length}</strong>
-              {unknownCount > 0 && (
+          {/* The line keeps its height while loading, so the page below does not jump when the count arrives. */}
+          {selectedPrefix && (
+            <p className="mt-2 min-h-5 text-sm text-[var(--textSecondary)]">
+              {STRINGS.candidatesAdmin.totalCandidates} <strong>{loadingCandidates ? '–' : candidates.length}</strong>
+              {!loadingCandidates && unknownCount > 0 && (
                 <span className="ml-2 text-amber-500">
                   {STRINGS.candidatesAdmin.unrecognizedStatus(unknownCount)}
                 </span>
@@ -1007,7 +1010,7 @@ export function CandidateDetailsPage() {
                           {STAGE_LABELS[stage]}
                         </span>
                         <span className={`text-lg font-bold ${isActive ? 'text-white' : 'text-[var(--text)]'}`}>
-                          {count}
+                          {loadingCandidates ? '–' : count}
                         </span>
                       </button>
                       {idx < STAGES.length - 1 && (
@@ -1023,7 +1026,7 @@ export function CandidateDetailsPage() {
                     that predate the current acknowledgement flow are still in it.
                     Amber rather than the pipeline styling: it is a place to empty,
                     not a step anybody should be aiming for. */}
-                {legacyCount > 0 && (
+                {!loadingCandidates && legacyCount > 0 && (
                   <div className="flex items-center flex-shrink-0 ml-4 pl-4 border-l border-[var(--border)]">
                     <button
                       onClick={() => {
@@ -1049,7 +1052,7 @@ export function CandidateDetailsPage() {
                   </div>
                 )}
                 {/* Rejected tab - separated from pipeline */}
-                {rejectedCount > 0 && (
+                {!loadingCandidates && rejectedCount > 0 && (
                   <div className="flex items-center flex-shrink-0 ml-4 pl-4 border-l border-[var(--border)]">
                     <button
                       onClick={() => {
@@ -1208,7 +1211,8 @@ export function CandidateDetailsPage() {
                 </Button>
               )}
               {trailingActions.map(renderBulkAction)}
-              {availableActions.includes('rejection') && renderBulkAction('rejection')}
+              {/* Rejection stands apart at the far end of the bar, so it never sits as a stray button under the others. */}
+              {availableActions.includes('rejection') && <div className="ml-auto">{renderBulkAction('rejection')}</div>}
             </div>
           )}
 

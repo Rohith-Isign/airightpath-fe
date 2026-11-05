@@ -505,6 +505,12 @@ export const STRINGS = {
     assessedOnly: (score: string) => `On the assessed areas only: ${score} / 10`,
     reEvaluate: 'Re-evaluate with AI',
     reEvaluating: 'Re-evaluating…',
+    /** A finished interview with no pass or fail: why, and what to do. */
+    noVerdict: 'INCOMPLETE',
+    noVerdictInsufficient:
+      'The interview ended before enough questions were answered, so the AI could not decide pass or fail. Read the transcript yourself, or press Re-evaluate with AI to check again.',
+    noVerdictNotGraded:
+      'This interview has not been scored yet. Press Re-evaluate with AI to score it.',
     reEvaluateTitle: 'Re-evaluate this interview?',
     reEvaluatingNote: 'The AI is grading the interview again. This can take up to a minute; this window closes when it is done.',
     reEvaluateConfirm:
