@@ -302,15 +302,17 @@ export function AdminJobsPage() {
                         size="sm"
                         className="w-full min-w-0"
                         onClick={() => setSelectedJob(job)}
+                        title="See this job as a read-only page. Nothing can be changed here."
                         leftIcon={<Eye size={15} />}
                       >
-                        Details
+                        View
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         className="w-full min-w-0"
                         onClick={() => handleEditJob(job)}
+                        title="Open the form to change this job"
                         leftIcon={<Pencil size={15} />}
                       >
                         Edit

@@ -34,6 +34,7 @@ import { AtsResultsTable } from '@/components/admin/AtsResultsTable';
 import { ScreeningRunReport } from '@/components/admin/ScreeningRunReport';
 import { getAppEmail } from '@/utils/application.utils';
 import { MESSAGES } from '@/config/messages';
+import { STRINGS } from '@/constants/strings';
 import type { JobPostDTO, JobApplicationDTO, ScreeningRun } from '@/types/job.types';
 
 type FilterTab = 'all' | 'shortlisted' | 'rejected';
@@ -419,15 +420,25 @@ export function AtsScreeningPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <Tag size={20} className="text-[var(--primary)]" />
-              <CardTitle>Required Skills</CardTitle>
+              <CardTitle>{STRINGS.atsScreening.scoringHeading}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             {selectedJob ? (
               <div className="space-y-4">
-                <p className="text-sm text-[var(--textSecondary)]">
-                  These skills will be matched against candidate resumes for ATS scoring:
-                </p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.atsScreening.scoringIntro}</p>
+                <ul className="space-y-1 text-sm text-[var(--textSecondary)]">
+                  {STRINGS.atsScreening.scoringParts.map((part) => (
+                    <li key={part.name} className="flex gap-2">
+                      <span className="w-10 flex-shrink-0 font-semibold text-[var(--text)]">{part.weight}%</span>
+                      <span>
+                        <span className="font-medium text-[var(--text)]">{part.name}</span>: {part.detail}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-[var(--textTertiary)]">{STRINGS.atsScreening.scoringNote}</p>
+                <p className="text-sm font-medium text-[var(--text)]">{STRINGS.atsScreening.keySkillsHeading}</p>
                 <div className="flex flex-wrap gap-2">
                   {selectedJob.keySkills.split(',').map((skill, idx) => (
                     <Badge key={idx} variant="secondary" size="md">

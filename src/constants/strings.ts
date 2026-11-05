@@ -344,6 +344,18 @@ export const STRINGS = {
 
   /** ATS screening results: where a screened candidate has gone since. */
   atsScreening: {
+    scoringHeading: 'How candidates are scored',
+    scoringIntro: 'Each resume is scored against the whole job, not the skills list alone:',
+    scoringParts: [
+      { name: 'Key skills', weight: 50, detail: 'the skills listed below' },
+      { name: 'Job description', weight: 20, detail: 'terms from the description used in the resume' },
+      { name: 'Experience', weight: 15, detail: 'years stated against years asked for' },
+      { name: 'Role', weight: 10, detail: 'the role and title being hired for' },
+      { name: 'Education', weight: 5, detail: 'degree level asked for, or higher' },
+    ],
+    scoringNote:
+      'A part the job gives nothing to measure (no skills, description or experience entered) is left out and the others share its weight.',
+    keySkillsHeading: 'Key skills of this job:',
     movedOn: (stage: string) => `Moved on: ${stage}`,
     movedOnHint: 'Already moved past screening by an admin, so the ATS result below is for reference only.',
     stages: {
