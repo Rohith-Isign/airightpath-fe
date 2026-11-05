@@ -35,6 +35,7 @@ import { promptService } from '@/services/prompt.service';
 import { ROUTES } from '@/config/routes';
 import { nowDateTimeLocal, isPast } from '@/utils/datetime.utils';
 import { usePersistentState } from '@/hooks/usePersistentState';
+import { useNow } from '@/hooks/useNow';
 import { parseQuestionPaper } from '@/utils/question-paper.utils';
 import {
   clampMinutesPerQuestion,
@@ -201,18 +202,30 @@ export function AssignAssessmentPage() {
   const selectedEmails = useMemo(() => new Set(selectedEmailList), [selectedEmailList]);
   const [startTime, setStartTime] = usePersistentState(`${KEY}startTime`, '');
   const [deadline, setDeadline] = usePersistentState(`${KEY}deadline`, '');
-  // Floor for the date-time pickers (computed once on mount).
-  const [minDateTime] = useState(nowDateTimeLocal);
+  /**
+   * Whether the exam opens the moment it is assigned, or at a time the admin picks.
+   *
+   * "Start now" is the default and has no time to get wrong. A start time picked a minute ahead used to be in the
+   * past by the time the rest of the form was filled in, and the assignment was refused for a time the admin had
+   * chosen correctly when they chose it.
+   */
+  const [startMode, setStartMode] = usePersistentState<'now' | 'later'>(`${KEY}startMode`, 'now');
+  // Ticks, so the floor of the pickers and the errors follow the clock while the form sits open.
+  const now = useNow(15_000);
+  const minDateTime = useMemo(() => nowDateTimeLocal(), [now]);
+  /** A picked start that passed this recently is treated as "now", not as a mistake. */
+  const START_GRACE_MS = 2 * 60_000;
 
   // Shown against the fields themselves rather than only as a toast on submit,
   // so an impossible window is visible while it is being chosen. `min` on the
   // input does not cover a typed value, nor one that expires while the form is
   // open — the submit guards still run, these just surface the same rules early.
-  const startInPast = !!startTime && isPast(startTime);
+  const startInPast =
+    startMode === 'later' && !!startTime && new Date(startTime).getTime() < now.getTime() - START_GRACE_MS;
+  const windowStart = startMode === 'now' ? minDateTime : startTime;
   const deadlineInvalid =
     !!deadline &&
-    (isPast(deadline) ||
-      (!!startTime && new Date(deadline).getTime() <= new Date(startTime).getTime()));
+    (isPast(deadline) || (!!windowStart && new Date(deadline).getTime() <= new Date(windowStart).getTime()));
 
   // Checkbox state for assessment types
   const [aptitudeChecked, setAptitudeChecked] = usePersistentState(`${KEY}aptitudeChecked`, false);
@@ -340,10 +353,28 @@ export function AssignAssessmentPage() {
     // there would throw away the very selection that was just restored from the
     // last visit — the bug this screen is being fixed for.
     if (mountedPrefixRef.current) {
+      // Everything on this form belongs to the job it was filled in for: the papers were written for that job's
+      // questions, the window for its candidates. Carrying any of it to another job put the old job's values on a
+      // different job's assignment, so a change of job starts the form clean.
       setSelectedEmailList([]);
+      setStartMode('now');
+      setStartTime('');
+      setDeadline('');
+      setAptitudeChecked(false);
+      setCodingChecked(false);
+      clearPaperCache();
+      setAptitudeFile({ file: null, source: null });
+      setCodingFile({ file: null, source: null });
+      setAptitudeMinutes(defaultMinutesPerQuestion('APTITUDE'));
+      setCodingMinutes(defaultMinutesPerQuestion('CODING'));
+      setAptitudePassMark(String(DEFAULT_PASS_PERCENTAGE));
+      setCodingPassMark(String(DEFAULT_PASS_PERCENTAGE));
+      setAptitudeCountManual('');
+      setCodingCountManual('');
     }
     mountedPrefixRef.current = true;
-  }, [selectedPrefix, setSelectedEmailList]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPrefix]);
 
   /**
    * Prompt types configured for a job, upper-cased.
@@ -625,7 +656,7 @@ export function AssignAssessmentPage() {
       showToast(MESSAGES.admin.assign.minutesPerQuestionInvalid(minPerQ, maxPerQ), 'warning');
       return;
     }
-    if (!startTime) {
+    if (startMode === 'later' && !startTime) {
       showToast(MESSAGES.admin.assign.startTimeRequired, 'warning');
       return;
     }
@@ -634,16 +665,22 @@ export function AssignAssessmentPage() {
       return;
     }
     // Reject past date/time and an out-of-order window before saving.
-    const now = Date.now();
-    if (new Date(startTime).getTime() < now) {
-      showToast(MESSAGES.admin.assign.startInPast, 'warning');
-      return;
+    const nowMs = Date.now();
+    // "Start now" opens at the moment of assigning. A picked start that has only just passed counts as now too;
+    // a start that is well in the past is a mistake, and is said so.
+    let start = startMode === 'now' ? nowDateTimeLocal() : startTime;
+    if (startMode === 'later' && new Date(startTime).getTime() < nowMs) {
+      if (new Date(startTime).getTime() < nowMs - START_GRACE_MS) {
+        showToast(MESSAGES.admin.assign.startInPast, 'warning');
+        return;
+      }
+      start = nowDateTimeLocal();
     }
-    if (new Date(deadline).getTime() < now) {
+    if (new Date(deadline).getTime() < nowMs) {
       showToast(MESSAGES.admin.assign.deadlineInPast, 'warning');
       return;
     }
-    if (new Date(deadline).getTime() <= new Date(startTime).getTime()) {
+    if (new Date(deadline).getTime() <= new Date(start).getTime()) {
       showToast(MESSAGES.admin.assign.deadlineBeforeStart, 'warning');
       return;
     }
@@ -652,7 +689,7 @@ export function AssignAssessmentPage() {
     try {
       const formData = new FormData();
       formData.append('candidateEmails', Array.from(selectedEmails).join(','));
-      formData.append('startTime', startTime);
+      formData.append('startTime', start);
       formData.append('deadline', deadline);
       formData.append('uploadedBy', user?.email ?? '');
       formData.append('jobPrefix', selectedPrefix);
@@ -687,6 +724,7 @@ export function AssignAssessmentPage() {
       // module, so the next assign does not open pre-filled with the last one.
       clearPaperCache();
       setSelectedEmailList([]);
+      setStartMode('now');
       setStartTime('');
       setDeadline('');
       setAptitudeChecked(false);
@@ -1053,25 +1091,60 @@ export function AssignAssessmentPage() {
             {/* Exam window. Picker-only, so `min` cannot be typed past; the
                 errors still catch a window that went stale while the form sat
                 open, or one walked backwards with the arrow keys. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <DateTimeInput
-                label="Start Time"
-                required
-                min={minDateTime}
-                value={startTime}
-                onChange={setStartTime}
-                helperText={startInPast ? undefined : 'Pick from the calendar — cannot be in the past'}
-                error={startInPast ? 'Start time cannot be in the past' : undefined}
-              />
-              <DateTimeInput
-                label="Deadline"
-                required
-                min={startTime || minDateTime}
-                value={deadline}
-                onChange={setDeadline}
-                helperText={deadlineInvalid ? undefined : 'Must be after the start time'}
-                error={deadlineInvalid ? 'Deadline must be after the start time' : undefined}
-              />
+            <div className="space-y-4">
+              {/* When the exam opens. "Start now" is the default: nothing to pick, nothing to go stale. */}
+              <div>
+                <p className="block text-sm font-medium text-[var(--text)] mb-2">Start</p>
+                <div className="inline-flex rounded-xl border border-[var(--border)] p-1 gap-1" role="group" aria-label="When the exam opens">
+                  {([
+                    ['now', 'Start now'],
+                    ['later', 'Schedule a start time'],
+                  ] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={startMode === mode}
+                      onClick={() => setStartMode(mode)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        startMode === mode
+                          ? 'bg-[var(--primary)] text-white'
+                          : 'text-[var(--textSecondary)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {startMode === 'now' && (
+                  <p className="mt-1.5 text-sm text-[var(--textSecondary)]">
+                    Candidates can start as soon as the assessment is assigned.
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {startMode === 'later' && (
+                  <DateTimeInput
+                    label="Start time"
+                    required
+                    min={minDateTime}
+                    value={startTime}
+                    onChange={setStartTime}
+                    helperText={startInPast ? undefined : 'Pick a time from now on'}
+                    error={
+                      startInPast ? 'That start time has passed. Pick a later time, or choose Start now.' : undefined
+                    }
+                  />
+                )}
+                <DateTimeInput
+                  label="Deadline"
+                  required
+                  min={windowStart || minDateTime}
+                  value={deadline}
+                  onChange={setDeadline}
+                  helperText={deadlineInvalid ? undefined : 'When the exam closes. Must be after the start.'}
+                  error={deadlineInvalid ? 'The deadline must be in the future and after the start.' : undefined}
+                />
+              </div>
             </div>
 
             {/* Candidate Selection */}
