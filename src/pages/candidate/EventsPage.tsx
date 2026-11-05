@@ -120,9 +120,11 @@ export function EventsPage() {
             const expired = isDeadlinePassed(job.applicationDeadline);
 
             return (
-              <Card key={job.id ?? job.jobPrefix} hover className="min-w-0">
-                <CardContent>
-                  <div className="space-y-4">
+              <Card key={job.id ?? job.jobPrefix} hover className="min-w-0 h-full">
+                <CardContent className="h-full">
+                  {/* A full-height column, so the cards in a row are the same height and the buttons sit on the same
+                      line in every card, however many lines a title or the skills take. */}
+                  <div className="flex h-full flex-col gap-4">
                     {/* Job Title, Company and Applied Badge */}
                     <div className="flex items-start justify-between gap-2">
                       <div
@@ -199,7 +201,7 @@ export function EventsPage() {
 
                     {/* Action Buttons — a grid so the two labels share the row
                         evenly and never overflow a narrow card. */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="mt-auto grid grid-cols-2 gap-2">
                       <Button
                         variant="outline"
                         size="sm"
