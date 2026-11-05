@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { interviewWsService } from "@/services/interview-ws.service";
 import { aiService } from "@/services/ai.service";
-import { getAccessToken } from "@/services/api.service";
 import { APP_CONFIG } from "@/config/app.config";
 import { useAudioStreaming } from "./useAudioStreaming";
 import { useAudioPlayback } from "./useAudioPlayback";
@@ -45,6 +44,27 @@ function withCurrentTurn(
 export function useVoiceInterview() {
   // State
   const [state, setState] = useState<VoiceInterviewState>("pre-start");
+
+  /**
+   * The interviewer has answered in text but its voice has not started yet.
+   *
+   * The reply text arrives first and the spoken audio a moment later. In that gap nothing was playing, so the
+   * "Start answering" button came back, and a candidate who pressed it talked over the interviewer (and cut its voice
+   * off). While this is true the interviewer counts as speaking: the mic stays locked until the voice has played.
+   */
+  const [awaitingInterviewerAudio, setAwaitingInterviewerAudio] = useState(false);
+  const awaitingAudioTimerRef = useRef<number | null>(null);
+  /** Whether any voice has arrived for the turn in progress: it can come before the reply text does. */
+  const audioArrivedRef = useRef(false);
+  const clearAwaitingAudio = useCallback(() => {
+    if (awaitingAudioTimerRef.current) {
+      window.clearTimeout(awaitingAudioTimerRef.current);
+      awaitingAudioTimerRef.current = null;
+    }
+    setAwaitingInterviewerAudio(false);
+  }, []);
+  /** Why the interview ended, when the server said: "ai_closed", "question_limit", or the reason text of a forced end. */
+  const [endReason, setEndReason] = useState<string | null>(null);
   const [scheduleId, setScheduleId] = useState<number | null>(null);
   /**
    * The same id, readable from a callback that was built before it arrived.
@@ -111,7 +131,14 @@ export function useVoiceInterview() {
 
   // Audio hooks
   // Takes the id only; the email was being passed and silently discarded.
-  const audioStreaming = useAudioStreaming(scheduleId);
+  // Chunks of an answer that have been dealt with (text came back, or the send failed). Submit waits for them.
+  const doneChunksRef = useRef<Set<number>>(new Set());
+  const chunkTextsRef = useRef<Map<number, string>>(new Map());
+  const failedChunksRef = useRef<Set<number>>(new Set());
+  const audioStreaming = useAudioStreaming(scheduleId, (index, ok) => {
+    doneChunksRef.current.add(index);
+    if (!ok) failedChunksRef.current.add(index);
+  });
   const audioPlayback = useAudioPlayback();
 
   // Stable refs for audio playback functions (avoid recreating callbacks on every render)
@@ -133,8 +160,10 @@ export function useVoiceInterview() {
     (text: string): { cleanText: string; isCoding: boolean } => {
       const tagRegex = /\[(CODING|THEORY|NON-TECH)\]\s*/i;
       const match = text.match(tagRegex);
-      const isCoding = match ? match[1].toUpperCase() === "CODING" : false;
       const cleanText = text.replace(tagRegex, "").trim();
+      // The code editor opens only for the model's [CODING] tag. Guessing from the wording opened it for
+      // questions meant to be answered aloud.
+      const isCoding = !!match && match[1].toUpperCase() === "CODING";
       return { cleanText, isCoding };
     },
     [],
@@ -167,8 +196,20 @@ export function useVoiceInterview() {
       interviewWsService.subscribe(
         `/topic/interview/${id}/transcription`,
         (msg: TranscriptionMessage) => {
-          transcriptRef.current +=
-            (transcriptRef.current ? " " : "") + msg.text;
+          if (typeof msg.chunkIndex === "number") {
+            doneChunksRef.current.add(msg.chunkIndex);
+          }
+          if (!msg.text) return; // A chunk with no speech: it only marks itself done.
+          if (typeof msg.chunkIndex === "number") {
+            // Joined in the order the audio was spoken, not the order the answers came back.
+            chunkTextsRef.current.set(msg.chunkIndex, msg.text);
+            transcriptRef.current = [...chunkTextsRef.current.entries()]
+              .sort((a, b) => a[0] - b[0])
+              .map(([, text]) => text)
+              .join(" ");
+          } else {
+            transcriptRef.current += (transcriptRef.current ? " " : "") + msg.text;
+          }
           setCurrentTranscript(transcriptRef.current);
           if (msg.words) {
             wordTimestampsRef.current.push(...msg.words);
@@ -193,6 +234,7 @@ export function useVoiceInterview() {
 
             // Always reset editor when question changes
             setCodeContent("");
+            setCodeOutput("");
 
             if (!isCoding) {
               setCodeLanguage("java"); // optional reset
@@ -249,6 +291,8 @@ export function useVoiceInterview() {
           if (msg.audio) {
             questionAudioRef.current.set(msg.chunkIndex, msg.audio);
           }
+          audioArrivedRef.current = true;
+          clearAwaitingAudio();
           enqueueAudioRef.current(msg.audio, msg.text, msg.isLast);
         },
       );
@@ -350,12 +394,12 @@ export function useVoiceInterview() {
             const { cleanText, isCoding } = detectAndCleanCodingTag(responseText);
 
             setIsCodingQuestion(isCoding);
-            if (isCoding) {
-              setCodeContent("");
-              // Cleared with the editor: output from the previous problem would
-              // otherwise be submitted as evidence for this one.
-              setCodeOutput("");
-            }
+            // Cleared for every question, coding or not. Left in place after a
+            // non-coding one, the last problem's code and output were attached
+            // to each later spoken answer. The output goes with the editor, or
+            // it would be submitted as evidence for the next problem.
+            setCodeContent("");
+            setCodeOutput("");
             setLastQuestionText(cleanText);
             // The previous question's audio must not outlive it: a turn that is
             // never spoken (a code-explanation question skips TTS) would
@@ -375,7 +419,19 @@ export function useVoiceInterview() {
 
           setQuestionsAsked(msg.questionsAsked);
 
+          // The reply is on screen; its voice follows. Keep the mic locked until it has played, unless it came first
+          // or this was the last turn. A timeout releases the lock if no voice ever arrives (TTS down).
+          if (msg.response && !msg.isComplete && !msg.terminated && !audioArrivedRef.current) {
+            setAwaitingInterviewerAudio(true);
+            if (awaitingAudioTimerRef.current) window.clearTimeout(awaitingAudioTimerRef.current);
+            awaitingAudioTimerRef.current = window.setTimeout(() => {
+              awaitingAudioTimerRef.current = null;
+              setAwaitingInterviewerAudio(false);
+            }, 10_000);
+          }
+
           if (msg.isComplete || msg.terminated) {
+            setEndReason((prev) => prev ?? (msg.reason ? String(msg.reason) : msg.terminated ? "terminated" : "ai_closed"));
             setState("completed");
           } else {
             setState((prev) => (prev === "completed" ? prev : "active"));
@@ -388,6 +444,16 @@ export function useVoiceInterview() {
         `/topic/interview/${id}/transcription-error`,
         (msg: { error: string }) => {
           console.error("Transcription error:", msg.error);
+          // The server refuses an answer to an interview that is already over, and said so only here, so the page
+          // sat on "Processing your answer…" for good. That refusal means the interview ended: show it ended.
+          if (/not active/i.test(msg.error ?? "")) {
+            if (processingTimeoutRef.current) {
+              window.clearTimeout(processingTimeoutRef.current);
+              processingTimeoutRef.current = null;
+            }
+            setState("completed");
+            return;
+          }
           setTranscriptionError(msg.error);
           setTimeout(() => setTranscriptionError(null), 5000);
         },
@@ -472,17 +538,9 @@ export function useVoiceInterview() {
         }
 
         interviewWsService.disconnect();
-        // Connect WebSocket with both scheduleId and JWT token
-        const token = getAccessToken();
-
-        if (!token) {
-          console.error("❌ No JWT token found. WebSocket connection blocked.");
-          return;
-        }
-
+        // The session cookie travels on the handshake; nothing is passed in.
         interviewWsService.connect({
           scheduleId: response.scheduleId,
-          token: token, // REQUIRED
           email: request.email,
           mobileToken: request.mobileToken || undefined, 
       
@@ -512,7 +570,7 @@ export function useVoiceInterview() {
         setState("active");
         // Returned rather than exposed as state: the caller is already awaiting
         // this, and a flag it has to watch for separately is a flag it can miss.
-        return { resumed: !!response.resumed, expiresAt: response.expiresAt };
+        return { resumed: !!response.resumed, expiresAt: response.expiresAt, startedAt: response.startedAt };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error("Failed to start interview:", err);
@@ -530,34 +588,134 @@ export function useVoiceInterview() {
 
   // Start answering (recording)
   const startAnswering = useCallback(async () => {
+    // The mic opens only when the interviewer has finished speaking. It used to interrupt the voice instead, which put
+    // the candidate's words on top of the interviewer's and cut the question short.
+    if (audioPlayback.isPlaying || awaitingInterviewerAudio) return;
     transcriptRef.current = "";
     wordTimestampsRef.current = [];
+    doneChunksRef.current = new Set();
+    failedChunksRef.current = new Set();
+    chunkTextsRef.current = new Map();
     setCurrentTranscript("");
-
-    // Interrupt any playing audio
-    audioPlayback.stopPlayback();
-    sendToInterview("interrupt", { reason: "candidate_speaking" });
 
     await audioStreaming.startRecording();
     setState("answering");
-  }, [audioStreaming, audioPlayback, sendToInterview]);
+  }, [audioStreaming, audioPlayback, awaitingInterviewerAudio]);
+
+  /**
+   * Notices an interview that ended without the page being told.
+   *
+   * The end is announced over the live connection, once. When the AI closed the interview, or the time ran out,
+   * and that message was missed, the phone (which asks the server) showed "thank you" while this page stayed on
+   * "Processing…" for ever, and pressing submit changed nothing. So while the interview is running the page also
+   * asks the server every few seconds whether it is still going.
+   */
+  useEffect(() => {
+    if (state !== "active" && state !== "answering" && state !== "processing") return;
+    let cancelled = false;
+    const check = async () => {
+      const id = scheduleIdRef.current;
+      if (id === null) return;
+      try {
+        const { data } = await aiService.getVoiceStatus(id);
+        if (!cancelled && String(data?.status ?? "").toUpperCase() === "COMPLETED") {
+          if (processingTimeoutRef.current) {
+            window.clearTimeout(processingTimeoutRef.current);
+            processingTimeoutRef.current = null;
+          }
+          setState("completed");
+        }
+      } catch {
+        // Not reachable this time; the next check asks again.
+      }
+    };
+    const timer = window.setInterval(check, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [state]);
+
+  /** Waits for the live connection, which reconnects by itself, for up to `ms`. */
+  const waitForConnection = useCallback(async (ms: number): Promise<boolean> => {
+    const deadline = Date.now() + ms;
+    while (!interviewWsService.connected) {
+      if (Date.now() >= deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    return true;
+  }, []);
+
+  /**
+   * The interviewer's reply never arrived. Ask the server what it has before telling the candidate to repeat
+   * themselves: the answer may have been received and the reply produced, with only the message lost on the way.
+   * If the server has moved on, show where it got to; if not, say so and let them answer again.
+   */
+  const recoverLostReply = useCallback(async () => {
+    const id = scheduleIdRef.current;
+    if (id !== null) {
+      try {
+        const { data } = await aiService.resumeVoiceInterview(id);
+        const history = data?.conversationHistory ?? [];
+        const last = history[history.length - 1];
+        if (data && !data.hasActiveSession) {
+          // Nothing running on the server: the interview ended while the reply was on its way.
+          setState("completed");
+          return;
+        }
+        if (data?.hasActiveSession && last && last.role !== "candidate") {
+          const turn = detectAndCleanCodingTag(last.content);
+          setIsCodingQuestion(turn.isCoding);
+          setLastQuestionText(turn.cleanText);
+          setConversation((prev) => [
+            ...prev,
+            {
+              role: "interviewer",
+              content: turn.cleanText,
+              timestamp: last.timestamp ?? new Date().toISOString(),
+              isCodingQuestion: turn.isCoding,
+            },
+          ]);
+          setError(null);
+          setState("active");
+          return;
+        }
+      } catch (err) {
+        console.warn("Could not ask the server what happened to the reply", err);
+      }
+    }
+    setState("active");
+    setError("Response timed out. Please try answering again.");
+  }, [detectAndCleanCodingTag]);
+
+  /**
+   * An answer is being submitted: from the first press until it has been sent, or has failed and the candidate is
+   * back to answering.
+   *
+   * <p>The state only becomes "processing" after the last audio is flushed and transcribed, which can take many
+   * seconds, and until then the submit button was still live. Each extra press ran the whole submission again and
+   * sent the same answer more than once, so a candidate who felt nothing had happened and pressed again got
+   * duplicates. The ref blocks a second call at once; the state lets the page disable the buttons.</p>
+   */
+  const submittingRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Submit answer — stops recording, waits for final transcription, then sends
-  const submitAnswer = useCallback(
+  const performSubmit = useCallback(
     async (manualTranscript?: string) => {
       // Wait for the final audio chunk to be flushed and sent to BE
       await audioStreaming.stopRecording();
 
       if (!manualTranscript) {
-        // Wait for the backend to transcribe the final chunk and send it back.
-        // The last chunk was just sent — give Whisper time to process it.
-        const transcriptBefore = transcriptRef.current;
+        // Wait for every chunk sent to be dealt with. The last one can hold most of the answer, so this is
+        // the speech service's whole turn on it, not a short grace period. Capped, so a lost reply cannot hold
+        // the candidate for ever.
+        const sent = audioStreaming.getSentChunkCount();
         await new Promise<void>((resolve) => {
           let elapsed = 0;
           const interval = setInterval(() => {
             elapsed += 200;
-            // Resolve once new transcription arrives or timeout after 3s
-            if (transcriptRef.current !== transcriptBefore || elapsed >= 3000) {
+            if (doneChunksRef.current.size >= sent || elapsed >= 45_000) {
               clearInterval(interval);
               resolve();
             }
@@ -570,6 +728,22 @@ export function useVoiceInterview() {
       // Code counts as an answer on its own. A coding question can be answered
       // entirely in the editor, and requiring speech as well left a candidate
       // with a working solution no way to submit it.
+      if (!transcript.trim() && !codeContent.trim() && failedChunksRef.current.size > 0) {
+        // The audio was there but did not get to the server: a connection or server problem, not the
+        // microphone. Saying "check your microphone" sent candidates round a loop that could not work.
+        setConversation((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content:
+              "Your answer was recorded but could not be sent to the server. Check your connection, then press the mic and answer again.",
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+        setError("Your answer could not be sent. Please try again.");
+        setState("active");
+        return;
+      }
       if (!transcript.trim() && !codeContent.trim()) {
         // Say so. This used to return to "active" in silence: the candidate had
         // spoken, nothing was transcribed, no question advanced and no reason
@@ -590,10 +764,30 @@ export function useVoiceInterview() {
         return;
       }
 
+      // The answer is only sent if the connection is up. A send on a dead socket is dropped without a word, the
+      // page then sat in "processing" for the full timeout, and the candidate repeated an answer the server
+      // already had. The client reconnects on its own within a couple of seconds, so wait for it first.
+      if (!(await waitForConnection(12_000))) {
+        setConversation((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content:
+              "The connection dropped before your answer was sent. It is reconnecting. Please check your internet, then press the mic and answer again.",
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+        setError("Connection lost. Your answer was not sent.");
+        setState("active");
+        return;
+      }
+
       // Capture current code state before resetting
-      const submittedCode = codeContent;
+      // Only a coding question takes code: on any other, the editor is not on screen, so whatever is
+      // left in it is not part of the answer.
+      const submittedCode = isCodingQuestion ? codeContent : "";
       const submittedLanguage = codeLanguage;
-      const submittedOutput = codeOutput;
+      const submittedOutput = isCodingQuestion ? codeOutput : "";
 
       // Add candidate answer to conversation
       setConversation((prev) => [
@@ -626,6 +820,8 @@ export function useVoiceInterview() {
       }
       sendToInterview("submit-answer", payload);
 
+      audioArrivedRef.current = false;
+      clearAwaitingAudio();
       setError(null);
       setState("processing");
 
@@ -633,11 +829,25 @@ export function useVoiceInterview() {
       processingTimeoutRef.current = window.setTimeout(() => {
         console.error("Processing timeout — no response-complete received");
         processingTimeoutRef.current = null;
-        setState("active");
-        setError("Response timed out. Please try answering again.");
+        void recoverLostReply();
       }, APP_CONFIG.INTERVIEW_PROCESSING_TIMEOUT_MS);
     },
-    [audioStreaming, codeContent, codeLanguage, codeOutput, sendToInterview],
+    [audioStreaming, codeContent, codeLanguage, codeOutput, isCodingQuestion, sendToInterview, waitForConnection, recoverLostReply],
+  );
+
+  const submitAnswer = useCallback(
+    async (manualTranscript?: string) => {
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setIsSubmitting(true);
+      try {
+        await performSubmit(manualTranscript);
+      } finally {
+        submittingRef.current = false;
+        setIsSubmitting(false);
+      }
+    },
+    [performSubmit],
   );
 
   // Skip question — sends a skipped answer bypassing the empty-transcript guard
@@ -662,16 +872,17 @@ export function useVoiceInterview() {
       skipped: true,
     });
 
+    audioArrivedRef.current = false;
+    clearAwaitingAudio();
     setState("processing");
 
     // Start safety timeout
     processingTimeoutRef.current = window.setTimeout(() => {
       console.error("Processing timeout — no response-complete received");
       processingTimeoutRef.current = null;
-      setState("active");
-      setError("Response timed out. Please try answering again.");
+      void recoverLostReply();
     }, APP_CONFIG.INTERVIEW_PROCESSING_TIMEOUT_MS);
-  }, [sendToInterview]);
+  }, [sendToInterview, recoverLostReply]);
 
   // Send proctoring event
   //
@@ -811,21 +1022,27 @@ export function useVoiceInterview() {
     return null;
   }, [scheduleId]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount. Held in refs so the cleanup runs once, on unmount, and not each time the hooks'
+  // returned objects change.
+  const audioStreamingRef = useRef(audioStreaming);
+  audioStreamingRef.current = audioStreaming;
+  const audioPlaybackRef = useRef(audioPlayback);
+  audioPlaybackRef.current = audioPlayback;
   useEffect(() => {
     return () => {
       if (processingTimeoutRef.current) {
         clearTimeout(processingTimeoutRef.current);
       }
       interviewWsService.disconnect();
-      audioStreaming.stopRecording();
-      audioPlayback.stopPlayback();
+      audioStreamingRef.current.stopRecording();
+      audioPlaybackRef.current.stopPlayback();
     };
   }, []);
 
   return {
     // State
     state,
+    endReason,
     scheduleId,
     interviewerName,
     conversation,
@@ -851,6 +1068,8 @@ export function useVoiceInterview() {
     // Audio state
     isRecording: audioStreaming.isRecording,
     isPlaying: audioPlayback.isPlaying,
+    /** The interviewer is speaking, or is about to: its text is shown and its voice has not played yet. */
+    isInterviewerSpeaking: audioPlayback.isPlaying || awaitingInterviewerAudio,
     amplitude: audioPlayback.amplitude,
     audioLevel: audioStreaming.audioLevel,
     /**
@@ -870,6 +1089,7 @@ export function useVoiceInterview() {
     startInterview,
     startAnswering,
     submitAnswer,
+    isSubmitting,
     skipQuestion,
     endInterview,
     sendProctoringEvent,

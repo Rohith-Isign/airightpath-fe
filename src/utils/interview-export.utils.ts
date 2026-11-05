@@ -1,5 +1,7 @@
 import { brandWorkbook, loadExcelJs, styleHeader } from '@/utils/results-export.utils';
 import { describeInterviewSubmission, interviewCompletionLabel } from '@/utils/interview-submission.utils';
+import { attemptStatusLabel, isNotAssessable } from '@/utils/interview-standing.utils';
+import { performanceLevel } from '@/utils/performance-level.utils';
 import type { InterviewSchedule } from '@/types/interview.types';
 import type { VoiceConversationEntryDTO } from '@/services/interview.service';
 
@@ -28,6 +30,8 @@ export interface InterviewExportInput {
   filters: {
     round: string;
     search?: string;
+    /** The submitted-between filter, already worded, when one is applied. */
+    submitted?: string;
   };
   generatedAt: Date;
   /**
@@ -84,6 +88,9 @@ function addSummarySheet(workbook: Workbook, input: InterviewExportInput): void 
   if (input.filters.search) {
     rows.splice(3, 0, ['Search filter', input.filters.search]);
   }
+  if (input.filters.submitted) {
+    rows.splice(3, 0, ['Submitted between', input.filters.submitted]);
+  }
   if (input.rows.length !== input.totalCandidates) {
     rows.push(['Note', 'This is a filtered view, not every candidate on the job.']);
   }
@@ -103,13 +110,14 @@ const RESULT_COLUMNS = [
   { header: 'Overridden to', width: 15 },
   { header: 'Overridden by', width: 28 },
   { header: 'Score /10', width: 11 },
+  { header: 'Level', width: 18 },
   { header: 'Recommendation', width: 18 },
   { header: 'Needs review', width: 13 },
   { header: 'How it ended', width: 22 },
   { header: 'Warnings', width: 10 },
   { header: 'Duration (min)', width: 14 },
   { header: 'Started', width: 18 },
-  { header: 'Ended', width: 18 },
+  { header: 'Submitted', width: 18 },
   { header: 'Deadline', width: 18 },
 ];
 
@@ -125,12 +133,15 @@ function addResultsSheet(workbook: Workbook, input: InterviewExportInput): void 
     const row = sheet.addRow([
       interview.email,
       interview.roundLabel ?? interview.round ?? '',
-      interview.attemptStatus,
+      attemptStatusLabel(interview),
       interview.interviewResult,
       interview.overriddenResult ?? '',
       interview.overriddenBy ?? '',
       // A real number, not a formatted string, so the column averages.
-      interview.evaluation?.overallScore ?? null,
+      isNotAssessable(interview) ? null : (interview.evaluation?.overallScore ?? null),
+      isNotAssessable(interview)
+        ? 'Not assessable'
+        : (performanceLevel(interview.evaluation?.overallScore)?.label ?? ''),
       interview.evaluation?.recommendation ?? '',
       interview.needsHumanReview ? 'Yes' : '',
       submission?.label ?? interviewCompletionLabel(interview.completionReason),
@@ -142,7 +153,7 @@ function addResultsSheet(workbook: Workbook, input: InterviewExportInput): void 
     ]);
 
     row.getCell(7).numFmt = '0.0';
-    [13, 14, 15].forEach((i) => {
+    [14, 15, 16].forEach((i) => {
       row.getCell(i).numFmt = 'yyyy-mm-dd hh:mm';
     });
   });

@@ -70,6 +70,7 @@ export const ENDPOINTS = {
       `/api/job-applications/filterByPrefix/${seg(prefix)}`,
     // Screening run: whole job, or only the emails passed in.
     SCREEN: "/api/job-applications/screen",
+    SCORE_CHECK: "/api/job-applications/score-check",
     SEND_ACK_MAIL: "/api/job-applications/send-ack-mail",
     SEND_REJECTION_MAIL: "/api/job-applications/send-rejection-mail",
     SEND_RECONFIRMATION_MAIL: "/api/job-applications/send-reconfirmation-mail",
@@ -132,11 +133,15 @@ export const ENDPOINTS = {
     ASSIGN: "/api/interview/assign-interview",
     ASSIGN_BULK: "/api/interview/assign-interview-bulk",
     GET_ACTIVE: "/api/interview/active",
+    /** Move the window of a booked interview that has not been started. */
+    RESCHEDULE: (id: number) => `/api/interview/schedules/${id}/schedule`,
     GET_RESULTS: "/api/interview/results",
     GET_RESULT_DETAIL: (id: number) => `/api/interview/results/${id}`,
     /** Soft-remove a result from the list, with a reason, and put it back. */
     DELETE_RESULT: (id: number) => `/api/interview/results/${id}`,
     RESTORE_RESULT: (id: number) => `/api/interview/results/${id}/restore`,
+    /** Grade the interview again and replace the stored evaluation. */
+    RE_EVALUATE: (id: number) => `/api/interview/results/${id}/re-evaluate`,
     /** A reviewer's notes and override on one interview. */
     REVIEW: (id: number) => `/api/interview/${id}/review`,
     // A signed, playable link to a stored recording. The schedule holds an
@@ -195,6 +200,8 @@ export const ENDPOINTS = {
     GET_BY_JOB: (prefix: string) => `/api/prompts/${seg(prefix)}`,
     SAVE: "/api/prompts",
     JOBS_WITH_PROMPTS: "/api/prompts/jobs-with-prompts",
+    /** The built-in prompts a job uses until it has one of its own. */
+    DEFAULTS: "/api/prompts/defaults",
     COPY: "/api/prompts/copy",
     GET_EVALUATION_CATEGORIES: (prefix: string) =>
       `/api/prompts/evaluation-categories/${seg(prefix)}`,

@@ -17,17 +17,19 @@ import { Modal } from '@/components/ui/Modal';
 import { mobileSchema } from '@/config/validation';
 import { ROUTES } from '@/config/routes';
 import { MESSAGES } from '@/config/messages';
-import { digitsOnly } from '@/utils/input.utils';
+import { STRINGS } from '@/constants/strings';
+import { digitsOnly, namesOnly } from '@/utils/input.utils';
+import { firstNameSchema, lastNameSchema } from '@/config/validation';
 import type { UsersDto } from '@/types/user.types';
 
 const profileSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
+  firstName: firstNameSchema,
+  lastName: lastNameSchema,
   email: z.string().email(),
   mobileNumber: mobileSchema,
   alternativeMobileNumber: z
     .string()
-    .regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit mobile number starting with 6-9')
+    .regex(/^[6-9]\d{9}$/, STRINGS.profilePage.invalidAlternativeMobile)
     .or(z.literal(''))
     .optional(),
 });
@@ -137,12 +139,12 @@ export function ProfilePage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-[var(--text)]">My Profile</h1>
+      <h1 className="text-3xl font-bold text-[var(--text)]">{STRINGS.profilePage.title}</h1>
 
       {/* Photo Upload Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Profile Photo</CardTitle>
+          <CardTitle>{STRINGS.profilePage.photoHeading}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-6">
@@ -151,7 +153,7 @@ export function ProfilePage() {
                 type="button"
                 onClick={() => imageUrl && setShowImageViewer(true)}
                 disabled={!imageUrl}
-                title={imageUrl ? 'View profile photo' : undefined}
+                title={imageUrl ? STRINGS.profilePage.viewPhoto : undefined}
                 className={`rounded-full ${imageUrl ? 'cursor-zoom-in' : 'cursor-default'}`}
               >
                 <Avatar
@@ -184,7 +186,7 @@ export function ProfilePage() {
             </div>
             <div>
               <p className="text-sm text-[var(--textSecondary)]">
-                Upload a profile photo. Supported formats: JPEG, PNG, GIF. Max size: 5MB.
+                {STRINGS.profilePage.photoHint}
               </p>
             </div>
           </div>
@@ -194,39 +196,42 @@ export function ProfilePage() {
       {/* Profile Form */}
       <Card>
         <CardHeader>
-          <CardTitle>Personal Information</CardTitle>
+          <CardTitle>{STRINGS.profilePage.personalInformation}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
-                label="First Name"
+                label={STRINGS.profilePage.firstName}
                 {...register('firstName')}
+                // Letters only: a digit is dropped as it is typed, not reported after the form is sent.
+                onChange={(e) => setValue('firstName', namesOnly(e.target.value), { shouldValidate: true, shouldDirty: true })}
                 error={errors.firstName?.message}
               />
               <Input
-                label="Last Name"
+                label={STRINGS.profilePage.lastName}
                 {...register('lastName')}
+                onChange={(e) => setValue('lastName', namesOnly(e.target.value), { shouldValidate: true, shouldDirty: true })}
                 error={errors.lastName?.message}
               />
             </div>
 
             <Input
-              label="Email"
+              label={STRINGS.profilePage.email}
               type="email"
               {...register('email')}
               disabled
-              helperText="Email cannot be changed."
+              helperText={STRINGS.profilePage.emailLocked}
             />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
-                label="Mobile Number"
+                label={STRINGS.profilePage.mobile}
                 type="tel"
                 inputMode="numeric"
                 maxLength={10}
                 autoComplete="tel"
-                placeholder="Enter 10-digit mobile number"
+                placeholder={STRINGS.profilePage.mobilePlaceholder}
                 error={errors.mobileNumber?.message}
                 {...register('mobileNumber')}
                 onChange={(e) =>
@@ -237,12 +242,12 @@ export function ProfilePage() {
                 }
               />
               <Input
-                label="Alternative Mobile Number"
+                label={STRINGS.profilePage.alternativeMobile}
                 type="tel"
                 inputMode="numeric"
                 maxLength={10}
                 autoComplete="tel"
-                placeholder="Optional"
+                placeholder={STRINGS.profilePage.optional}
                 error={errors.alternativeMobileNumber?.message}
                 {...register('alternativeMobileNumber')}
                 onChange={(e) =>
@@ -256,7 +261,7 @@ export function ProfilePage() {
 
             <div className="flex justify-end pt-4">
               <Button type="submit" isLoading={saving} leftIcon={<Save size={18} />}>
-                Save Changes
+                {STRINGS.profilePage.saveChanges}
               </Button>
             </div>
           </form>
@@ -266,14 +271,14 @@ export function ProfilePage() {
       {/* Security / Change Password */}
       <Card>
         <CardHeader>
-          <CardTitle>Security</CardTitle>
+          <CardTitle>{STRINGS.profilePage.security}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium text-[var(--text)]">Password</p>
+              <p className="text-sm font-medium text-[var(--text)]">{STRINGS.profilePage.password}</p>
               <p className="text-sm text-[var(--textSecondary)]">
-                Update your password to keep your account secure.
+                {STRINGS.profilePage.passwordHint}
               </p>
             </div>
             <Button
@@ -282,7 +287,7 @@ export function ProfilePage() {
               leftIcon={<Lock size={18} />}
               onClick={() => navigate(changePasswordPath)}
             >
-              Change password
+              {STRINGS.profilePage.changePassword}
             </Button>
           </div>
         </CardContent>
@@ -293,13 +298,13 @@ export function ProfilePage() {
         <Modal
           isOpen={showImageViewer}
           onClose={() => setShowImageViewer(false)}
-          title="Profile Photo"
+          title={STRINGS.profilePage.photoHeading}
           size="lg"
         >
           <div className="flex items-center justify-center">
             <img
               src={imageUrl}
-              alt="Profile"
+              alt={STRINGS.profilePage.photoAlt}
               className="max-h-[70vh] w-auto rounded-xl object-contain"
             />
           </div>

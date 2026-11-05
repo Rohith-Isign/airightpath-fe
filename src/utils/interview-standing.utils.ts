@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { isPast } from '@/utils/datetime.utils';
 import type {
   InterviewResult,
@@ -61,6 +62,46 @@ function stateOf(schedule: InterviewSchedule): RoundState {
 }
 
 /**
+ * True once the booked slot has closed and the candidate never began: the interview was missed.
+ *
+ * Worked out from the deadline each time it is asked, not stored, so it flips the moment the slot ends without a
+ * background job having to run first.
+ */
+export function isNotAttended(schedule: Pick<InterviewSchedule, 'attemptStatus' | 'deadlineTime'>): boolean {
+  return (
+    schedule.attemptStatus === 'NOT_ATTEMPTED' &&
+    !!schedule.deadlineTime &&
+    isPast(schedule.deadlineTime)
+  );
+}
+
+/**
+ * Whether an interview was graded and found to have nothing to grade.
+ *
+ * <p>A finished interview the candidate never answered is deliberately left
+ * PENDING — the grader refuses to invent a score, and whether silence means a
+ * no-show, a broken microphone or a withdrawal is not something it can know.
+ * But "PENDING" on a completed row reads as "the scoring has not run yet",
+ * which is the one thing it does not mean. The evaluation is there; it says
+ * there was nothing to assess.</p>
+ */
+export function isNotAssessable(interview: InterviewSchedule): boolean {
+  return (
+    interview.attemptStatus === 'COMPLETED' &&
+    interview.interviewResult === 'PENDING' &&
+    !!interview.evaluation &&
+    !interview.evaluation.recommendation
+  );
+}
+
+/** The status an admin reads for one interview: the stored one, except that a missed slot says "Not Attended". */
+export function attemptStatusLabel(
+  schedule: Pick<InterviewSchedule, 'attemptStatus' | 'deadlineTime'>,
+): string {
+  return isNotAttended(schedule) ? STRINGS.interviewStatus.notAttendedBadge : schedule.attemptStatus.replace(/_/g, ' ');
+}
+
+/**
  * One candidate's interview standing, built from their schedules for a job.
  *
  * The pipeline stage says "Interview" or "Interview Done" and stops there. It
@@ -116,4 +157,57 @@ export function buildInterviewStandings(
     standings.set(email, buildInterviewStanding(mine));
   }
   return standings;
+}
+
+/**
+ * How an interview's result is shown: PASSED or FAILED once there is a verdict, and "INCOMPLETE" for a finished
+ * interview that has none. PENDING on a finished interview used to read as "still waiting", when what it means is that
+ * the grading found too little evidence to call it (or never ran); the hint says which.
+ */
+export function resultDisplay(
+  schedule: Pick<InterviewSchedule, 'attemptStatus' | 'interviewResult' | 'evaluation'>,
+): { label: string; hint?: string } {
+  if (schedule.attemptStatus === 'COMPLETED' && schedule.interviewResult === 'PENDING') {
+    const evaluated = !!schedule.evaluation;
+    return {
+      label: STRINGS.scoreBreakdown.noVerdict,
+      hint: evaluated ? STRINGS.scoreBreakdown.noVerdictInsufficient : STRINGS.scoreBreakdown.noVerdictNotGraded,
+    };
+  }
+  return { label: schedule.interviewResult };
+}
+
+/** What an admin can do about one round for one candidate, from where that round stands. */
+export type RoundAction = 'assign' | 'edit' | 'reassign' | null;
+
+/**
+ * The next step offered for a round, derived from the candidate's standing.
+ *
+ * L2 is the first round: booked when nothing has been, booked again when the last attempt was missed or not passed,
+ * and nothing while an attempt is live or already passed.
+ *
+ * L3 follows L2 and is only offered once L2 has been passed: that is the move the screen exists to make, so it is
+ * put in front of the admin instead of sitting behind "Reassign". Once booked, the same rule as L2 applies.
+ */
+export function roundAction(
+  standing: CandidateInterviewStanding | undefined,
+  round: InterviewRound,
+): RoundAction {
+  const find = (r: InterviewRound) => standing?.rounds.find((x) => x.round === r);
+  const own = find(round);
+
+  if (round === 'L3_BEHAVIORAL') {
+    const l2 = find('L2_TECHNICAL');
+    const l2Passed = l2?.state === 'completed' && l2.result === 'PASSED';
+    if (!own) return l2Passed ? 'assign' : null;
+  } else if (!own) {
+    return 'assign';
+  }
+
+  // Booked and not yet started: nothing to book again, but the times and prompt can still be changed.
+  if (own!.outstanding) return own!.state === 'pending' ? 'edit' : null;
+  const passed = own!.state === 'completed' && own!.result === 'PASSED';
+  // Finished and passed, or finished and still being judged: nothing to redo.
+  if (passed || (own!.state === 'completed' && own!.result === 'PENDING')) return null;
+  return 'reassign';
 }

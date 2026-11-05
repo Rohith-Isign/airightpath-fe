@@ -70,7 +70,7 @@ export function useToast() {
 
 function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) {
   return (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2.5 max-w-md">
+    <div className="fixed top-4 left-4 right-4 z-[100] flex flex-col gap-2.5 sm:left-auto sm:max-w-md">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
       ))}

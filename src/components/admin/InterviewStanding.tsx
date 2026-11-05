@@ -1,14 +1,12 @@
-import { CalendarClock, CheckCircle2, Clock, Loader2, PlayCircle, TimerOff } from 'lucide-react';
+import { STRINGS } from '@/constants/strings';
+import { CalendarClock, CheckCircle2, Clock, Loader2, PlayCircle, RotateCcw, TimerOff, Video } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
+import type { InterviewRound } from '@/types/interview.types';
 import { formatDateTime } from '@/utils/format.utils';
+import { INTERVIEW_ROUNDS, roundAction } from '@/utils/interview-standing.utils';
 import type { CandidateInterviewStanding, RoundStanding } from '@/utils/interview-standing.utils';
-
-/** Short round label — "L2", "L3" — because the cell has one line to work in. */
-const SHORT_ROUND: Record<string, string> = {
-  L2_TECHNICAL: 'L2',
-  L3_BEHAVIORAL: 'L3',
-};
 
 /** How each state reads, and what it is telling the admin to do about it. */
 const STATE_DISPLAY: Record<
@@ -16,67 +14,83 @@ const STATE_DISPLAY: Record<
   { label: string; variant: 'info' | 'warning' | 'success' | 'error' | 'secondary'; icon: React.ReactNode }
 > = {
   pending: {
-    label: 'Assigned',
+    label: STRINGS.interviewStatus.assigned,
     variant: 'info',
     icon: <CalendarClock size={12} className="flex-shrink-0" />,
   },
   'in-progress': {
-    label: 'In progress',
+    label: STRINGS.interviewStatus.inProgress,
     variant: 'warning',
     icon: <PlayCircle size={12} className="flex-shrink-0" />,
   },
   // Not "missed": nobody has judged the candidate yet, and the only thing this
   // state actually licenses is booking them again.
   expired: {
-    label: 'Not sat',
+    label: STRINGS.interviewStatus.notAttended,
     variant: 'error',
     icon: <TimerOff size={12} className="flex-shrink-0" />,
   },
   completed: {
-    label: 'Completed',
+    label: STRINGS.interviewStatus.completed,
     variant: 'success',
     icon: <CheckCircle2 size={12} className="flex-shrink-0" />,
   },
 };
 
-function RoundLine({ standing }: Readonly<{ standing: RoundStanding }>) {
-  const display = STATE_DISPLAY[standing.state];
-  const roundLabel = SHORT_ROUND[standing.round] ?? standing.round;
+/** What the round's own action button says. */
+const ACTION_LABEL = {
+  assign: STRINGS.candidateTable.assign,
+  edit: STRINGS.candidateTable.edit,
+  reassign: STRINGS.candidateTable.reassign,
+} as const;
+
+/** One round of the candidate's journey: where it stands, and the one thing that can be done next. */
+function RoundTrack({
+  round,
+  standing,
+  action,
+  onAssign,
+}: Readonly<{
+  round: InterviewRound;
+  standing?: RoundStanding;
+  action: 'assign' | 'edit' | 'reassign' | null;
+  onAssign?: (round: InterviewRound) => void;
+}>) {
+  const display = standing ? STATE_DISPLAY[standing.state] : null;
 
   return (
-    <div className="min-w-0 space-y-0.5">
+    <div className="min-w-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 space-y-1">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span
-          className="text-xs font-semibold text-[var(--text)]"
-          title={INTERVIEW_ROUND_LABELS[standing.round]}
-        >
-          {roundLabel}
-        </span>
+        <span className="text-xs font-semibold text-[var(--text)]">{INTERVIEW_ROUND_LABELS[round]}</span>
 
         {/* Attempt count only once it is more than one — "×1" is noise. */}
-        {standing.attempts > 1 && (
+        {standing && standing.attempts > 1 && (
           <span
             className="text-[10px] font-semibold text-[var(--warning)]"
-            title={`Booked ${standing.attempts} times`}
+            title={STRINGS.candidateTable.bookedTimes(standing.attempts)}
           >
             ×{standing.attempts}
           </span>
         )}
 
-        <Badge variant={display.variant} size="sm">
-          <span className="flex items-center gap-1">
-            {display.icon}
-            {display.label}
-          </span>
-        </Badge>
+        {standing && display ? (
+          <Badge variant={display.variant} size="sm">
+            <span className="flex items-center gap-1">
+              {display.icon}
+              {display.label}
+            </span>
+          </Badge>
+        ) : (
+          <span className="text-[11px] text-[var(--textTertiary)]">{STRINGS.candidateTable.notAssigned}</span>
+        )}
 
-        {standing.state === 'completed' && standing.score !== null && (
+        {standing?.state === 'completed' && standing.score !== null && (
           <span className="text-xs font-bold text-[var(--text)]">{standing.score}%</span>
         )}
 
         {/* The verdict, once there is one. PENDING means the evaluation has not
             landed yet, which is not a verdict and is not shown as one. */}
-        {standing.state === 'completed' && standing.result && standing.result !== 'PENDING' && (
+        {standing?.state === 'completed' && standing.result && standing.result !== 'PENDING' && (
           <Badge variant={standing.result === 'PASSED' ? 'success' : 'error'} size="sm">
             {standing.result}
           </Badge>
@@ -85,12 +99,23 @@ function RoundLine({ standing }: Readonly<{ standing: RoundStanding }>) {
 
       {/* The deadline, while it is still the thing that matters. Once the
           interview is sat, when it was due is history. */}
-      {standing.state !== 'completed' && standing.deadlineTime && (
+      {standing && standing.state !== 'completed' && standing.deadlineTime && (
         <p className="flex items-center gap-1 text-[10px] text-[var(--textTertiary)]">
           <Clock size={10} className="flex-shrink-0" />
-          {standing.state === 'expired' ? 'Was due' : 'Due'}{' '}
+          {standing.state === 'expired' ? STRINGS.candidateTable.wasDue : STRINGS.candidateTable.due}{' '}
           {formatDateTime(standing.deadlineTime)}
         </p>
+      )}
+
+      {action && onAssign && (
+        <Button
+          size="sm"
+          variant={action === 'assign' ? 'primary' : 'outline'}
+          leftIcon={action === 'reassign' ? <RotateCcw size={12} /> : <Video size={12} />}
+          onClick={() => onAssign(round)}
+        >
+          {ACTION_LABEL[action]} {round === 'L2_TECHNICAL' ? 'L2' : 'L3'}
+        </Button>
       )}
     </div>
   );
@@ -99,37 +124,41 @@ function RoundLine({ standing }: Readonly<{ standing: RoundStanding }>) {
 /**
  * Where a candidate stands in their interviews, in the width of a table cell.
  *
- * The pipeline stage says "Interview" for a candidate who was booked an hour ago
- * and for one who is halfway through, and "Interview Done" tells you a round
- * finished without saying which one or how it went. An admin could not tell an
- * assigned candidate from a completed one without leaving this screen for
- * Interview Results and matching people up by email.
+ * L2 and L3 each get their own track — a status, a score and verdict, a deadline and the next action — so that the
+ * journey reads as two steps, not one mixed list. L3 stays visible as "Not assigned" until L2 has been passed, and
+ * from then on offers its own Assign button, so moving a candidate from L2 to L3 is one click on the row they are
+ * already looking at.
  */
 export function InterviewStanding({
   standing,
   loading,
+  onAssign,
 }: Readonly<{
   standing?: CandidateInterviewStanding;
   /** The schedules are still arriving, so absence isn't reported as fact. */
   loading?: boolean;
+  /** Books (or re-books) a round for this candidate. */
+  onAssign?: (round: InterviewRound) => void;
 }>) {
   if (loading && !standing) {
     return (
       <span className="flex items-center gap-1.5 text-xs text-[var(--textTertiary)]">
         <Loader2 size={12} className="animate-spin" />
-        Loading
+        {STRINGS.candidateTable.loading}
       </span>
     );
   }
 
-  if (!standing || standing.rounds.length === 0) {
-    return <span className="text-xs text-[var(--textTertiary)]">No interview set</span>;
-  }
-
   return (
     <div className="space-y-1.5">
-      {standing.rounds.map((round) => (
-        <RoundLine key={round.round} standing={round} />
+      {INTERVIEW_ROUNDS.map((round) => (
+        <RoundTrack
+          key={round}
+          round={round}
+          standing={standing?.rounds.find((r) => r.round === round)}
+          action={roundAction(standing, round)}
+          onAssign={onAssign}
+        />
       ))}
     </div>
   );

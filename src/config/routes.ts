@@ -13,6 +13,8 @@ export const ROUTES = {
     JOBS: '/admin/jobs',
     JOBS_CREATE: '/admin/jobs/create',
     JOBS_EDIT: '/admin/jobs/:jobPrefix/edit',
+    JOBS_VIEW: '/admin/jobs/:jobPrefix/view',
+    jobsView: (jobPrefix: string) => `/admin/jobs/${encodeURIComponent(jobPrefix)}/view`,
     jobsEdit: (jobPrefix: string) => `/admin/jobs/${encodeURIComponent(jobPrefix)}/edit`,
     CANDIDATES: '/admin/candidates',
     USERS: '/admin/users',

@@ -19,6 +19,7 @@ import {
   UserCheck,
   Pencil,
   Trash2,
+  Eye,
 } from 'lucide-react';
 import { jobService, isEndpointMissing } from '@/services/job.service';
 import { jobApplicationService } from '@/services/job-application.service';
@@ -88,6 +89,11 @@ export function AdminJobsPage() {
   // form refetches by prefix if the page is opened cold.
   const handleEditJob = (job: JobPostDTO) => {
     navigate(ROUTES.ADMIN.jobsEdit(job.jobPrefix), { state: { job } });
+  };
+
+  // The whole job form, read-only: every field the admin filled in, with Edit one click away.
+  const handleViewJob = (job: JobPostDTO) => {
+    navigate(ROUTES.ADMIN.jobsView(job.jobPrefix), { state: { job } });
   };
 
   const handleViewCandidates = (job: JobPostDTO) => {
@@ -302,15 +308,17 @@ export function AdminJobsPage() {
                         size="sm"
                         className="w-full min-w-0"
                         onClick={() => setSelectedJob(job)}
+                        title="See this job as a read-only page. Nothing can be changed here."
                         leftIcon={<Eye size={15} />}
                       >
-                        Details
+                        View
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         className="w-full min-w-0"
                         onClick={() => handleEditJob(job)}
+                        title="Open the form to change this job"
                         leftIcon={<Pencil size={15} />}
                       >
                         Edit
@@ -370,6 +378,9 @@ export function AdminJobsPage() {
                 onClick={() => askDeleteJob(selectedJob)}
               >
                 Delete
+              </Button>
+              <Button variant="outline" leftIcon={<Eye size={16} />} onClick={() => handleViewJob(selectedJob)}>
+                View Full Form
               </Button>
               <Button leftIcon={<Pencil size={16} />} onClick={() => handleEditJob(selectedJob)}>
                 Edit Job

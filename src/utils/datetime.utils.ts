@@ -24,6 +24,25 @@ export function isPast(value: string): boolean {
  * "Mon, 10 Aug 2026, 02:30 PM". Used for the preview of what a candidate will
  * read in a scheduling email, so the admin never has to decode the raw value.
  */
+export const BUSINESS_TIMEZONE = 'Asia/Kolkata';
+
+/** "IST" for the business timezone, the label the candidate's email carries after the time. */
+export function businessTimezoneLabel(): string {
+  const part = new Intl.DateTimeFormat('en-IN', { timeZone: BUSINESS_TIMEZONE, timeZoneName: 'short' })
+    .formatToParts(new Date())
+    .find((p) => p.type === 'timeZoneName');
+  return part?.value ?? BUSINESS_TIMEZONE;
+}
+
+/**
+ * The schedule exactly as the candidate's email states it, zone included: "Mon, 10 Aug 2026, 02:30 PM IST".
+ * The picked value is a wall-clock time in the business timezone, so the zone is appended, not converted to.
+ */
+export function formatScheduleWithZone(value: string): string {
+  const formatted = formatScheduleForEmail(value);
+  return formatted === value ? value : `${formatted.replace(/(am|pm)$/, (m) => m.toUpperCase())} ${businessTimezoneLabel()}`;
+}
+
 export function formatScheduleForEmail(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;

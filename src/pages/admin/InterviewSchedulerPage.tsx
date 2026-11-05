@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { BackLink } from '@/components/ui/BackLink';
 import { Loader2, Video, Send, Mail, Calendar, AlertTriangle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { DateTimeInput } from '@/components/ui/DateTimeInput';
 import { nowDateTimeLocal, isPast } from '@/utils/datetime.utils';
 import { Select } from '@/components/ui/Select';
@@ -13,32 +14,49 @@ import { jobService } from '@/services/job.service';
 import { jobApplicationService } from '@/services/job-application.service';
 import { interviewService } from '@/services/interview.service';
 import { MESSAGES } from '@/config/messages';
+import { INTERVIEW_ASSIGN_STAGES } from '@/utils/interview-assign-stages';
 import type { JobPostDTO, JobApplicationDTO } from '@/types/job.types';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
-import type { InterviewRound } from '@/types/interview.types';
+import type { InterviewRound, InterviewSchedule } from '@/types/interview.types';
+import { formatServerDateTime } from '@/utils/format.utils';
 
 const ROUND_OPTIONS = (Object.keys(INTERVIEW_ROUND_LABELS) as InterviewRound[]).map((value) => ({
   value,
   label: INTERVIEW_ROUND_LABELS[value],
 }));
 
+/** What the Candidates screen hands over when it sends the admin here to book someone. */
+interface SchedulerHandoff {
+  jobPrefix?: string;
+  emails?: string[];
+  round?: InterviewRound;
+  // The form as it was left, handed back when the admin returns from another screen (the full prompt editor).
+  startTime?: string;
+  deadlineTime?: string;
+  sendEmail?: boolean;
+}
+
 export function InterviewSchedulerPage() {
   const { showToast } = useToast();
+  const handoff = (useLocation().state as SchedulerHandoff | null) ?? {};
 
   const [jobs, setJobs] = useState<JobPostDTO[]>([]);
-  const [selectedPrefix, setSelectedPrefix] = useState('');
+  const [selectedPrefix, setSelectedPrefix] = useState(handoff.jobPrefix ?? '');
   const [candidates, setCandidates] = useState<JobApplicationDTO[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
-  const [deadlineTime, setDeadlineTime] = useState('');
+  const [deadlineTime, setDeadlineTime] = useState(handoff.deadlineTime ?? '');
+  /** When the interview opens; the deadline is when it closes. Starts at now. */
+  const [startTime, setStartTime] = useState(handoff.startTime ?? nowDateTimeLocal());
   /** Floor for the deadline picker, fixed on mount. */
   const [minDateTime] = useState(nowDateTimeLocal);
   const deadlineInPast = !!deadlineTime && isPast(deadlineTime);
-  const [sendEmail, setSendEmail] = useState(true);
+  const endBeforeStart = !!deadlineTime && !!startTime && deadlineTime <= startTime;
+  const [sendEmail, setSendEmail] = useState(handoff.sendEmail ?? true);
   /**
    * Which interview to book. L2 first because it is the round that follows the
    * exam; L3 is scheduled after it, for candidates who passed.
    */
-  const [round, setRound] = useState<InterviewRound>('L2_TECHNICAL');
+  const [round, setRound] = useState<InterviewRound>(handoff.round ?? 'L2_TECHNICAL');
   /**
    * Whether the selected round has a prompt behind it.
    *
@@ -47,8 +65,13 @@ export function InterviewSchedulerPage() {
    * for booking now — but the button says what will happen.
    */
   const [promptConfigured, setPromptConfigured] = useState(true);
-  const [questionsFromDate, setQuestionsFromDate] = useState('');
-  const [questionsToDate, setQuestionsToDate] = useState('');
+
+  /** Every booking on this job, so a candidate who already has the round shows their existing window. */
+  const [schedules, setSchedules] = useState<InterviewSchedule[]>([]);
+  const [schedulesFailed, setSchedulesFailed] = useState(false);
+  /** Set once the admin edits a time, so loading an existing booking never overwrites what they typed. */
+  const timesTouched = useRef(!!handoff.deadlineTime);
+  const firstRun = useRef(true);
 
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
@@ -64,8 +87,78 @@ export function InterviewSchedulerPage() {
     } else {
       setCandidates([]);
     }
-    setSelectedEmails(new Set());
+    // Arriving from Candidates, the people picked there are already selected; changing the job clears them.
+    setSelectedEmails(
+      selectedPrefix && selectedPrefix === handoff.jobPrefix
+        ? new Set(handoff.emails ?? [])
+        : new Set(),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPrefix]);
+
+  async function fetchSchedules() {
+    if (!selectedPrefix) {
+      setSchedules([]);
+      return;
+    }
+    try {
+      const res = await interviewService.getResults(selectedPrefix, undefined, { silent: true });
+      setSchedules(res.data ?? []);
+      setSchedulesFailed(false);
+    } catch {
+      setSchedules([]);
+      setSchedulesFailed(true);
+    }
+  }
+
+  useEffect(() => {
+    // Not on the first run: arriving with a form already filled in (back from the prompt editor) keeps it.
+    if (!firstRun.current) timesTouched.current = false;
+    firstRun.current = false;
+    void fetchSchedules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPrefix, round]);
+
+  /** The live booking of the chosen round for each selected candidate, if they have one. */
+  const liveByEmail = new Map<string, InterviewSchedule>();
+  for (const sch of schedules) {
+    // A booking with no end time recorded is still open: it was never closed, and it is the one to edit.
+    const open = sch.attemptStatus !== 'COMPLETED' && !(sch.deadlineTime && isPast(sch.deadlineTime));
+    if (!open || (sch.round ?? 'L2_TECHNICAL') !== round) continue;
+    const match = [...selectedEmails].find((e) => e.toLowerCase() === (sch.email ?? '').toLowerCase());
+    if (match) liveByEmail.set(match, sch);
+  }
+  /** What this candidate already has for the chosen round, in a line, so the list says it before anything is selected. */
+  function bookingLine(email: string): string {
+    const mine = schedules
+      .filter((x) => (x.round ?? 'L2_TECHNICAL') === round && (x.email ?? '').toLowerCase() === email.toLowerCase())
+      .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0];
+    if (!mine) return '';
+    const short = round === 'L2_TECHNICAL' ? 'L2' : 'L3';
+    if (mine.attemptStatus === 'COMPLETED') return `${short} finished`;
+    if (mine.deadlineTime && isPast(mine.deadlineTime)) return `${short} missed (was due ${formatServerDateTime(mine.deadlineTime)})`;
+    return mine.attemptStatus === 'IN_PROGRESS'
+      ? `${short} in progress`
+      : `${short} assigned: ${formatServerDateTime(mine.assignedAt)} → ${mine.deadlineTime ? formatServerDateTime(mine.deadlineTime) : 'no end time set'}`;
+  }
+
+  /** Not started yet, so their window can still be moved. */
+  const movable = [...liveByEmail.values()].filter((sch) => sch.attemptStatus === 'NOT_ATTEMPTED' && !sch.startedAt);
+  /** Already being sat: left alone. */
+  const inProgressCount = liveByEmail.size - movable.length;
+  const newCount = selectedEmails.size - liveByEmail.size;
+  const firstMovableId = movable[0]?.id;
+
+  // Show the existing window to edit, instead of an empty end date, until the admin types their own.
+  useEffect(() => {
+    const first = movable[0];
+    // The existing window fills the fields unless the admin has put their own end time in.
+    if (!first || (timesTouched.current && deadlineTime)) return;
+    const picker = (stamp?: string) => /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(stamp ?? '')?.slice(1, 3).join('T') ?? '';
+    setStartTime(picker(first.assignedAt) || startTime);
+    setDeadlineTime(picker(first.deadlineTime));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstMovableId]);
 
   async function fetchJobs() {
     setLoadingJobs(true);
@@ -84,11 +177,9 @@ export function InterviewSchedulerPage() {
     setLoadingCandidates(true);
     try {
       const res = await jobApplicationService.getByPrefix(selectedPrefix);
-      // Filter to candidates who have passed assessment (EXAM_COMPLETED or later stages)
-      const eligibleStatuses = ['EXAM_COMPLETED'];
-      const eligible = (res.data ?? []).filter((c) =>
-        eligibleStatuses.includes(c.status)
-      );
+      // Any candidate who is not rejected, with or without an assessment: an interview can be booked at any point,
+      // and a candidate who failed a round is at a later stage and still needs it booked again.
+      const eligible = (res.data ?? []).filter((c) => INTERVIEW_ASSIGN_STAGES.includes(c.status));
       setCandidates(eligible);
     } catch {
       // Error toast auto-handled by interceptor
@@ -131,26 +222,50 @@ export function InterviewSchedulerPage() {
       showToast(MESSAGES.admin.interviewScheduler.deadlineTimeRequired, 'warning');
       return;
     }
+    if (!startTime || endBeforeStart) {
+      showToast('The interview must end after it starts.', 'warning');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      await interviewService.assignInterviewBulk({
-        emails: Array.from(selectedEmails),
-        jobPrefix: selectedPrefix,
-        deadlineTime,
-        sendEmail,
-        round,
-        questionsFromDate: questionsFromDate || undefined,
-        questionsToDate: questionsToDate || undefined,
-      });
-      showToast(MESSAGES.admin.interviewScheduler.scheduled(selectedEmails.size), 'success');
+      // Anyone who already holds this round and has not started it has their window moved; anyone being sat is
+      // left alone; everyone else is booked now.
+      for (const sch of movable) {
+        await interviewService.rescheduleInterview(sch.id, {
+          assignedAt: startTime,
+          deadlineTime,
+          notify: sendEmail,
+        });
+      }
+      const toBook = Array.from(selectedEmails).filter((e) => !liveByEmail.has(e));
+      if (toBook.length > 0) {
+        await interviewService.assignInterviewBulk({
+          emails: toBook,
+          jobPrefix: selectedPrefix,
+          assignedAt: startTime,
+          deadlineTime,
+          sendEmail,
+          round,
+        });
+      }
+      showToast(
+        movable.length > 0
+          ? `${toBook.length} booked, ${movable.length} moved to the new time${inProgressCount > 0 ? `, ${inProgressCount} already in progress left alone` : ''}.`
+          : MESSAGES.admin.interviewScheduler.scheduled(selectedEmails.size),
+        'success',
+      );
       setSelectedEmails(new Set());
       setDeadlineTime('');
+      setStartTime(nowDateTimeLocal());
       setQuestionsFromDate('');
       setQuestionsToDate('');
 
-      // Refresh candidate list so scheduled candidates disappear
-      if (selectedPrefix) fetchCandidates();
+      // Refresh the lists so the stages and windows shown are current
+      if (selectedPrefix) {
+        fetchCandidates();
+        void fetchSchedules();
+      }
     } catch {
       // Error toast auto-handled by interceptor
     } finally {
@@ -172,11 +287,13 @@ export function InterviewSchedulerPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Shown only when another screen sent us here */}
+      <BackLink />
       <div>
         <h1 className="text-3xl font-bold text-[var(--text)]">Schedule Interview</h1>
         <p className="text-[var(--textSecondary)] mt-1">
-          Assign AI interviews to candidates who have completed their assessments
+          Assign L2 or L3 AI interviews, or book a further attempt, for any candidate on the job
         </p>
       </div>
 
@@ -222,6 +339,14 @@ export function InterviewSchedulerPage() {
                 jobPrefix={selectedPrefix}
                 round={round}
                 onConfiguredChange={setPromptConfigured}
+                getReturnState={() => ({
+                  jobPrefix: selectedPrefix,
+                  emails: Array.from(selectedEmails),
+                  round,
+                  startTime,
+                  deadlineTime,
+                  sendEmail,
+                })}
               />
             )}
 
@@ -250,7 +375,7 @@ export function InterviewSchedulerPage() {
                 ) : candidates.length === 0 ? (
                   <EmptyState
                     title="No eligible candidates"
-                    description="No candidates have completed their assessment for this job yet."
+                    description="No candidates on this job can be booked for an interview yet."
                   />
                 ) : (
                   <div className="max-h-64 overflow-y-auto border border-[var(--border)] rounded-lg divide-y divide-[var(--border)]">
@@ -270,8 +395,11 @@ export function InterviewSchedulerPage() {
                             {c.firstName} {c.lastName}
                           </p>
                           <p className="text-xs text-[var(--textSecondary)] truncate">
-                            {c.email}
+                            {c.email} · {c.status.replaceAll('_', ' ').toLowerCase()}
                           </p>
+                          {bookingLine(c.email) && (
+                            <p className="text-xs text-[var(--primary)]">{bookingLine(c.email)}</p>
+                          )}
                         </div>
                       </label>
                     ))}
@@ -280,41 +408,65 @@ export function InterviewSchedulerPage() {
               </div>
             )}
 
+            {/* Candidates who already hold this round: their current window is what the fields below show and edit. */}
+            {schedulesFailed && (
+              <p className="text-xs text-[var(--error)]">
+                Could not load the interviews already booked for this job, so existing bookings are not shown.
+              </p>
+            )}
+            {liveByEmail.size > 0 && (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface1)] p-3 text-sm text-[var(--text)] space-y-1">
+                <p className="font-medium">
+                  {liveByEmail.size} selected already {liveByEmail.size === 1 ? 'has' : 'have'}{' '}
+                  {INTERVIEW_ROUND_LABELS[round]} assigned
+                </p>
+                {movable.slice(0, 5).map((sch) => (
+                  <p key={sch.id} className="text-xs text-[var(--textSecondary)]">
+                    {sch.email}: {formatServerDateTime(sch.assignedAt)} →{' '}
+                    {sch.deadlineTime ? formatServerDateTime(sch.deadlineTime) : 'no end time set, add one below'}
+                  </p>
+                ))}
+                <p className="text-xs text-[var(--textSecondary)]">
+                  Changing the times below moves {movable.length === 1 ? 'that booking' : 'those bookings'}
+                  {newCount > 0 ? ` and books the other ${newCount} afresh` : ''}.
+                  {inProgressCount > 0 ? ` ${inProgressCount} already in progress will not be changed.` : ''}
+                </p>
+              </div>
+            )}
+
             {/* Deadline. Native datetime-local, same as the date fields just
                 below it and everywhere else in the app. */}
             <DateTimeInput
-              label="Interview Deadline"
+              label="Start date & time"
               required
               min={minDateTime}
-              value={deadlineTime}
-              onChange={setDeadlineTime}
+              value={startTime}
+              onChange={(value) => {
+                timesTouched.current = true;
+                setStartTime(value);
+              }}
               leftIcon={<Calendar size={16} />}
-              helperText={deadlineInPast ? undefined : 'Pick from the calendar — cannot be in the past'}
-              error={deadlineInPast ? 'The deadline has already passed' : undefined}
+              helperText="The interview opens for the candidate at this time"
             />
-
-            {/* Question Date Range */}
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Use questions created from (optional)"
-                type="date"
-                value={questionsFromDate}
-                onChange={(e) => setQuestionsFromDate(e.target.value)}
-                leftIcon={<Calendar size={16} />}
-                helperText="Only AI-generated interview questions created on or after this date are used."
-              />
-              <Input
-                label="Use questions created until (optional)"
-                type="date"
-                value={questionsToDate}
-                onChange={(e) => setQuestionsToDate(e.target.value)}
-                leftIcon={<Calendar size={16} />}
-                helperText="Only questions created on or before this date are used. Leave both empty to use every question."
-              />
-            </div>
-            <p className="text-xs text-[var(--textTertiary)] -mt-4">
-              If provided, only questions created within this date range will be asked.
-            </p>
+            <DateTimeInput
+              label="End date & time (deadline)"
+              required
+              min={startTime || minDateTime}
+              value={deadlineTime}
+              onChange={(value) => {
+                timesTouched.current = true;
+                setDeadlineTime(value);
+              }}
+              leftIcon={<Calendar size={16} />}
+              helperText={deadlineInPast || endBeforeStart ? undefined : 'The interview closes at this time — cannot be in the past'}
+              error={
+                deadlineInPast
+                  ? 'The deadline has already passed'
+                  : endBeforeStart
+                    ? 'The end must be after the start'
+                    : undefined
+              }
+            />
 
             {/* Email Notification Toggle */}
             <label className="flex items-center gap-3 cursor-pointer">
@@ -348,9 +500,10 @@ export function InterviewSchedulerPage() {
                 onClick={handleSubmit}
                 isLoading={submitting}
                 leftIcon={!submitting ? <Send size={16} /> : undefined}
-                disabled={!selectedPrefix || selectedEmails.size === 0 || !deadlineTime}
+                disabled={!selectedPrefix || selectedEmails.size === 0 || !deadlineTime || !startTime || endBeforeStart}
               >
-                Schedule Interview{selectedEmails.size > 1 ? `s (${selectedEmails.size})` : ''}
+                {movable.length > 0 ? 'Update Interview' : 'Schedule Interview'}
+                {selectedEmails.size > 1 ? ` (${selectedEmails.size})` : ''}
               </Button>
             </div>
           </div>

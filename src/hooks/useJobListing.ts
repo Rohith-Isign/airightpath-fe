@@ -14,9 +14,13 @@ import type { JobPostDTO } from '@/types/job.types';
 
 export type JobStatusFilter = 'active' | 'expired' | 'all';
 
-export const JOB_PAGE_SIZES = [20, 40, 60, 100];
+/**
+ * Multiples of six, so every full page fills its last row whether the grid shows one, two or three cards across. A
+ * page of 20 left two cards and an empty slot on the last row of the three-column grid.
+ */
+export const JOB_PAGE_SIZES = [18, 36, 60, 96];
 
-export const DEFAULT_JOB_PAGE_SIZE = 20;
+export const DEFAULT_JOB_PAGE_SIZE = 18;
 
 /**
  * What a job is called, everywhere: the Job Title the admin typed when creating it.
@@ -66,10 +70,12 @@ export function useJobListing(jobs: JobPostDTO[], storagePrefix: string): JobLis
     `${storagePrefix}:status`,
     'active',
   );
-  const [pageSize, setPageSize] = usePersistentState(
+  const [storedPageSize, setPageSize] = usePersistentState(
     `${storagePrefix}:pageSize`,
     DEFAULT_JOB_PAGE_SIZE,
   );
+  // A size remembered from before the sizes changed (20, 40, 100) would still leave a short last row.
+  const pageSize = JOB_PAGE_SIZES.includes(storedPageSize) ? storedPageSize : DEFAULT_JOB_PAGE_SIZE;
   const [page, setPage] = useState(1);
 
   // Keyed on the canonical type, so "Full-time" and "Full-Time" are one option.

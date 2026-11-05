@@ -68,13 +68,24 @@ export function useAudioPlayback() {
     };
   }, [isPlaying, updateAmplitude]);
 
+  /**
+   * Which run of the queue is current. Stopping playback starts a new one.
+   *
+   * Stopping a clip makes the loop playing it wake up and carry on. If a replay had been queued by then, that old
+   * loop and the new one both read the same queue, and the old one finished by reporting that nothing was playing
+   * while the replay still was. A loop that is no longer the current run now just ends.
+   */
+  const generationRef = useRef(0);
+
   const processQueue = useCallback(async () => {
     if (isProcessingRef.current || queueRef.current.length === 0) return;
 
     isProcessingRef.current = true;
     setIsPlaying(true);
+    const generation = generationRef.current;
 
     while (queueRef.current.length > 0) {
+      if (generation !== generationRef.current) return;
       const chunk = queueRef.current.shift()!;
 
       try {
@@ -88,6 +99,7 @@ export function useAudioPlayback() {
         }
 
         const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+        if (generation !== generationRef.current) return;
 
         await new Promise<void>((resolve) => {
           const source = ctx.createBufferSource();
@@ -111,6 +123,7 @@ export function useAudioPlayback() {
       }
     }
 
+    if (generation !== generationRef.current) return;
     isProcessingRef.current = false;
     setIsPlaying(false);
     setAmplitude(0);
@@ -125,6 +138,7 @@ export function useAudioPlayback() {
   );
 
   const stopPlayback = useCallback(() => {
+    generationRef.current += 1;
     queueRef.current = [];
     if (sourceRef.current) {
       try {

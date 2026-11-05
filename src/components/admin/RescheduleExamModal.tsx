@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { useState } from 'react';
 import { CalendarClock, Mail } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
@@ -100,8 +101,7 @@ export function RescheduleExamModal({
     >
       <div className="space-y-4">
         <p className="text-sm text-[var(--textSecondary)]">
-          {assessment.candidateEmail} has not sat this paper yet. Moving the window changes when
-          they can open it.
+          {STRINGS.reschedule.notStarted(assessment.candidateEmail)}
         </p>
 
         <DateTimeInput

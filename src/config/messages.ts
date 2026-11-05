@@ -73,6 +73,7 @@ export const MESSAGES = {
     photoCaptured: 'Photo captured.',
     photoUploadFailed: "We couldn't save your photo. Please try again.",
     photoNoFace: 'No face detected. Please centre your face in the frame and try again.',
+    photoFaceLost: 'Your face left the frame, so no photo was taken. Look at the camera and try again.',
     photoMultipleFaces: 'More than one person is visible. Only you may be in frame.',
     secondPersonPresent: 'Another person is visible in your camera. Please sit alone to continue.',
     tooNoisy: 'Your surroundings are too noisy. Please move somewhere quieter and try again.',
@@ -112,6 +113,7 @@ export const MESSAGES = {
 
   interview: {
     micToStart: 'Please click the microphone to start answering.',
+    questionTimedOut: 'No answer was given in time, so we are moving on to the next question.',
     // No longer announces an ending, because there is not one. The usual
     // cause is a microphone that is not working, and ending the interview
     // was the harshest possible response to the candidate's own equipment.
@@ -122,6 +124,8 @@ export const MESSAGES = {
     resumed: 'Picking up where you left off — your earlier answers are saved.',
     roomSecondPerson: (count: number) =>
       `${count} people visible on your phone camera. You must be alone for this interview.`,
+    tabSwitch: (count: number) =>
+      `You left the interview tab (${count}). Stay on this page for the whole interview; it is recorded for the reviewer.`,
     fullscreenExit: (count: number) =>
       `Fullscreen exit detected (${count}). Please return to fullscreen.`,
     faceNotDetected: 'Face not detected. Please stay in front of the camera.',
@@ -177,11 +181,6 @@ export const MESSAGES = {
       deadlineBeforeStart: 'Deadline must be after the start time.',
       minutesPerQuestionInvalid: (min: number, max: number) =>
         `Time per question must be between ${min} and ${max} minutes.`,
-      // Generation reads a per-job prompt. Without one the server 404s, which
-      // the interceptor renders as a generic "couldn't be found" — true, but it
-      // names neither what is missing nor how to fix it.
-      promptMissing: (type: string) =>
-        `No ${type} prompt is set up for this job yet. Use "Create Prompt" to add one, then generate again.`,
       assigned: 'Assessment assigned successfully!',
     },
     atsBatch: {

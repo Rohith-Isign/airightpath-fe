@@ -50,6 +50,13 @@ export interface EvaluationCategory {
 }
 
 /** A stored prompt for a job (aptitude/coding/interview stages). */
+/** A built-in prompt: what a job uses until it is given one of its own. `promptStage` is null for aptitude and coding. */
+export interface DefaultPromptRecord {
+  promptType: string;
+  promptStage: string | null;
+  prompt: string;
+}
+
 export interface PromptRecord {
   id: number;
   jobPrefix: string;
@@ -134,6 +141,8 @@ export interface InterviewTemplateRequest {
 export interface BulkInterviewAssignRequest {
   jobPrefix: string;
   emails: string[];
+  /** When the interview opens. Omitted means now. */
+  assignedAt?: string;
   deadlineTime: string; // ISO datetime string
   sendEmail?: boolean;
   /** Omitted books the technical round, matching the server's default. */
@@ -257,8 +266,11 @@ export type ConversationEntry = {
 export interface MobileCapture {
   id: number;
   interviewScheduleId: number;
-  /** ROOM_PHOTO when the phone's view of the room was approved; MONITOR_FRAME while the interview ran. */
-  kind: 'ROOM_PHOTO' | 'MONITOR_FRAME';
+  /**
+   * ROOM_PHOTO from the room scan; EXTRA_PERSON or NO_CANDIDATE when the phone saw a second person or nobody while the
+   * interview ran; MONITOR_FRAME is the older periodic still, no longer taken.
+   */
+  kind: 'ROOM_PHOTO' | 'MONITOR_FRAME' | 'EXTRA_PERSON' | 'NO_CANDIDATE';
   frameIndex: number;
   capturedAt?: string;
 }
@@ -285,6 +297,8 @@ export interface VoiceStartResponse {
    * restart it. Optional only for older servers that do not send it.
    */
   expiresAt?: string;
+  /** When the interview began, so a reloaded screen shows the true elapsed time. */
+  startedAt?: string;
   firstQuestion: string;
   interviewerName: string;
   firstQuestionAudio: string | null; // base64 mp3
@@ -323,6 +337,8 @@ export interface TranscriptionMessage {
   words: WordTimestamp[];
   duration: number;
   chunkIndex: number;
+  /** Set when this chunk has been dealt with, even if it held no speech. */
+  done?: boolean;
 }
 
 export interface AITokenMessage {
@@ -354,6 +370,8 @@ export interface ResponseCompleteMessage {
   questionsAsked: number;
   isComplete: boolean;
   terminated: boolean;
+  /** Why the interview ended: ai_closed, question_limit, or the server's own reason for forcing it. */
+  reason?: string;
 }
 
 // Voice evaluation types
@@ -377,6 +395,12 @@ export interface VoiceEvaluationResult {
   needsHumanReview?: boolean;
   /** Why it was flagged. Empty when it was not. */
   reviewReasons?: string[];
+  /** Share of the scoring areas (by weight) that the questions asked about, 0 to 1. The overall counts only those. */
+  coverage?: number;
+  /** The mean over the assessed areas only. The overall is lower whenever some areas were never reached. */
+  assessedScore?: number | null;
+  /** How much the score rests on. INSUFFICIENT means too little was asked or answered to give a verdict. */
+  evidenceLevel?: 'SUFFICIENT' | 'PARTIAL' | 'INSUFFICIENT';
 }
 
 export interface VoiceCategoryScore {
@@ -384,6 +408,13 @@ export interface VoiceCategoryScore {
   score: number;
   weight: number;
   feedback: string;
+  /**
+   * Numbers of the interviewer's questions this score is based on, in the order they were asked. Absent on a result
+   * graded before this was recorded; empty when the area was never asked about.
+   */
+  questionNumbers?: number[] | null;
+  /** False when no question tested this area: it is shown as not assessed and adds nothing to the overall. */
+  assessed?: boolean;
 }
 
 export interface SpeechAnalysis {

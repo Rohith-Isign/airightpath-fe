@@ -10,6 +10,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { STRINGS } from '@/constants/strings';
 import { assessmentService } from '@/services/assessment.service';
 import { interviewService } from '@/services/interview.service';
 import { jobApplicationService } from '@/services/job-application.service';
@@ -19,7 +20,9 @@ import { Button } from '@/components/ui/Button';
 import { ROUTES } from '@/config/routes';
 import { formatDate, formatDateTime } from '@/utils/format.utils';
 import { useNow } from '@/hooks/useNow';
+import { isNotAttended } from '@/utils/interview-standing.utils';
 import type { Assessment } from '@/types/assessment.types';
+import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewSchedule } from '@/types/interview.types';
 import type { JobApplicationDTO } from '@/types/job.types';
 
@@ -31,6 +34,11 @@ export function CandidateDashboardPage() {
   const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
   const [applications, setApplications] = useState<JobApplicationDTO[]>([]);
   const [loading, setLoading] = useState(true);
+  /**
+   * Which lists could not be read. A failed read used to leave its list empty, so the card showed 0 for something
+   * that was simply not loaded; a card now shows "--" in that case instead of a number it does not know.
+   */
+  const [failed, setFailed] = useState({ assessments: false, interviews: false, applications: false });
 
   useEffect(() => {
     async function fetchData() {
@@ -42,14 +50,20 @@ export function CandidateDashboardPage() {
         // count taken from it could only ever be zero.
         // Applications are a separate resource — the count of assessments says
         // nothing about how many jobs were applied to.
-        const [assessRes, interviewRes, applicationRes] = await Promise.all([
+        // Independent reads: one failing must not blank the other cards.
+        const [assessRes, interviewRes, applicationRes] = await Promise.allSettled([
           assessmentService.getAllAssessmentsForCandidate(user.email),
           interviewService.getActiveInterviews(user.email),
-          jobApplicationService.getByEmail(user.email).catch(() => null),
+          jobApplicationService.getByEmail(user.email),
         ]);
-        setAssessments(assessRes.data ?? []);
-        setInterviews(interviewRes.data ?? []);
-        setApplications(applicationRes?.data ?? []);
+        setAssessments(assessRes.status === 'fulfilled' ? assessRes.value.data ?? [] : []);
+        setInterviews(interviewRes.status === 'fulfilled' ? interviewRes.value.data ?? [] : []);
+        setApplications(applicationRes.status === 'fulfilled' ? applicationRes.value.data ?? [] : []);
+        setFailed({
+          assessments: assessRes.status === 'rejected',
+          interviews: interviewRes.status === 'rejected',
+          applications: applicationRes.status === 'rejected',
+        });
       } catch {
         // Error toast auto-handled by interceptor
       } finally {
@@ -77,8 +91,17 @@ export function CandidateDashboardPage() {
   };
 
   const upcomingAssessments = assessments.filter((a) => !a.examAttended && !isExpired(a));
-  const upcomingInterviews = interviews.filter((i) => i.attemptStatus !== 'COMPLETED');
-  const completedAssessments = assessments.filter((a) => a.examAttended);
+  // Not one that is finished, and not one whose slot has already passed unstarted: that is a missed interview, not an
+  // upcoming one.
+  const upcomingInterviews = interviews.filter((i) => i.attemptStatus !== 'COMPLETED' && !isNotAttended(i));
+  // One per paper: a re-assigned paper is another row for the same job and type, and counting every row counted the
+  // same exam again each time it was sat.
+  const completedExamCount = new Set(
+    assessments.filter((a) => a.examAttended).map((a) => `${a.jobPrefix}|${a.assessmentType}`),
+  ).size;
+  // Every application the candidate has, so the card always agrees with the "My Applications" list it links to.
+  const appliedJobCount = applications.length;
+  const countOrDash = (count: number, didFail: boolean) => (didFail ? '--' : count);
 
   if (loading) {
     return (
@@ -93,10 +116,10 @@ export function CandidateDashboardPage() {
       {/* Welcome Section */}
       <div>
         <h1 className="text-3xl font-bold text-[var(--text)]">
-          Welcome back, {user?.firstName || 'Candidate'}!
+          {STRINGS.candidateDashboard.welcome(user?.firstName || STRINGS.candidateDashboard.defaultName)}
         </h1>
         <p className="mt-2 text-[var(--textSecondary)]">
-          Here is an overview of your activities and upcoming events.
+          {STRINGS.candidateDashboard.intro}
         </p>
       </div>
 
@@ -109,8 +132,8 @@ export function CandidateDashboardPage() {
                 <ClipboardCheck className="w-6 h-6 text-[var(--primary)]" />
               </div>
               <div>
-                <p className="text-sm text-[var(--textSecondary)]">Upcoming Assessments</p>
-                <p className="text-2xl font-bold text-[var(--text)]">{upcomingAssessments.length}</p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateDashboard.upcomingAssessments}</p>
+                <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(upcomingAssessments.length, failed.assessments)}</p>
               </div>
             </div>
           </CardContent>
@@ -123,8 +146,8 @@ export function CandidateDashboardPage() {
                 <Video className="w-6 h-6 text-[var(--accent)]" />
               </div>
               <div>
-                <p className="text-sm text-[var(--textSecondary)]">Upcoming Interviews</p>
-                <p className="text-2xl font-bold text-[var(--text)]">{upcomingInterviews.length}</p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateDashboard.upcomingInterviews}</p>
+                <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(upcomingInterviews.length, failed.interviews)}</p>
               </div>
             </div>
           </CardContent>
@@ -140,8 +163,8 @@ export function CandidateDashboardPage() {
                 <Briefcase className="w-6 h-6 text-[var(--success)]" />
               </div>
               <div>
-                <p className="text-sm text-[var(--textSecondary)]">Jobs Applied</p>
-                <p className="text-2xl font-bold text-[var(--text)]">{applications.length}</p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateDashboard.jobsApplied}</p>
+                <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(appliedJobCount, failed.applications)}</p>
               </div>
             </div>
           </CardContent>
@@ -154,8 +177,8 @@ export function CandidateDashboardPage() {
                 <Trophy className="w-6 h-6 text-[var(--warning)]" />
               </div>
               <div>
-                <p className="text-sm text-[var(--textSecondary)]">Completed Exams</p>
-                <p className="text-2xl font-bold text-[var(--text)]">{completedAssessments.length}</p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateDashboard.completedExams}</p>
+                <p className="text-2xl font-bold text-[var(--text)]">{countOrDash(completedExamCount, failed.assessments)}</p>
               </div>
             </div>
           </CardContent>
@@ -169,7 +192,7 @@ export function CandidateDashboardPage() {
             <CardTitle>
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="w-5 h-5 text-[var(--primary)]" />
-                Upcoming Assessments
+                {STRINGS.candidateDashboard.upcomingAssessments}
               </div>
             </CardTitle>
             <Button
@@ -178,14 +201,14 @@ export function CandidateDashboardPage() {
               rightIcon={<ArrowRight size={16} />}
               onClick={() => navigate(ROUTES.CANDIDATE.ASSESSMENTS)}
             >
-              View All
+              {STRINGS.candidateDashboard.viewAll}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {upcomingAssessments.length === 0 ? (
             <p className="text-[var(--textSecondary)] text-center py-8">
-              No upcoming assessments.
+              {STRINGS.candidateDashboard.noUpcomingAssessments}
             </p>
           ) : (
             <div className="space-y-3">
@@ -211,15 +234,15 @@ export function CandidateDashboardPage() {
                       </p>
                       <p className="text-sm text-[var(--textSecondary)]">
                         {startsLater(assessment)
-                          ? `Opens: ${formatDateTime(assessment.startTime!)}`
-                          : `Deadline: ${formatDate(assessment.deadline)}`}
+                          ? STRINGS.candidateDashboard.opens(formatDateTime(assessment.startTime!))
+                          : STRINGS.candidateDashboard.deadline(formatDate(assessment.deadline))}
                       </p>
                     </div>
                   </div>
                   {startsLater(assessment) ? (
                     <span className="flex-shrink-0 flex items-center gap-1.5 text-sm text-[var(--textSecondary)]">
                       <Clock size={14} />
-                      Scheduled
+                      {STRINGS.candidateDashboard.scheduled}
                     </span>
                   ) : (
                     <Button
@@ -229,7 +252,7 @@ export function CandidateDashboardPage() {
                         navigate(ROUTES.CANDIDATE.INSTRUCTIONS, { state: { assessment } })
                       }
                     >
-                      Start
+                      {STRINGS.candidateDashboard.start}
                     </Button>
                   )}
                 </div>
@@ -246,7 +269,7 @@ export function CandidateDashboardPage() {
             <CardTitle>
               <div className="flex items-center gap-2">
                 <Video className="w-5 h-5 text-[var(--primary)]" />
-                Upcoming Interviews
+                {STRINGS.candidateDashboard.upcomingInterviews}
               </div>
             </CardTitle>
             <Button
@@ -255,14 +278,14 @@ export function CandidateDashboardPage() {
               rightIcon={<ArrowRight size={16} />}
               onClick={() => navigate(ROUTES.CANDIDATE.INTERVIEWS)}
             >
-              View All
+              {STRINGS.candidateDashboard.viewAll}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {upcomingInterviews.length === 0 ? (
             <p className="text-[var(--textSecondary)] text-center py-8">
-              No upcoming interviews.
+              {STRINGS.candidateDashboard.noUpcomingInterviews}
             </p>
           ) : (
             <div className="space-y-3">
@@ -272,9 +295,18 @@ export function CandidateDashboardPage() {
                   className="flex items-center justify-between p-4 rounded-lg bg-[var(--surface1)] border border-[var(--border)]"
                 >
                   <div>
-                    <p className="font-medium text-[var(--text)]">{interview.jobPrefix}</p>
+                    <p className="font-medium text-[var(--text)]">
+                      {interview.jobPrefix}
+                      {INTERVIEW_ROUND_LABELS[interview.round] && (
+                        <span className="ml-2 text-xs font-normal text-[var(--textSecondary)]">
+                          {INTERVIEW_ROUND_LABELS[interview.round]}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-sm text-[var(--textSecondary)]">
-                      Deadline: {formatDate(interview.deadlineTime)}
+                      {STRINGS.candidateDashboard.deadline(
+                        interview.deadlineTime ? formatDate(interview.deadlineTime) : STRINGS.candidateDashboard.noDeadline,
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -296,7 +328,7 @@ export function CandidateDashboardPage() {
                         navigate(ROUTES.CANDIDATE.INTERVIEW, { state: { interview } })
                       }
                     >
-                      Start
+                      {STRINGS.candidateDashboard.start}
                     </Button>
                   </div>
                 </div>

@@ -1,3 +1,4 @@
+import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
 import { useState, useEffect, useCallback } from 'react';
 import {
   Upload,
@@ -6,7 +7,6 @@ import {
   Loader2,
   X,
   Download,
-  ExternalLink,
   RefreshCw,
   CheckCircle,
 } from 'lucide-react';
@@ -16,7 +16,6 @@ import { useToast } from '@/components/ui/Toast';
 import { resumeService } from '@/services/resume.service';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import {
@@ -26,6 +25,7 @@ import {
 } from '@/utils/file.utils';
 import { formatFileSize } from '@/utils/format.utils';
 import { MESSAGES } from '@/config/messages';
+import { STRINGS } from '@/constants/strings';
 
 /**
  * The candidate's single resume.
@@ -174,9 +174,9 @@ export function ResumePage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text)]">Resume Management</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text)]">{STRINGS.resumePage.title}</h1>
         <p className="text-[var(--textSecondary)] mt-1">
-          One resume, used whenever you apply for a job. Replace it any time.
+          {STRINGS.resumePage.subtitle}
         </p>
       </div>
 
@@ -189,7 +189,7 @@ export function ResumePage() {
                 <CheckCircle size={20} className="text-[var(--success)]" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-[var(--text)]">Your current resume</p>
+                <p className="text-sm font-semibold text-[var(--text)]">{STRINGS.resumePage.currentResume}</p>
                 <p className="text-sm text-[var(--textSecondary)] break-all">{stored.name}</p>
                 <p className="text-xs text-[var(--textTertiary)] mt-0.5">
                   {formatFileSize(stored.size)}
@@ -197,7 +197,7 @@ export function ResumePage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" leftIcon={<Eye size={15} />} onClick={openPreview}>
-                  View
+                  {STRINGS.resumePage.view}
                 </Button>
                 <Button
                   variant="outline"
@@ -205,7 +205,7 @@ export function ResumePage() {
                   leftIcon={<Download size={15} />}
                   onClick={downloadStored}
                 >
-                  Download
+                  {STRINGS.resumePage.download}
                 </Button>
                 <Button
                   size="sm"
@@ -213,7 +213,7 @@ export function ResumePage() {
                   onClick={() => setShowUpload(true)}
                   disabled={showUpload}
                 >
-                  Change
+                  {STRINGS.resumePage.change}
                 </Button>
               </div>
             </div>
@@ -224,8 +224,8 @@ export function ResumePage() {
           <CardContent>
             <EmptyState
               icon={<FileText size={44} />}
-              title="No resume yet"
-              description="Upload one here and it will be ready the next time you apply for a job."
+              title={STRINGS.resumePage.emptyTitle}
+              description={STRINGS.resumePage.emptyBody}
             />
           </CardContent>
         </Card>
@@ -237,7 +237,7 @@ export function ResumePage() {
       <Card>
         <CardContent>
           <p className="text-sm font-semibold text-[var(--text)] mb-3">
-            {stored ? 'Replace your resume' : 'Upload your resume'}
+            {stored ? STRINGS.resumePage.replaceHeading : STRINGS.resumePage.uploadHeading}
           </p>
 
           <button
@@ -270,10 +270,10 @@ export function ResumePage() {
             />
             <Upload className="w-10 h-10 mx-auto text-[var(--textTertiary)] mb-3" />
             <span className="block text-[var(--text)] font-medium">
-              Drag and drop your resume here, or click to browse
+              {STRINGS.resumePage.dropHere}
             </span>
             <span className="block text-sm text-[var(--textSecondary)] mt-1">
-              PDF, DOC or DOCX — max 2MB
+              {STRINGS.resumePage.formats}
             </span>
           </button>
 
@@ -290,7 +290,7 @@ export function ResumePage() {
                 type="button"
                 onClick={() => setFile(null)}
                 className="text-[var(--textSecondary)] hover:text-[var(--text)] transition-colors flex-shrink-0"
-                aria-label="Remove selected file"
+                aria-label={STRINGS.resumePage.removeFile}
               >
                 <X size={18} />
               </button>
@@ -304,7 +304,7 @@ export function ResumePage() {
               disabled={!file}
               leftIcon={stored ? <RefreshCw size={18} /> : <Upload size={18} />}
             >
-              {stored ? 'Replace resume' : 'Save resume'}
+              {stored ? STRINGS.resumePage.replaceButton : STRINGS.resumePage.saveButton}
             </Button>
             {stored && (
               <Button
@@ -315,14 +315,14 @@ export function ResumePage() {
                 }}
                 disabled={saving}
               >
-                Cancel
+                {STRINGS.resumePage.cancel}
               </Button>
             )}
           </div>
 
           {stored && (
             <p className="text-xs text-[var(--textSecondary)] mt-3">
-              Applications you have already submitted keep the resume you sent with them.
+              {STRINGS.resumePage.keepsOld}
             </p>
           )}
         </CardContent>
@@ -334,52 +334,27 @@ export function ResumePage() {
         <ConfirmDialog
           isOpen
           variant="warning"
-          title="Replace your resume?"
-          confirmText="Replace"
+          title={STRINGS.resumePage.confirmTitle}
+          confirmText={STRINGS.resumePage.confirmButton}
           isLoading={saving}
           onClose={() => setConfirmReplace(false)}
           onConfirm={saveResume}
           message={
             <span>
-              <strong className="text-[var(--text)]">{file.name}</strong> will replace{' '}
-              <strong className="text-[var(--text)]">{stored?.name}</strong>. New applications will
-              use the new file.
+              <strong className="text-[var(--text)]">{file.name}</strong> {STRINGS.resumePage.confirmWillReplace}{' '}
+              <strong className="text-[var(--text)]">{stored?.name}</strong>. {STRINGS.resumePage.confirmNewApplications}
             </span>
           }
         />
       )}
 
-      {/* Preview */}
-      {resumeUrl && (
-        <Modal
-          isOpen={!!resumeUrl}
+      {/* Preview. The shared viewer shows a PDF in the browser and a Word file as text: putting a Word file in an
+          iframe only makes the browser download it. */}
+      {resumeUrl && stored && (
+        <ResumeViewerModal
+          resume={{ url: resumeUrl, name: stored.name, type: stored.type }}
           onClose={closePreview}
-          title="Your Resume"
-          size="lg"
-          footer={
-            <>
-              <Button variant="ghost" onClick={closePreview}>
-                Close
-              </Button>
-              <Button
-                variant="outline"
-                leftIcon={<ExternalLink size={16} />}
-                onClick={() => window.open(resumeUrl, '_blank', 'noopener,noreferrer')}
-              >
-                Open in new tab
-              </Button>
-              <Button leftIcon={<Download size={16} />} onClick={downloadStored}>
-                Download
-              </Button>
-            </>
-          }
-        >
-          <iframe
-            src={resumeUrl}
-            title="Resume"
-            className="w-full h-[70vh] rounded-lg border border-[var(--border)]"
-          />
-        </Modal>
+        />
       )}
     </div>
   );

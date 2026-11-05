@@ -1,5 +1,6 @@
+import { STRINGS } from '@/constants/strings';
 import { formatElapsedSeconds, parseServerInstant } from '@/utils/format.utils';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Loader2,
   Video,
@@ -11,9 +12,11 @@ import {
   Award,
   FileSpreadsheet,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
@@ -26,6 +29,9 @@ import {
 } from '@/components/admin/InterviewResultRemoval';
 import { jobService } from '@/services/job.service';
 import { interviewService } from '@/services/interview.service';
+import { jobApplicationService } from '@/services/job-application.service';
+import { getAppEmail } from '@/utils/application.utils';
+import { performanceLevel } from '@/utils/performance-level.utils';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { useToast } from '@/components/ui/Toast';
 import { downloadBlob } from '@/utils/question-paper.utils';
@@ -36,6 +42,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import type { JobPostDTO } from '@/types/job.types';
+import { attemptStatusLabel, isNotAssessable, isNotAttended, resultDisplay } from '@/utils/interview-standing.utils';
 import type { InterviewSchedule, InterviewStats, InterviewRound } from '@/types/interview.types';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import {
@@ -60,26 +67,26 @@ import {
 const COLUMN_WIDTHS = {
   withRound: {
     candidate: '200px', round: '130px', status: '115px', result: '100px', score: '85px',
-    duration: '100px', warnings: '105px', completion: '125px', recommendation: '155px',
+    duration: '100px', submitted: '120px', warnings: '105px', completion: '125px', recommendation: '155px',
     actions: '150px',
   },
   withoutRound: {
     // `round` is never read here — the column is not rendered — but both sets
     // need the same keys for the lookup below to typecheck.
     candidate: '230px', round: '0', status: '125px', result: '110px', score: '95px',
-    duration: '105px', warnings: '110px', completion: '135px', recommendation: '165px',
+    duration: '105px', submitted: '125px', warnings: '110px', completion: '135px', recommendation: '165px',
     actions: '160px',
   },
 } as const;
 
 /** Narrowest the table may get before the card scrolls it sideways. */
-const TABLE_MIN_WIDTH = '1265px';
+const TABLE_MIN_WIDTH = '1385px';
 
 /** 'ALL' is the default view; the rest mirror the server's InterviewRound. */
 type RoundFilter = 'ALL' | InterviewRound;
 
 const ROUND_FILTER_OPTIONS: { value: RoundFilter; label: string }[] = [
-  { value: 'ALL', label: 'All rounds' },
+  { value: 'ALL', label: STRINGS.interviewResults.allRounds },
   { value: 'L2_TECHNICAL', label: INTERVIEW_ROUND_LABELS.L2_TECHNICAL },
   { value: 'L3_BEHAVIORAL', label: INTERVIEW_ROUND_LABELS.L3_BEHAVIORAL },
 ];
@@ -150,7 +157,17 @@ function warningCountOf(interview: InterviewSchedule): number {
 function ScoreCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
   const score = interview.evaluation?.overallScore;
   if (score == null) return <span className="text-sm text-[var(--textTertiary)]">--</span>;
-  return <span className="font-semibold text-[var(--text)]">{score.toFixed(1)}/10</span>;
+  const level = performanceLevel(score);
+  return (
+    <span className="flex flex-col items-start gap-0.5">
+      <span className="font-semibold text-[var(--text)]">{score.toFixed(1)}/10</span>
+      {level && (
+        <Badge variant={level.variant} size="sm">
+          {level.label}
+        </Badge>
+      )}
+    </span>
+  );
 }
 
 function RoundCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
@@ -181,25 +198,6 @@ function WarningsCell({ interview }: Readonly<{ interview: InterviewSchedule }>)
  * which is the part someone opening this next actually needs to know — so the
  * AI's own verdict stays visible beside it rather than being replaced.
  */
-/**
- * Whether an interview was graded and found to have nothing to grade.
- *
- * <p>A finished interview the candidate never answered is deliberately left
- * PENDING — the grader refuses to invent a score, and whether silence means a
- * no-show, a broken microphone or a withdrawal is not something it can know.
- * But "PENDING" on a completed row reads as "the scoring has not run yet",
- * which is the one thing it does not mean. The evaluation is there; it says
- * there was nothing to assess.</p>
- */
-function isNotAssessable(interview: InterviewSchedule): boolean {
-  return (
-    interview.attemptStatus === 'COMPLETED' &&
-    interview.interviewResult === 'PENDING' &&
-    !!interview.evaluation &&
-    !interview.evaluation.recommendation
-  );
-}
-
 function ResultCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
   const overridden = interview.overriddenResult;
   if (!overridden) {
@@ -208,16 +206,18 @@ function ResultCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
         <Badge
           variant="warning"
           size="sm"
-          title="The interview finished but the candidate did not answer, so there is nothing to score."
+          title={STRINGS.interviewResults.notAssessableHint}
         >
-          NOT ASSESSABLE
+          {STRINGS.interviewResults.notAssessable}
         </Badge>
       );
     }
     return (
-      <Badge variant={getResultVariant(interview.interviewResult)} size="sm">
-        {interview.interviewResult}
-      </Badge>
+      <span title={resultDisplay(interview).hint}>
+        <Badge variant={getResultVariant(interview.interviewResult)} size="sm">
+          {resultDisplay(interview).label}
+        </Badge>
+      </span>
     );
   }
   return (
@@ -283,19 +283,19 @@ function InterviewActions({
         leftIcon={<Eye size={14} />}
         onClick={() => onViewDetail(interview)}
       >
-        View
+        {STRINGS.interviewResults.view}
       </Button>
       {/* Was window.open on the stored s3:// reference, which no browser can
           open — the same blank tab the result page had. Both now use the one
           player, so a recording behaves the same from either place. */}
       {interview.recordReferences && (
-        <RecordingPlayerButton scheduleId={interview.id} kind="camera" label="Camera" />
+        <RecordingPlayerButton scheduleId={interview.id} kind="camera" label={STRINGS.interviewResults.recording.camera} />
       )}
       {interview.screenRecordReferences && (
-        <RecordingPlayerButton scheduleId={interview.id} kind="screen" label="Screen" />
+        <RecordingPlayerButton scheduleId={interview.id} kind="screen" label={STRINGS.interviewResults.recording.screen} />
       )}
       {interview.mobileRecordReferences && (
-        <RecordingPlayerButton scheduleId={interview.id} kind="mobile" label="Phone" />
+        <RecordingPlayerButton scheduleId={interview.id} kind="mobile" label={STRINGS.interviewResults.recording.phone} />
       )}
       {/* Removal is soft and reversible, so both directions live here rather
           than behind separate screens. A removed row is only on this list at
@@ -305,6 +305,38 @@ function InterviewActions({
       ) : (
         <InterviewResultRemoveButton interview={interview} onRemoved={onChanged} />
       )}
+    </div>
+  );
+}
+
+/**
+ * When an interview was submitted: the moment it ended, however it ended. Shared by the Submitted column, the
+ * date filter and the exports, so they can never disagree about which day a row belongs to.
+ */
+function submittedAtOf(interview: InterviewSchedule): Date | null {
+  if (!interview.endedAt) return null;
+  const parsed = parseServerInstant(interview.endedAt);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function describeDateRange(from: string, to: string): string {
+  const day = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString();
+  if (from && to) return `${day(from)} to ${day(to)}`;
+  if (from) return `From ${day(from)}`;
+  if (to) return `Up to ${day(to)}`;
+  return '';
+}
+
+/** The date, with the time underneath, for the Submitted column. */
+function SubmittedCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
+  const at = submittedAtOf(interview);
+  if (!at) return <span className="text-[var(--textTertiary)]">--</span>;
+  return (
+    <div className="leading-snug">
+      <div className="text-[var(--textSecondary)]">{at.toLocaleDateString()}</div>
+      <div className="text-xs text-[var(--textTertiary)]">
+        {at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </div>
     </div>
   );
 }
@@ -326,7 +358,7 @@ export function InterviewResultsPage() {
   // hides rows the reviewer never chose to hide on this visit; the job is the
   // thing worth remembering.
   const [roundFilter, setRoundFilter] = useState<RoundFilter>('ALL');
-  const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
+  const [allInterviews, setInterviews] = useState<InterviewSchedule[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
   const [stats, setStats] = useState<InterviewStats | null>(null);
@@ -339,6 +371,17 @@ export function InterviewResultsPage() {
    * would quietly undo that for everyone who shares the browser.
    */
   const [showRemoved, setShowRemoved] = useState(false);
+  // Submitted between. Each end is optional, so "everything since the 10th" needs only the one field. Not
+  // persisted, for the same reason as the round filter.
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  // Each candidate's address as they registered it, by lower-cased address. The interview record can hold a
+  // different capitalisation (it is matched and stored in more than one place), so rows are shown from this.
+  const [registeredEmails, setRegisteredEmails] = useState<Map<string, string>>(new Map());
+  const emailOf = useCallback(
+    (row: { email: string }) => registeredEmails.get(row.email.toLowerCase()) ?? row.email,
+    [registeredEmails],
+  );
 
   useEffect(() => {
     fetchJobs();
@@ -366,6 +409,32 @@ export function InterviewResultsPage() {
     }
   }
 
+  const dateFilterActive = dateFrom !== '' || dateTo !== '';
+  const dateRangeInverted = !!dateFrom && !!dateTo && dateFrom > dateTo;
+  // The rows the table, the count and both exports describe. Local midnight to local end of day, so a bound of the
+  // 14th includes everything submitted on the 14th; an interview with no end time cannot satisfy a date range.
+  const interviews = useMemo(() => {
+    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : null;
+    const inRange = dateFilterActive
+      ? allInterviews.filter((row) => {
+          const at = submittedAtOf(row);
+          if (!at) return false;
+          if (from && at < from) return false;
+          if (to && at > to) return false;
+          return true;
+        })
+      : allInterviews;
+    // Newest first, in the table and in both exports: when it was submitted, or failing that when it started or was
+    // booked, with the id breaking a tie. An interview that was never finished still sits where it happened.
+    const stamp = (row: InterviewSchedule) => {
+      const raw = row.endedAt ?? row.startedAt ?? row.assignedAt;
+      const time = raw ? parseServerInstant(raw).getTime() : NaN;
+      return Number.isNaN(time) ? 0 : time;
+    };
+    return [...inRange].sort((a, b) => stamp(b) - stamp(a) || (b.id ?? 0) - (a.id ?? 0));
+  }, [allInterviews, dateFilterActive, dateFrom, dateTo]);
+
   const roundOrUndefined = roundFilter === 'ALL' ? undefined : roundFilter;
   // With one round selected the column would repeat the same value on every
   // row, so it is dropped and named once in the card header instead.
@@ -376,10 +445,14 @@ export function InterviewResultsPage() {
     if (!selectedPrefix) return;
     setLoadingResults(true);
     try {
-      const res = await interviewService.getResults(selectedPrefix, roundOrUndefined, {
-        includeDeleted: showRemoved,
-      });
+      const [res, appsRes] = await Promise.all([
+        interviewService.getResults(selectedPrefix, roundOrUndefined, { includeDeleted: showRemoved }),
+        jobApplicationService.getByPrefix(selectedPrefix).catch(() => null),
+      ]);
       setInterviews(res.data ?? []);
+      setRegisteredEmails(
+        new Map((appsRes?.data ?? []).map((app) => [getAppEmail(app).toLowerCase(), getAppEmail(app)])),
+      );
     } catch {
       // Error toast auto-handled by interceptor
     } finally {
@@ -442,9 +515,9 @@ export function InterviewResultsPage() {
     // Round is a column even when the view is filtered to one: an exported file
     // outlives the screen's filter state, and a reader opening it later cannot
     // otherwise tell which interview the numbers came from.
-    const headers = ['Email', 'Round', 'Status', 'Result', 'Completion Reason', 'Score', 'Warnings', 'Duration', 'Assigned', 'Deadline'];
+    const headers = STRINGS.interviewResults.csvHeaders;
     const rows = interviews.map((i) => [
-      i.email,
+      emailOf(i),
       roundLabelOf(i),
       i.attemptStatus,
       i.interviewResult,
@@ -452,6 +525,7 @@ export function InterviewResultsPage() {
       i.evaluation?.overallScore?.toFixed(1) ?? '',
       i.warningCount ?? i.proctoringWarnings ?? 0,
       formatDuration(i.startedAt, i.endedAt),
+      submittedAtOf(i)?.toLocaleString() ?? '',
       i.assignedAt ? new Date(i.assignedAt).toLocaleDateString() : '',
       i.deadlineTime ? new Date(i.deadlineTime).toLocaleDateString() : '',
     ]);
@@ -465,7 +539,7 @@ export function InterviewResultsPage() {
     link.download = `interview-results-${selectedPrefix}${roundSlug}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [interviews, selectedPrefix, roundFilter]);
+  }, [interviews, selectedPrefix, roundFilter, emailOf]);
 
   /**
    * The same rows the table is showing, as a workbook.
@@ -481,23 +555,24 @@ export function InterviewResultsPage() {
       const input = {
         jobTitle: jobs.find((j) => j.jobPrefix === selectedPrefix)?.jobTitle ?? selectedPrefix,
         jobPrefix: selectedPrefix,
-        rows: interviews,
-        totalCandidates: interviews.length,
+        rows: interviews.map((row) => ({ ...row, email: emailOf(row) })),
+        totalCandidates: allInterviews.length,
         filters: {
-          round: roundFilter === 'ALL' ? 'All rounds' : INTERVIEW_ROUND_LABELS[roundFilter],
+          round: roundFilter === 'ALL' ? STRINGS.interviewResults.allRounds : INTERVIEW_ROUND_LABELS[roundFilter],
+          ...(dateFilterActive ? { submitted: describeDateRange(dateFrom, dateTo) } : {}),
         },
         generatedAt: new Date(),
       };
       downloadBlob(await buildInterviewWorkbook(input), interviewWorkbookFileName(input));
     } catch {
-      showToast('Could not build the Excel report. Please try again.', 'error');
+      showToast(STRINGS.interviewResults.exportFailed, 'error');
     } finally {
       setExportingExcel(false);
     }
-  }, [exportingExcel, interviews, jobs, selectedPrefix, roundFilter, showToast]);
+  }, [exportingExcel, interviews, emailOf, allInterviews.length, jobs, selectedPrefix, roundFilter, dateFilterActive, dateFrom, dateTo, showToast]);
 
   const jobOptions = [
-    { value: '', label: 'Select a job' },
+    { value: '', label: STRINGS.interviewResults.selectJobPlaceholder },
     ...jobs.map((j) => ({ value: j.jobPrefix, label: `${j.jobTitle} (${j.jobPrefix})` })),
   ];
 
@@ -512,30 +587,74 @@ export function InterviewResultsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-[var(--text)]">Interview Results</h1>
+        <h1 className="text-3xl font-bold text-[var(--text)]">{STRINGS.interviewResults.pageTitle}</h1>
         <p className="text-[var(--textSecondary)] mt-1">
-          Review AI interview results, evaluation scores, and recordings for each job
+          {STRINGS.interviewResults.pageSubtitle}
         </p>
       </div>
 
       {/* Job Selector */}
       <Card>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-            <Select
-              label="Select Job"
-              options={jobOptions}
-              value={selectedPrefix}
-              onChange={(e) => setSelectedPrefix(e.target.value)}
-            />
-            <Select
-              label="Round"
-              options={ROUND_FILTER_OPTIONS}
-              value={roundFilter}
-              onChange={(e) => setRoundFilter(e.target.value as RoundFilter)}
-              disabled={!selectedPrefix}
-            />
+          {/* One row, like the assessment results: job, round and the submitted-between dates side by side, wrapping
+              only when the window is too narrow. Each date end is optional. */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="w-full sm:w-72">
+              <Select
+                label={STRINGS.interviewResults.selectJob}
+                options={jobOptions}
+                value={selectedPrefix}
+                onChange={(e) => setSelectedPrefix(e.target.value)}
+              />
+            </div>
+            <div className="w-full sm:w-48">
+              <Select
+                label={STRINGS.interviewResults.round}
+                options={ROUND_FILTER_OPTIONS}
+                value={roundFilter}
+                onChange={(e) => setRoundFilter(e.target.value as RoundFilter)}
+                disabled={!selectedPrefix}
+              />
+            </div>
+            <div className="w-full sm:w-44">
+              <Input
+                type="date"
+                label={STRINGS.interviewResults.submittedFrom}
+                value={dateFrom}
+                max={dateTo || undefined}
+                disabled={!selectedPrefix}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </div>
+            <div className="w-full sm:w-44">
+              <Input
+                type="date"
+                label={STRINGS.interviewResults.submittedTo}
+                value={dateTo}
+                min={dateFrom || undefined}
+                disabled={!selectedPrefix}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
+            {dateFilterActive && (
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<X size={14} />}
+                onClick={() => {
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+              >
+                {STRINGS.interviewResults.clear}
+              </Button>
+            )}
           </div>
+          {dateRangeInverted && (
+            <p className="mt-3 text-sm text-[var(--error)]">
+              {STRINGS.interviewResults.dateRangeInverted}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -550,7 +669,7 @@ export function InterviewResultsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-[var(--text)]">{stats.totalInterviews}</p>
-                  <p className="text-xs text-[var(--textSecondary)]">Total Interviews</p>
+                  <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.totalInterviews}</p>
                 </div>
               </div>
             </CardContent>
@@ -563,7 +682,7 @@ export function InterviewResultsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-[var(--text)]">{stats.passRate}%</p>
-                  <p className="text-xs text-[var(--textSecondary)]">Pass Rate</p>
+                  <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.passRate}</p>
                 </div>
               </div>
             </CardContent>
@@ -576,7 +695,7 @@ export function InterviewResultsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-[var(--text)]">{stats.avgScore}/10</p>
-                  <p className="text-xs text-[var(--textSecondary)]">Avg Score</p>
+                  <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.avgScore}</p>
                 </div>
               </div>
             </CardContent>
@@ -589,7 +708,7 @@ export function InterviewResultsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-[var(--text)]">{stats.avgDurationMinutes}m</p>
-                  <p className="text-xs text-[var(--textSecondary)]">Avg Duration</p>
+                  <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.avgDuration}</p>
                 </div>
               </div>
             </CardContent>
@@ -604,7 +723,7 @@ export function InterviewResultsPage() {
             <div className="flex items-center justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <Video size={20} className="text-[var(--primary)]" />
-                <CardTitle>Results ({interviews.length})</CardTitle>
+                <CardTitle>{STRINGS.interviewResults.resultsTitle(interviews.length)}</CardTitle>
                 {/* Named here rather than in a column: with a round selected
                     every row carries the same one, so it belongs to the whole
                     table, not to each line of it. */}
@@ -630,11 +749,11 @@ export function InterviewResultsPage() {
                   onClick={() => setShowRemoved((on) => !on)}
                   title={
                     showRemoved
-                      ? 'Hide results that have been removed'
-                      : 'Also list results that have been removed'
+                      ? STRINGS.interviewResults.hideRemovedHint
+                      : STRINGS.interviewResults.showRemovedHint
                   }
                 >
-                  {showRemoved ? 'Hide removed' : 'Show removed'}
+                  {showRemoved ? STRINGS.interviewResults.hideRemoved : STRINGS.interviewResults.showRemoved}
                 </Button>
               </div>
               {interviews.length > 0 && (
@@ -652,7 +771,7 @@ export function InterviewResultsPage() {
                     onClick={handleExportExcel}
                     disabled={exportingExcel}
                   >
-                    Export Excel
+                    {STRINGS.interviewResults.exportExcel}
                   </Button>
                   <Button
                     variant="ghost"
@@ -660,7 +779,7 @@ export function InterviewResultsPage() {
                     leftIcon={<Download size={14} />}
                     onClick={handleExportCSV}
                   >
-                    Export CSV
+                    {STRINGS.interviewResults.exportCsv}
                   </Button>
                 </div>
               )}
@@ -674,11 +793,13 @@ export function InterviewResultsPage() {
             ) : interviews.length === 0 ? (
               <EmptyState
                 icon={<Video size={48} />}
-                title="No interview results"
+                title={STRINGS.interviewResults.empty.title}
                 description={
-                  roundFilter === 'ALL'
-                    ? 'No interviews have been conducted for this job yet.'
-                    : `No ${INTERVIEW_ROUND_LABELS[roundFilter]} interviews for this job yet. Choose "All rounds" to see the others.`
+                  dateFilterActive && allInterviews.length > 0
+                    ? STRINGS.interviewResults.empty.inDateRange
+                    : roundFilter === 'ALL'
+                    ? STRINGS.interviewResults.empty.noneForJob
+                    : STRINGS.interviewResults.empty.noneForRound(INTERVIEW_ROUND_LABELS[roundFilter])
                 }
               />
             ) : (
@@ -702,7 +823,7 @@ export function InterviewResultsPage() {
                           onClick={() => openCandidateResult(interview.email)}
                           className="min-w-0 break-all text-left font-medium text-[var(--primary)] underline-offset-2 hover:underline"
                         >
-                          {interview.email}
+                          {emailOf(interview)}
                         </button>
                         <div className="flex-shrink-0">
                           <ScoreCell interview={interview} />
@@ -711,32 +832,38 @@ export function InterviewResultsPage() {
 
                       <div className="flex flex-wrap items-center gap-2">
                         {showRound && <RoundCell interview={interview} />}
-                        <Badge variant={getStatusVariant(interview.attemptStatus)} size="sm">
-                          {interview.attemptStatus.replace(/_/g, ' ')}
+                        <Badge variant={isNotAttended(interview) ? 'error' : getStatusVariant(interview.attemptStatus)} size="sm">
+                          {attemptStatusLabel(interview)}
                         </Badge>
                         <ResultCell interview={interview} />
                         <CompletionCell interview={interview} />
                         {interview.needsHumanReview && !interview.overriddenResult && (
-                          <Badge variant="warning" size="sm">Needs review</Badge>
+                          <Badge variant="warning" size="sm">{STRINGS.interviewResults.needsReview}</Badge>
                         )}
                       </div>
 
-                      <dl className="grid grid-cols-3 gap-x-3 gap-y-2">
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
                         <div className="min-w-0">
-                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">Duration</dt>
+                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">{STRINGS.interviewResults.columns.duration}</dt>
                           <dd className="text-sm text-[var(--textSecondary)]">
                             {formatDuration(interview.startedAt, interview.endedAt)}
                           </dd>
                         </div>
                         <div className="min-w-0">
-                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">Warnings</dt>
+                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">{STRINGS.interviewResults.columns.submitted}</dt>
+                          <dd className="text-sm">
+                            <SubmittedCell interview={interview} />
+                          </dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-xs text-[var(--textTertiary)] mb-0.5">{STRINGS.interviewResults.columns.warnings}</dt>
                           <dd>
                             <WarningsCell interview={interview} />
                           </dd>
                         </div>
                         <div className="min-w-0">
                           <dt className="text-xs text-[var(--textTertiary)] mb-0.5">
-                            Recommendation
+                            {STRINGS.interviewResults.columns.recommendation}
                           </dt>
                           <dd>
                             <RecommendationCell interview={interview} />
@@ -762,18 +889,19 @@ export function InterviewResultsPage() {
                   <Table className="table-fixed" style={{ minWidth: TABLE_MIN_WIDTH }}>
                     <TableHeader>
                       <TableRow>
-                        <TableHead style={{ width: columnWidths.candidate }}>Candidate</TableHead>
+                        <TableHead style={{ width: columnWidths.candidate }}>{STRINGS.interviewResults.columns.candidate}</TableHead>
                         {showRound && (
-                          <TableHead style={{ width: columnWidths.round }}>Round</TableHead>
+                          <TableHead style={{ width: columnWidths.round }}>{STRINGS.interviewResults.columns.round}</TableHead>
                         )}
-                        <TableHead style={{ width: columnWidths.status }}>Status</TableHead>
-                        <TableHead style={{ width: columnWidths.result }}>Result</TableHead>
-                        <TableHead style={{ width: columnWidths.score }}>Score</TableHead>
-                        <TableHead style={{ width: columnWidths.duration }}>Duration</TableHead>
-                        <TableHead style={{ width: columnWidths.warnings }}>Warnings</TableHead>
-                        <TableHead style={{ width: columnWidths.completion }}>Completion</TableHead>
-                        <TableHead style={{ width: columnWidths.recommendation }}>Recommendation</TableHead>
-                        <TableHead style={{ width: columnWidths.actions }}>Actions</TableHead>
+                        <TableHead style={{ width: columnWidths.status }}>{STRINGS.interviewResults.columns.status}</TableHead>
+                        <TableHead style={{ width: columnWidths.result }}>{STRINGS.interviewResults.columns.result}</TableHead>
+                        <TableHead style={{ width: columnWidths.score }}>{STRINGS.interviewResults.columns.score}</TableHead>
+                        <TableHead style={{ width: columnWidths.duration }}>{STRINGS.interviewResults.columns.duration}</TableHead>
+                        <TableHead style={{ width: columnWidths.submitted }}>{STRINGS.interviewResults.columns.submitted}</TableHead>
+                        <TableHead style={{ width: columnWidths.warnings }}>{STRINGS.interviewResults.columns.warnings}</TableHead>
+                        <TableHead style={{ width: columnWidths.completion }}>{STRINGS.interviewResults.columns.completion}</TableHead>
+                        <TableHead style={{ width: columnWidths.recommendation }}>{STRINGS.interviewResults.columns.recommendation}</TableHead>
+                        <TableHead style={{ width: columnWidths.actions }}>{STRINGS.interviewResults.columns.actions}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -793,14 +921,16 @@ export function InterviewResultsPage() {
                               className={`text-left text-[var(--primary)] underline-offset-2 hover:underline ${
                                 interview.deletedAt ? 'line-through' : ''
                               }`}
-                              title="See this candidate's rounds"
+                              title={STRINGS.interviewResults.seeRounds}
                             >
-                              {interview.email}
+                              {emailOf(interview)}
                             </button>
                             {interview.deletedAt && (
                               <p className="mt-1 text-[11px] leading-snug text-red-600 dark:text-red-400">
-                                Removed by {interview.deletedBy || 'unknown'} —{' '}
-                                {interview.deleteReason || 'no reason recorded'}
+                                {STRINGS.interviewResults.removedBy(
+                                  interview.deletedBy || STRINGS.interviewResults.unknown,
+                                  interview.deleteReason || STRINGS.interviewResults.noReason,
+                                )}
                               </p>
                             )}
                           </TableCell>
@@ -810,8 +940,8 @@ export function InterviewResultsPage() {
                             </TableCell>
                           )}
                           <TableCell className="align-top">
-                            <Badge variant={getStatusVariant(interview.attemptStatus)} size="sm">
-                              {interview.attemptStatus.replace(/_/g, ' ')}
+                            <Badge variant={isNotAttended(interview) ? 'error' : getStatusVariant(interview.attemptStatus)} size="sm">
+                              {attemptStatusLabel(interview)}
                             </Badge>
                           </TableCell>
                           <TableCell className="align-top">
@@ -824,6 +954,9 @@ export function InterviewResultsPage() {
                           </TableCell>
                           <TableCell className="align-top text-[var(--textSecondary)]">
                             {formatDuration(interview.startedAt, interview.endedAt)}
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <SubmittedCell interview={interview} />
                           </TableCell>
                           <TableCell className="align-top">
                             <WarningsCell interview={interview} />

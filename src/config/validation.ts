@@ -11,6 +11,12 @@ export const passwordSchema = z
   .regex(/^[A-Z]/, 'Password must start with an uppercase letter')
   .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one special character');
 
+/** A first or last name: letters, spaces, apostrophes, hyphens and full stops, starting with a letter. */
+const nameRule = /^\p{L}[\p{L}\p{M}\s'.-]*$/u;
+const NAME_MESSAGE = 'Use letters only (no numbers or symbols)';
+export const firstNameSchema = z.string().trim().min(1, 'First name is required').regex(nameRule, NAME_MESSAGE);
+export const lastNameSchema = z.string().trim().min(1, 'Last name is required').regex(nameRule, NAME_MESSAGE);
+
 export const mobileSchema = z
   .string()
   .min(1, 'Mobile number is required')
@@ -33,8 +39,8 @@ export const loginSchema = z.object({
 
 export const registerSchema = z
   .object({
-    firstName: z.string().min(1, 'First name is required'),
-    lastName: z.string().min(1, 'Last name is required'),
+    firstName: firstNameSchema,
+    lastName: lastNameSchema,
     email: emailSchema,
     mobileNumber: mobileSchema,
     password: passwordSchema,
@@ -71,6 +77,17 @@ export const resetPasswordSchema = z
     path: ['confirmPassword'],
   });
 
+/**
+ * True when the text holds a negative number. These fields are free text ("3-5 years", "10-15 LPA"), so a minus is
+ * only a range dash when a digit comes before it: "3-5" and "3 - 5" pass; "-85", "--5", "up to -5" do not.
+ */
+export function hasNegativeNumber(value: string): boolean {
+  if (/^\s*-/.test(value)) return /-\s*\d/.test(value);
+  return /(^|[^\d\s])\s*-\d/.test(value);
+}
+
+const NO_NEGATIVE = 'Enter a number of zero or more; negative values are not allowed';
+
 export const jobPostSchema = z.object({
   // The prefix becomes part of the web address of a dozen pages, so it is checked as it
   // is typed rather than after the server refuses it. Same rule as the backend.
@@ -88,9 +105,16 @@ export const jobPostSchema = z.object({
     .min(1, 'Job description is required')
     .max(3000, 'Job description must be 3000 characters or fewer'),
   keySkills: z.string().trim().min(1, 'At least one skill is required'),
-  experience: z.string().trim().min(1, 'Experience is required'),
+  experience: z
+    .string()
+    .trim()
+    .min(1, 'Experience is required')
+    .refine((v) => !hasNegativeNumber(v), NO_NEGATIVE),
   education: z.string().trim().min(1, 'Education is required'),
-  salaryRange: z.string().optional(),
+  salaryRange: z
+    .string()
+    .optional()
+    .refine((v) => !v || !hasNegativeNumber(v), NO_NEGATIVE),
   jobType: z.string().min(1, 'Please select a job type'),
   industry: z.string().optional(),
   // Required: every post is categorised by department for reporting and
@@ -100,7 +124,7 @@ export const jobPostSchema = z.object({
   // without one shows up unidentifiable.
   role: z.string().trim().min(1, 'Job role is required'),
   numberOfOpenings: z
-    .number({ invalid_type_error: 'Number of openings is required' })
+    .number({ error: 'Number of openings is required' })
     .int('Openings must be a whole number (no decimals)')
     .min(1, 'At least 1 opening is required')
     .max(100000, 'Number of openings looks too high'),
@@ -144,11 +168,14 @@ export function jobEditSchema(originalDeadline?: string) {
 }
 
 export const jobApplicationSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
+  firstName: firstNameSchema,
+  lastName: lastNameSchema,
   email: emailSchema,
   mobileNumber: mobileSchema,
-  experience: z.string().min(1, 'Experience is required'),
+  experience: z
+    .string()
+    .min(1, 'Experience is required')
+    .refine((v) => !hasNegativeNumber(v), NO_NEGATIVE),
   address: z.string().min(1, 'Address is required'),
   role: z.string().min(1, 'Role is required'),
   // Optional referral — no validation; a candidate may leave neither, either, or both.

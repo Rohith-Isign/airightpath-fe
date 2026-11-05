@@ -49,7 +49,6 @@ export const APP_CONFIG = {
   CODING_MINUTES_PER_QUESTION: 25,
   EXAM_MIN_MINUTES_PER_QUESTION: 1,
   EXAM_MAX_MINUTES_PER_QUESTION: 180,
-  INTERVIEW_TIMER_MINUTES: 60,
   INTERVIEW_QUESTION_TIMER_MINUTES: 5,
   FACE_DETECTION_MAX_WARNINGS: 999999,
   PROCTORING_MAX_TOTAL_WARNINGS: 9999999,
@@ -65,7 +64,15 @@ export const APP_CONFIG = {
    * between each part. Kept as a lever only: setting it brings the gaps back.
    */
   RECORDING_SEGMENT_MINUTES: Number(import.meta.env.VITE_RECORDING_SEGMENT_MINUTES ?? 0) || 0,
-  AUDIO_CHUNK_SECONDS: 4,
+  /**
+   * How long an answer's audio runs before it is cut at the next pause and sent, and the longest it may go.
+   *
+   * Audio goes over HTTP as a file, so a chunk can be minutes long: it is cut at the first pause after the
+   * minimum rather than on a timer, so a word is not split in half, and cut anyway at the maximum. An ordinary
+   * answer is one call. At 32 kbit/s, three minutes is under a megabyte.
+   */
+  AUDIO_CHUNK_SECONDS: Number(import.meta.env.VITE_AUDIO_CHUNK_MIN_SECONDS) || 120,
+  AUDIO_CHUNK_MAX_SECONDS: Number(import.meta.env.VITE_AUDIO_CHUNK_MAX_SECONDS) || 180,
   AUDIO_CHUNK_MIME_TYPE: "audio/webm;codecs=opus",
   /**
    * Warnings before the candidate is told their conduct is being noted.
@@ -92,8 +99,12 @@ export const APP_CONFIG = {
   WS_RECONNECT_MAX_DELAY_MS: 30000,
   INTERVIEW_PROCESSING_TIMEOUT_MS: 45000,
   INTERVIEW_INSTRUCTION_COUNTDOWN_SECONDS: 30,
-  INTERVIEW_QUESTION_TIMEOUT_SECONDS: 300,
+  INTERVIEW_QUESTION_TIMEOUT_SECONDS: 120,
   INTERVIEW_CODING_QUESTION_TIMEOUT_SECONDS: 600,
   INTERVIEW_ANSWER_TIMEOUT_SECONDS: 600,
   INTERVIEW_MAX_CONSECUTIVE_SKIPS: 3,
+  /** Silence after a question is asked before "Are you still there?" is shown; the question's own timer carries on. */
+  INTERVIEW_IDLE_PROMPT_SECONDS: 60,
+  /** How long the "Are you still there?" prompt waits for a reply before the interview is closed. */
+  INTERVIEW_STILL_THERE_SECONDS: 60,
 } as const;

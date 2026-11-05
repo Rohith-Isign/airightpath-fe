@@ -1,3 +1,5 @@
+import { STRINGS } from '@/constants/strings';
+import { isAtsShortlisted, movedOnStage, usableAtsScore } from '@/utils/ats-status.utils';
 import { ArrowUpDown, ArrowUp, ArrowDown, FileText, CheckCircle, XCircle, Eye } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
@@ -15,6 +17,12 @@ interface AtsResultsTableProps {
   sortDirection?: 'asc' | 'desc';
   onSort: (field: AtsSortField) => void;
   onView: (candidate: JobApplicationDTO) => void;
+  /** Emails (lower-case) of the ticked rows. Omit, with the two handlers, for a table that cannot be selected from. */
+  selected?: ReadonlySet<string>;
+  onToggle?: (email: string) => void;
+  onToggleAll?: (emails: string[], checked: boolean) => void;
+  /** Scores looked up with "Check score", by lower-case email. Shown where no stored score exists. Nothing was saved. */
+  checkedScores?: Readonly<Record<string, number>>;
 }
 
 const SORT_OPTIONS: { field: AtsSortField; label: string }[] = [
@@ -26,14 +34,13 @@ const SORT_OPTIONS: { field: AtsSortField; label: string }[] = [
 /** The three derived flags every row/card needs. */
 function readCandidate(candidate: JobApplicationDTO) {
   // Prefer the genuine shortlistStatus column; fall back to status.
-  const isShortlisted = candidate.shortlistStatus
-    ? !/not/i.test(candidate.shortlistStatus)
-    : candidate.status === 'SHORTLISTED';
+  const isShortlisted = isAtsShortlisted(candidate);
   return {
-    score: candidate.matchPercent ?? 0,
+    score: usableAtsScore(candidate),
     isShortlisted,
     shortlistLabel: candidate.shortlistStatus ?? (isShortlisted ? 'Shortlisted' : 'Rejected'),
     scanDone: candidate.atsScanStatus ? /complet/i.test(candidate.atsScanStatus) : undefined,
+    movedOn: movedOnStage(candidate),
   };
 }
 
@@ -72,7 +79,14 @@ function SortableHead({
 }
 
 /** Score bar + percentage, shared by the table row and the mobile card. */
-function ScoreMeter({ score, className = '' }: Readonly<{ score: number; className?: string }>) {
+function ScoreMeter({ score, className = '' }: Readonly<{ score: number | null; className?: string }>) {
+  if (score === null) {
+    return (
+      <span className={`text-sm text-[var(--textTertiary)] ${className}`} title="No ATS score on record for this candidate">
+        --
+      </span>
+    );
+  }
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <div className="flex-1 min-w-0 h-2 rounded-full bg-[var(--border)] overflow-hidden">
@@ -102,6 +116,18 @@ function ShortlistBadge({
   );
 }
 
+/** Where the candidate has been taken since screening, so a low score beside "Shortlisted" is explained. */
+function MovedOnBadge({ stage }: Readonly<{ stage: string | null }>) {
+  if (!stage) return null;
+  return (
+    <span title={STRINGS.atsScreening.movedOnHint}>
+      <Badge variant="primary" size="sm">
+        {STRINGS.atsScreening.movedOn(stage)}
+      </Badge>
+    </span>
+  );
+}
+
 /**
  * ATS screening results.
  *
@@ -117,7 +143,26 @@ export function AtsResultsTable({
   sortDirection,
   onSort,
   onView,
+  selected,
+  onToggle,
+  onToggleAll,
+  checkedScores,
 }: Readonly<AtsResultsTableProps>) {
+  const scoreOf = (candidate: JobApplicationDTO) =>
+    usableAtsScore(candidate) ?? checkedScores?.[getAppEmail(candidate).toLowerCase()] ?? null;
+  const selectable = !!selected && !!onToggle && !!onToggleAll;
+  const emailsShown = candidates.map((c) => getAppEmail(c).toLowerCase());
+  const allTicked = selectable && emailsShown.length > 0 && emailsShown.every((e) => selected.has(e));
+  const tick = (candidate: JobApplicationDTO) =>
+    selectable && (
+      <input
+        type="checkbox"
+        aria-label={`Select ${candidate.firstName} ${candidate.lastName}`}
+        checked={selected.has(getAppEmail(candidate).toLowerCase())}
+        onChange={() => onToggle(getAppEmail(candidate).toLowerCase())}
+        className="h-4 w-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+      />
+    );
   return (
     <>
       {/* ── Mobile / tablet: cards ─────────────────────────────────────── */}
@@ -148,7 +193,8 @@ export function AtsResultsTable({
         </div>
 
         {candidates.map((candidate, idx) => {
-          const { score, isShortlisted, shortlistLabel, scanDone } = readCandidate(candidate);
+          const { isShortlisted, shortlistLabel, scanDone, movedOn } = readCandidate(candidate);
+          const score = scoreOf(candidate);
 
           return (
             <div
@@ -157,6 +203,7 @@ export function AtsResultsTable({
             >
               {/* Rank + name + score */}
               <div className="flex items-start gap-3">
+                {tick(candidate)}
                 <span className="flex-shrink-0 w-8 h-8 rounded-xl bg-[var(--bgSubtle,var(--surface1))] flex items-center justify-center text-xs font-bold text-[var(--text)]">
                   {idx + 1}
                 </span>
@@ -207,6 +254,7 @@ export function AtsResultsTable({
                   </Badge>
                 )}
                 <ShortlistBadge isShortlisted={isShortlisted} label={shortlistLabel} />
+                <MovedOnBadge stage={movedOn} />
                 <Button
                   variant="outline"
                   size="sm"
@@ -227,6 +275,17 @@ export function AtsResultsTable({
         <Table className="table-fixed">
           <TableHeader>
             <TableRow>
+              {selectable && (
+                <TableHead className="w-10 px-3">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all shown"
+                    checked={allTicked}
+                    onChange={(e) => onToggleAll(emailsShown, e.target.checked)}
+                    className="h-4 w-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                  />
+                </TableHead>
+              )}
               <TableHead className="w-12 px-3">#</TableHead>
               <SortableHead
                 label="Candidate"
@@ -260,10 +319,12 @@ export function AtsResultsTable({
           </TableHeader>
           <TableBody>
             {candidates.map((candidate, idx) => {
-              const { score, isShortlisted, shortlistLabel, scanDone } = readCandidate(candidate);
+              const { isShortlisted, shortlistLabel, scanDone, movedOn } = readCandidate(candidate);
+          const score = scoreOf(candidate);
 
               return (
                 <TableRow key={candidate.id ?? getAppEmail(candidate)}>
+                  {selectable && <TableCell className="px-3 py-3 align-top">{tick(candidate)}</TableCell>}
                   <TableCell className="px-3 py-3 align-top">
                     <span className="text-sm font-bold text-[var(--text)]">#{idx + 1}</span>
                   </TableCell>
@@ -311,6 +372,7 @@ export function AtsResultsTable({
                   <TableCell className="px-3 py-3 align-top">
                     <div className="flex flex-col items-start gap-1">
                       <ShortlistBadge isShortlisted={isShortlisted} label={shortlistLabel} />
+                      <MovedOnBadge stage={movedOn} />
                       {candidate.atsScanStatus && (
                         <Badge variant={scanDone ? 'info' : 'warning'} size="sm">
                           {candidate.atsScanStatus}

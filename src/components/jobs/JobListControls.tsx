@@ -2,12 +2,13 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Pagination } from '@/components/ui/Pagination';
+import { STRINGS } from '@/constants/strings';
 import type { JobListing, JobStatusFilter } from '@/hooks/useJobListing';
 
 const STATUS_OPTIONS: { value: JobStatusFilter; label: string }[] = [
-  { value: 'active', label: 'Active' },
-  { value: 'expired', label: 'Expired' },
-  { value: 'all', label: 'All Status' },
+  { value: 'active', label: STRINGS.jobList.statusActive },
+  { value: 'expired', label: STRINGS.jobList.statusExpired },
+  { value: 'all', label: STRINGS.jobList.statusAll },
 ];
 
 /** Search + type + status row shared by the admin and candidate job lists. */
@@ -35,7 +36,7 @@ export function JobListFilters({
       <div className="flex gap-3 sm:gap-4">
         <div className="flex-1 min-w-0 sm:flex-none sm:w-44">
           <Select
-            options={[{ value: '', label: 'All Types' }, ...listing.jobTypes]}
+            options={[{ value: '', label: STRINGS.jobList.allTypes }, ...listing.jobTypes]}
             value={listing.filterType}
             onChange={(e) => listing.setFilterType(e.target.value)}
           />
@@ -60,11 +61,16 @@ export function JobListCount({ listing }: { listing: JobListing }) {
   const { filtered, page, pageSize, status } = listing;
   const from = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, filtered.length);
-  const label = status === 'all' ? 'jobs' : `${status} jobs`;
+  const label =
+    status === 'all'
+      ? STRINGS.jobList.jobsAll
+      : status === 'active'
+        ? STRINGS.jobList.jobsActive
+        : STRINGS.jobList.jobsExpired;
 
   return (
     <p className="text-sm text-[var(--textSecondary)]">
-      Showing {from}–{to} of {filtered.length} {label}
+      {STRINGS.jobList.showing(from, to, filtered.length, label)}
     </p>
   );
 }

@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import type { Result, SubmissionMeta } from '@/types/result.types';
 import type { CodeSubmissionResponse } from '@/types/compiler.types';
 import { splitResultsJson } from '@/utils/result.utils';
@@ -529,12 +530,12 @@ function summaryRemarks(row: ExportCandidateRow): string | null {
 
   const aptitudeAttempts = row.aptitudeAttempts?.length ?? 0;
   const codingAttempts = row.codingAttempts?.length ?? 0;
-  if (aptitudeAttempts > 1) notes.push(`Aptitude sat ${aptitudeAttempts} times`);
-  if (codingAttempts > 1) notes.push(`Coding sat ${codingAttempts} times`);
+  if (aptitudeAttempts > 1) notes.push(STRINGS.exportNotes.aptitudeAttempts(aptitudeAttempts));
+  if (codingAttempts > 1) notes.push(STRINGS.exportNotes.codingAttempts(codingAttempts));
 
-  if (!row.aptitudeResult) notes.push('Aptitude not sat');
-  if (!row.hasCoding) notes.push('No coding paper assigned');
-  else if (!row.codingResult) notes.push('Coding not sat');
+  if (!row.aptitudeResult) notes.push(STRINGS.exportNotes.aptitudeNotStarted);
+  if (!row.hasCoding) notes.push(STRINGS.exportNotes.noCodingPaper);
+  else if (!row.codingResult) notes.push(STRINGS.exportNotes.codingNotStarted);
 
   // A percentage that could not be derived is not a zero, and the reader has to
   // be told which of the two they are looking at.

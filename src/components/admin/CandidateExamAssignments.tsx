@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { useState, useEffect, useCallback } from 'react';
 import {
   Loader2,
@@ -52,9 +53,9 @@ interface CandidateExamAssignmentsProps {
 }
 
 const STATE_LABEL: Record<AssignmentState, string> = {
-  sat: 'Sat',
-  expired: 'Expired',
-  pending: 'Not sat yet',
+  sat: STRINGS.assessmentStatus.completed,
+  expired: STRINGS.assessmentStatus.expired,
+  pending: STRINGS.assessmentStatus.notStarted,
 };
 
 const STATE_VARIANT: Record<AssignmentState, 'success' | 'error' | 'warning'> = {

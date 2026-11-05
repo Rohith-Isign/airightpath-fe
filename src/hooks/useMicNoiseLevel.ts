@@ -27,6 +27,10 @@ const METER_CEILING_DB = -15;
 
 /** Weight of each new sample in the running average — low value = steady meter. */
 const SMOOTHING = 0.12;
+/** How often the readout is pushed to the screen, however often the microphone is sampled. */
+const PAINT_INTERVAL_MS = 120;
+/** The longest a single frame is allowed to count for when accumulating sustained noise. */
+const MAX_FRAME_MS = 100;
 
 /**
  * Measures background noise on a live mic stream via the Web Audio API.
@@ -46,6 +50,10 @@ export function useMicNoiseLevel(stream: MediaStream | null): UseMicNoiseLevelRe
   const loudForMsRef = useRef(0);
   const lastFrameRef = useRef(0);
   const smoothedRef = useRef(METER_FLOOR_DB);
+  // When the readout was last pushed to the screen. The meter is sampled every frame, but re-rendering the whole
+  // instructions page 60 times a second made it shimmer while scrolling.
+  const lastPaintRef = useRef(0);
+  const bandRef = useRef<NoiseBand>('quiet');
 
   useEffect(() => {
     if (!config.enabled || !stream || stream.getAudioTracks().length === 0) return;
@@ -85,8 +93,14 @@ export function useMicNoiseLevel(stream: MediaStream | null): UseMicNoiseLevelRe
         smoothedRef.current = smoothed;
 
         const now = performance.now();
-        const elapsed = now - lastFrameRef.current;
+        // A frame that arrives late (the tab was in the background, a notification took focus) is counted as one
+        // ordinary frame, not as all the seconds it was away: otherwise one loud moment before the pause
+        // reads as noise sustained through it, and the Start button stays blocked.
+        const elapsed = Math.min(now - lastFrameRef.current, MAX_FRAME_MS);
         lastFrameRef.current = now;
+        // The browser may suspend the audio context while the page is not in front; the meter would then read
+        // its last sample forever.
+        if (audioContext && audioContext.state === 'suspended') void audioContext.resume().catch(() => {});
 
         // Time above the red threshold accumulates; anything quieter drains it
         // twice as fast, so the meter recovers quickly once the noise stops.
@@ -96,13 +110,20 @@ export function useMicNoiseLevel(stream: MediaStream | null): UseMicNoiseLevelRe
           loudForMsRef.current = Math.max(loudForMsRef.current - elapsed * 2, 0);
         }
 
+        // The amber band is entered at warnDb but only left 3 dB lower, so a level hovering on the line does
+        // not flip the label (and the text under it) back and forth.
+        const moderateFloor = bandRef.current === 'moderate' ? config.warnDb - 3 : config.warnDb;
         let nextBand: NoiseBand = 'quiet';
         if (loudForMsRef.current >= config.sustainMs) nextBand = 'loud';
-        else if (smoothed >= config.warnDb) nextBand = 'moderate';
+        else if (smoothed >= moderateFloor) nextBand = 'moderate';
+        bandRef.current = nextBand;
 
-        setDb(smoothed);
-        setBand((prev) => (prev === nextBand ? prev : nextBand));
-        setMeasuring(true);
+        if (now - lastPaintRef.current >= PAINT_INTERVAL_MS) {
+          lastPaintRef.current = now;
+          setDb(smoothed);
+          setBand((prev) => (prev === nextBand ? prev : nextBand));
+          setMeasuring(true);
+        }
 
         rafId = requestAnimationFrame(tick);
       };

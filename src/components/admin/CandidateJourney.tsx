@@ -69,6 +69,40 @@ const partsOf = (references?: string) => (references ?? '').split(/\r?\n/).filte
  * that never happened was simply absent from all of them, so a candidate stuck
  * between two stages looked the same as one who had cleared both.</p>
  */
+/**
+ * The line under "Current stage": the stored stage, corrected by what the interviews say, plus where each round stands.
+ *
+ * The stored stage can lag the interviews (an application booked for an interview stays at Interview Scheduled
+ * after every booked round has been sat), so a stage that says "scheduled" while nothing is outstanding reads as
+ * "completed". The per-round lines say why, which is what an admin looking at a candidate who sat L2 and has been
+ * booked for L3 needs to see.
+ */
+function currentStageLines(status: string, interviews: InterviewSchedule[]): string[] {
+  const label = (value: string) => value.replace(/_/g, ' ');
+  const live = interviews.filter((row) => !row.deletedAt);
+  if (!/^INTERVIEW_(SCHEDULED|COMPLETED)$/.test(status) || live.length === 0) return [label(status)];
+
+  // Latest booking per round: older attempts are history.
+  const latest = new Map<string, InterviewSchedule>();
+  for (const row of [...live].sort((a, b) => (a.id ?? 0) - (b.id ?? 0))) {
+    latest.set(row.round ?? 'L2_TECHNICAL', row);
+  }
+  const rows = [...latest.values()];
+  const outstanding = rows.some((row) => row.attemptStatus !== 'COMPLETED');
+
+  const roundLine = (row: InterviewSchedule) => {
+    const name = INTERVIEW_ROUND_LABELS[row.round ?? 'L2_TECHNICAL'] ?? row.round ?? 'Interview';
+    const result = row.overriddenResult ?? row.interviewResult;
+    if (row.attemptStatus !== 'COMPLETED') {
+      return `${name}: ${row.attemptStatus === 'IN_PROGRESS' ? 'in progress' : 'scheduled'}`;
+    }
+    return `${name}: ${result === 'PASSED' ? 'passed' : result === 'FAILED' ? 'failed' : 'completed'}`;
+  };
+
+  const stage = status === 'INTERVIEW_SCHEDULED' && !outstanding ? 'INTERVIEW_COMPLETED' : status;
+  return [label(stage), ...rows.map(roundLine)];
+}
+
 export function CandidateJourney({ candidate, jobPrefix, onViewInterviewResult }: Readonly<CandidateJourneyProps>) {
   const [interviews, setInterviews] = useState<InterviewSchedule[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -260,7 +294,7 @@ export function CandidateJourney({ candidate, jobPrefix, onViewInterviewResult }
       title: rejected ? 'Rejected' : 'Current stage',
       tone: rejected ? 'bad' : 'pending',
       when: formatServerDateTime(candidate.updatedAt),
-      lines: [rejected ? (candidate.rejectionStatus as string) : candidate.status.replace(/_/g, ' ')],
+      lines: rejected ? [candidate.rejectionStatus as string] : currentStageLines(candidate.status, interviews ?? []),
     });
     return out;
   }, [candidate, interviews, failed]);

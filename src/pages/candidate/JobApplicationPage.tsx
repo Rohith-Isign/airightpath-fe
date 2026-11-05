@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/Badge';
 import { ROUTES } from '@/config/routes';
 import { jobApplicationSchema } from '@/config/validation';
 import { MESSAGES } from '@/config/messages';
+import { STRINGS } from '@/constants/strings';
 import {
   validateResumeFile,
   filenameFromContentDisposition,
@@ -109,6 +110,14 @@ export function JobApplicationPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramPrefix]);
+
+  /** The role the job itself names; empty when the posting has neither a role nor a title. */
+  const jobRole = job?.role?.trim() || job?.jobTitle?.trim() || '';
+
+  // The role always follows the job on a new application (edit mode fills it from the saved application).
+  useEffect(() => {
+    if (job && !isEditMode) setValue('role', job.role || job.jobTitle || '');
+  }, [job, isEditMode, setValue]);
 
   // Check deadline
   useEffect(() => {
@@ -262,7 +271,8 @@ export function JobApplicationPage() {
         mobileNumber: data.mobileNumber,
         experience: data.experience,
         address: data.address,
-        jobRole: data.role,
+        // A disabled field can come back empty from the form, so the job's own role is the fallback.
+        jobRole: data.role || jobRole,
         jobPrefix: job.jobPrefix,
       });
 
@@ -313,11 +323,11 @@ export function JobApplicationPage() {
       <div className="text-center py-16">
         <p className="text-lg text-[var(--textSecondary)]">
           {jobNotFound
-            ? 'This job could not be found. It may have been removed or the link is incorrect.'
-            : 'No job selected. Please go to the Events page and select a job to apply.'}
+            ? STRINGS.applyForm.jobNotFound
+            : STRINGS.applyForm.noJobSelected}
         </p>
         <Button className="mt-4" onClick={() => navigate(ROUTES.CANDIDATE.EVENTS)}>
-          Browse Jobs
+          {STRINGS.applyForm.browseJobs}
         </Button>
       </div>
     );
@@ -331,18 +341,34 @@ export function JobApplicationPage() {
     );
   }
 
+  // A submitted application is final: there is no form to change it, only the list to look at it.
+  if (isEditMode) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <CheckCircle className="w-12 h-12 mx-auto text-[var(--success)] mb-4" />
+        <h1 className="text-2xl font-bold text-[var(--text)]">{STRINGS.applyForm.alreadyAppliedTitle}</h1>
+        <p className="mt-2 text-[var(--textSecondary)]">
+          {STRINGS.applyForm.alreadyAppliedBody(job.jobTitle, job.companyName)}
+        </p>
+        <Button className="mt-6" onClick={() => navigate(ROUTES.CANDIDATE.APPLICATIONS)}>
+          {STRINGS.applyForm.viewMyApplications}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-[var(--text)]">
-          {isEditMode ? 'Update Application' : 'Apply for Job'}
+          {isEditMode ? STRINGS.applyForm.titleUpdate : STRINGS.applyForm.titleApply}
         </h1>
         <p className="mt-1 text-[var(--textSecondary)]">
-          {job.jobTitle} at {job.companyName}
+          {STRINGS.applyForm.atCompany(job.jobTitle, job.companyName)}
         </p>
         {isEditMode && existingApplication?.status && (
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-sm text-[var(--textSecondary)]">Current Status:</span>
+            <span className="text-sm text-[var(--textSecondary)]">{STRINGS.applyForm.currentStatus}</span>
             <Badge
               variant={
                 existingApplication.status === 'APPLIED' ? 'info' :
@@ -361,32 +387,52 @@ export function JobApplicationPage() {
         <div className="flex items-center gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
           <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
           <p className="text-sm text-red-700 dark:text-red-400">
-            The application deadline for this job has passed. You can no longer submit or update your application.
+            {STRINGS.applyForm.deadlinePassed}
           </p>
         </div>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Application Form</CardTitle>
+          <CardTitle>{STRINGS.applyForm.formTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <p className="text-xs text-[var(--textSecondary)]">
+              {STRINGS.applyForm.requiredNote}
+            </p>
+            {/* The role comes from the job being applied to, so it is shown first and cannot be edited. It is
+                disabled like Email; the submit falls back to the job's role. A job that
+                names no role leaves the field open, so the candidate can still say what they are applying as. */}
+            <Input
+              label={STRINGS.applyForm.role}
+              {...register('role')}
+              error={errors.role?.message}
+              // Disabled exactly like Email, so the two fixed fields look and behave the same.
+              disabled={!!jobRole}
+              autoComplete="off"
+              placeholder={jobRole ? undefined : STRINGS.applyForm.rolePlaceholder}
+              helperText={jobRole ? STRINGS.applyForm.roleFromJob : undefined}
+            />
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
-                label="First Name"
+                label={STRINGS.applyForm.firstName}
+                required
                 {...register('firstName')}
                 error={errors.firstName?.message}
               />
               <Input
-                label="Last Name"
+                label={STRINGS.applyForm.lastName}
+                required
                 {...register('lastName')}
                 error={errors.lastName?.message}
               />
             </div>
 
             <Input
-              label="Email"
+              label={STRINGS.applyForm.email}
+              required
               type="email"
               {...register('email')}
               error={errors.email?.message}
@@ -394,12 +440,13 @@ export function JobApplicationPage() {
             />
 
             <Input
-              label="Mobile Number"
+              label={STRINGS.applyForm.mobile}
+              required
               type="tel"
               inputMode="numeric"
               maxLength={10}
               autoComplete="tel"
-              placeholder="Enter 10-digit mobile number"
+              placeholder={STRINGS.applyForm.mobilePlaceholder}
               error={errors.mobileNumber?.message}
               {...register('mobileNumber')}
               onChange={(e) =>
@@ -411,24 +458,19 @@ export function JobApplicationPage() {
             />
 
             <Input
-              label="Experience"
+              label={STRINGS.applyForm.experience}
+              required
               {...register('experience')}
               error={errors.experience?.message}
-              placeholder="e.g., 2 years"
+              placeholder={STRINGS.applyForm.experiencePlaceholder}
             />
 
             <Input
-              label="Address"
+              label={STRINGS.applyForm.address}
+              required
               {...register('address')}
               error={errors.address?.message}
-              placeholder="Enter your address"
-            />
-
-            <Input
-              label="Role"
-              {...register('role')}
-              error={errors.role?.message}
-              placeholder="Applied role"
+              placeholder={STRINGS.applyForm.addressPlaceholder}
             />
 
             {/* Referral — editable on a new application; read-only when editing
@@ -436,16 +478,16 @@ export function JobApplicationPage() {
             {!isEditMode ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label="Referral Name"
-                  helperText="Optional"
-                  placeholder="Who referred you?"
+                  label={STRINGS.applyForm.referralName}
+                  helperText={STRINGS.applyForm.optional}
+                  placeholder={STRINGS.applyForm.referralNamePlaceholder}
                   error={errors.referralName?.message}
                   {...register('referralName')}
                 />
                 <Input
-                  label="Referral ID"
-                  helperText="Optional"
-                  placeholder="Referral code or employee ID"
+                  label={STRINGS.applyForm.referralId}
+                  helperText={STRINGS.applyForm.optional}
+                  placeholder={STRINGS.applyForm.referralIdPlaceholder}
                   error={errors.referralId?.message}
                   {...register('referralId')}
                 />
@@ -453,15 +495,15 @@ export function JobApplicationPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label="Referral Name"
-                  value={existingApplication?.referralName?.trim() || 'Not provided'}
+                  label={STRINGS.applyForm.referralName}
+                  value={existingApplication?.referralName?.trim() || STRINGS.applyForm.notProvided}
                   readOnly
                   disabled
-                  helperText="Set at apply time — can't be changed"
+                  helperText={STRINGS.applyForm.referralLocked}
                 />
                 <Input
-                  label="Referral ID"
-                  value={existingApplication?.referralId?.trim() || 'Not provided'}
+                  label={STRINGS.applyForm.referralId}
+                  value={existingApplication?.referralId?.trim() || STRINGS.applyForm.notProvided}
                   readOnly
                   disabled
                 />
@@ -471,7 +513,7 @@ export function JobApplicationPage() {
             {/* Resume Upload */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-[var(--text)]">
-                Resume {!isEditMode && <span className="text-[var(--error)]">*</span>}
+                {STRINGS.applyForm.resume} {!isEditMode && <span className="text-[var(--error)]">*</span>}
               </label>
 
               {/* Show existing resume info in edit mode */}
@@ -480,7 +522,7 @@ export function JobApplicationPage() {
                   <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                      Resume already uploaded
+                      {STRINGS.applyForm.resumeAlreadyUploaded}
                     </p>
                     <p className="text-xs text-green-600 dark:text-green-500 truncate">
                       {existingApplication.resumeFileName}
@@ -497,12 +539,12 @@ export function JobApplicationPage() {
                     {storedResume ? (
                       <>
                         <Eye size={14} />
-                        View
+                        {STRINGS.applyForm.view}
                       </>
                     ) : (
                       <>
                         <Loader2 size={14} className="animate-spin" />
-                        Loading
+                        {STRINGS.applyForm.loading}
                       </>
                     )}
                   </button>
@@ -513,7 +555,7 @@ export function JobApplicationPage() {
               {checkingStored && !isEditMode && (
                 <p className="flex items-center gap-2 text-sm text-[var(--textSecondary)]">
                   <Loader2 size={14} className="animate-spin" />
-                  Checking for a saved resume...
+                  {STRINGS.applyForm.checkingSaved}
                 </p>
               )}
 
@@ -532,7 +574,7 @@ export function JobApplicationPage() {
                     <span className="flex items-center gap-2">
                       <FileText size={16} className="text-[var(--primary)] flex-shrink-0" />
                       <span className="text-sm font-medium text-[var(--text)]">
-                        Use my Rightpath resume
+                        {STRINGS.applyForm.useSaved}
                       </span>
                     </span>
                     <span className="block text-xs text-[var(--textSecondary)] mt-1 truncate">
@@ -555,11 +597,11 @@ export function JobApplicationPage() {
                     <span className="flex items-center gap-2">
                       <Upload size={16} className="text-[var(--primary)] flex-shrink-0" />
                       <span className="text-sm font-medium text-[var(--text)]">
-                        Upload a different file
+                        {STRINGS.applyForm.uploadDifferent}
                       </span>
                     </span>
                     <span className="block text-xs text-[var(--textSecondary)] mt-1">
-                      From this device (PDF, DOC, DOCX)
+                      {STRINGS.applyForm.fromDevice}
                     </span>
                   </button>
                 </div>
@@ -571,7 +613,7 @@ export function JobApplicationPage() {
                   <span className="flex items-center gap-2 min-w-0">
                     <CheckCircle size={16} className="text-[var(--success)] flex-shrink-0" />
                     <span className="text-sm text-[var(--text)] truncate">
-                      Applying with <strong>{storedResume.name}</strong>
+                      {STRINGS.applyForm.applyingWith} <strong>{storedResume.name}</strong>
                     </span>
                   </span>
                   <button
@@ -580,7 +622,7 @@ export function JobApplicationPage() {
                     className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--primary)] hover:underline flex-shrink-0"
                   >
                     <Eye size={14} />
-                    Preview
+                    {STRINGS.applyForm.preview}
                   </button>
                 </div>
               )}
@@ -602,8 +644,8 @@ export function JobApplicationPage() {
                 <Upload className="w-8 h-8 mx-auto text-[var(--textTertiary)] mb-2" />
                 <p className="text-sm text-[var(--textSecondary)]">
                   {isEditMode
-                    ? 'Click to upload a new resume to replace the existing one (PDF, DOC, DOCX - Max 2MB)'
-                    : 'Click to upload resume (PDF, DOC, DOCX - Max 2MB)'}
+                    ? STRINGS.applyForm.uploadReplace
+                    : STRINGS.applyForm.upload}
                 </p>
               </div>
               {resumeFile && (
@@ -635,7 +677,7 @@ export function JobApplicationPage() {
                 type="button"
                 onClick={() => navigate(-1)}
               >
-                Cancel
+                {STRINGS.applyForm.cancel}
               </Button>
               <Button
                 type="submit"
@@ -644,10 +686,10 @@ export function JobApplicationPage() {
                 leftIcon={<Send size={18} />}
               >
                 {isDeadlinePassed
-                  ? 'Deadline Passed'
+                  ? STRINGS.applyForm.deadlinePassedButton
                   : isEditMode
-                    ? 'Update Application'
-                    : 'Submit Application'}
+                    ? STRINGS.applyForm.titleUpdate
+                    : STRINGS.applyForm.submit}
               </Button>
             </div>
           </form>

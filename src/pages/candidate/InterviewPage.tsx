@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { STRINGS } from '@/constants/strings';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -8,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
-import { useTimer } from '@/hooks/useTimer';
+import { useElapsed } from '@/hooks/useElapsed';
 import { useVoiceInterview } from '@/hooks/useVoiceInterview';
 import { useQuestionTimer } from '@/hooks/useQuestionTimer';
 import { useMediaRecorder } from '@/hooks/useMediaRecorder';
@@ -16,6 +17,7 @@ import { useScreenRecorder, ScreenSurfaceError } from '@/hooks/useScreenRecorder
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { useFaceDetection } from '@/hooks/useFaceDetection';
 import { useDevToolsDetection } from '@/hooks/useDevToolsDetection';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { aiService } from '@/services/ai.service';
 import { extractApiError } from '@/services/api.service';
@@ -40,6 +42,12 @@ import type { InterviewSchedule } from '@/types/interview.types';
 
 type PostCompletionStep = 'ending' | 'uploading-screen' | 'done' | null;
 
+
+/** Seconds as m:ss. */
+function formatClock(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, '0')}`;
+}
 
 export function InterviewPage() {
   const location = useLocation();
@@ -83,45 +91,48 @@ export function InterviewPage() {
   const [mobileConnected, setMobileConnected] = useState(false);
   const [mobileVerified, setMobileVerified] = useState(false);
   const [isSetupActive, setIsSetupActive] = useState(false);
-  const [wsConnected, setWsConnected] = useState(false);
-  const mobileVideoRef = useRef<HTMLVideoElement>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  /** Whether the paired phone is offering its microphone as well as its camera. */
-  const [mobileAudioAvailable, setMobileAudioAvailable] = useState(false);
-  /**
-   * Which microphone answers are recorded from.
-   *
-   * Starts on this device and stays there unless the candidate says otherwise.
-   * The phone is often on a stand across the room for the second camera angle,
-   * where it is the worse microphone, not the better one — so switching to it
-   * automatically would quietly degrade the interview it is meant to improve.
-   */
-  const [micSource, setMicSource] = useState<'device' | 'phone'>('device');
-
   // Question timer
+  const questionTimerRef = useRef<{ incrementSkipCounter: () => void } | null>(null);
   const questionTimer = useQuestionTimer({
     state: voiceInterview.state,
     isPlaying: voiceInterview.isPlaying,
     isCodingQuestion: voiceInterview.isCodingQuestion,
     onTimeout: () => {
-      showToast(MESSAGES.interview.micToStart, 'warning');
+      // The time for this question has run out with no answer. Move on, as a person interviewing would: whatever is
+      // in the editor is submitted as the answer, and with nothing there the question is skipped, and the AI
+      // acknowledges it and asks something else. The skip is counted, so a run of them is noticed and recorded.
+      // Nothing more is skipped while the "still there?" prompt is waiting on the candidate: that is how the count
+      // used to run past the limit (4/3) with the interview carrying on.
+      if (stillThereOpenRef.current) {
+        if (stillThereCauseRef.current !== 'idle') return;
+        // The 60-second prompt is only a nudge: the question's time ran out with it still open, so it closes and
+        // the question is skipped and counted below, like any other unanswered one.
+        setStillThereOpen(false);
+      }
+      if (voiceInterview.codeContent.trim()) {
+        showToast(MESSAGES.interview.answerTimeLimit, 'warning');
+        void voiceInterview.submitAnswer();
+        return;
+      }
+      showToast(MESSAGES.interview.questionTimedOut, 'info');
+      questionTimerRef.current?.incrementSkipCounter();
+      voiceInterview.skipQuestion();
     },
     onMaxSkips: () => {
-      // Warned, not ended. This used to close the interview after three
-      // questions went unanswered — and the commonest reason for that is a
-      // microphone that is not working, which is the one case where taking
-      // the interview away is both the harshest outcome and the least
-      // deserved. A candidate thinking hard about three coding problems hit
-      // it too. The silence is recorded for the reviewer, who can see the
-      // transcript and judge it.
+      // Asked first, ended only if there is no reply. Closing straight away was too harsh — the commonest cause is a
+      // microphone that is not working — but doing nothing let the count run past the limit with the interview still
+      // going. Now the candidate is asked whether they are still there; if they confirm, the count restarts, and if
+      // the prompt goes unanswered the interview is closed. The silence is recorded for the reviewer either way.
       showToast(MESSAGES.interview.consecutiveUnanswered, 'warning');
+      openStillThere('no_response_after_skips');
       voiceInterview.sendProctoringEvent(
         'questions_unanswered',
         'Three consecutive questions passed without an answer',
       );
     },
   });
+
+  questionTimerRef.current = questionTimer;
 
   // Confirmation dialog
   const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -134,6 +145,8 @@ export function InterviewPage() {
    * same list the instructions screen builds is one button away throughout.
    */
   const [showRules, setShowRules] = useState(false);
+  /** Why the interview is ending when the page itself decided (time up, ended by the candidate, too many skips). */
+  const endCauseRef = useRef<string | null>(null);
   const [postCompletionStep, setPostCompletionStep] = useState<PostCompletionStep>(null);
   const postCompletionStartedRef = useRef(false);
 
@@ -147,7 +160,6 @@ export function InterviewPage() {
   const [instructionCountdown, setInstructionCountdown] = useState<number>(
     APP_CONFIG.INTERVIEW_INSTRUCTION_COUNTDOWN_SECONDS,
   );
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
   const { isSpeaking, speak: speakInstruction, stop: stopInstruction } = useSpeechSynthesis();
 
   // Answer timer
@@ -169,38 +181,20 @@ export function InterviewPage() {
   const inactivityWarningShownRef = useRef(false);
   /** "Are you still there?" — a question, never a countdown to ending. */
   const [stillThereOpen, setStillThereOpen] = useState(false);
-  /**
-   * The question on the table, for the panel above the code editor.
-   *
-   * The last thing the interviewer said, which is the question being answered.
-   * Fillers and system notices are skipped — neither is a question.
-   */
-  const currentQuestion = useMemo(() => {
-    const interviewerTurns = voiceInterview.conversation.filter(
-      (entry) => entry.role === 'interviewer',
-    );
-    return interviewerTurns.length > 0
-      ? interviewerTurns[interviewerTurns.length - 1].content
-      : null;
-  }, [voiceInterview.conversation]);
+  const [stillThereSeconds, setStillThereSeconds] = useState<number>(APP_CONFIG.INTERVIEW_STILL_THERE_SECONDS);
+  const stillThereOpenRef = useRef(false);
+  stillThereOpenRef.current = stillThereOpen;
+  const openStillThere = (cause: string) => {
+    stillThereCauseRef.current = cause;
+    setStillThereSeconds(APP_CONFIG.INTERVIEW_STILL_THERE_SECONDS);
+    setStillThereOpen(true);
+  };
+  const stillThereCauseRef = useRef('no_response');
   const runPostCompletionFlowRef = useRef<(skip: boolean) => void>(() => { });
 
-  // Global timer
-  const { secondsLeft: globalSecondsLeft, start: startGlobalTimer, startAt: startGlobalTimerAt } = useTimer({
-    initialSeconds: APP_CONFIG.INTERVIEW_TIMER_MINUTES * 60,
-    autoStart: false,
-    onExpire: () => {
-      showToast(MESSAGES.interview.timeUp, 'warning');
-      runPostCompletionFlowRef.current(false);
-    },
-  });
-
-  // Elapsed, for display. Derived from the countdown rather than kept as a
-  // second clock so the two can never disagree, and so a reload — which
-  // re-anchors the countdown to the server's deadline — resumes the count-up
-  // where it really was instead of from zero.
-  const totalInterviewSeconds = APP_CONFIG.INTERVIEW_TIMER_MINUTES * 60;
-  const elapsedSeconds = Math.min(totalInterviewSeconds, Math.max(0, totalInterviewSeconds - globalSecondsLeft));
+  // How long the interview has been running. It only counts up: nothing ends the interview because of the time it
+  // has taken. It ends when the interviewer has covered what it needs to, or when the candidate ends it.
+  const { elapsedSeconds, startAt: startElapsedAt } = useElapsed();
 
   const segmentMs = APP_CONFIG.RECORDING_SEGMENT_MINUTES > 0
     ? APP_CONFIG.RECORDING_SEGMENT_MINUTES * 60_000
@@ -281,7 +275,7 @@ export function InterviewPage() {
     try {
       await resumeScreenRecording();
       setScreenPermission('granted');
-      showToast('Screen sharing resumed — recording has continued.', 'success');
+      showToast(STRINGS.candidateInterview.toast.screenResumed, 'success');
       voiceInterview.sendProctoringEvent(
         'screen_share_resumed',
         'Candidate resumed screen sharing',
@@ -289,8 +283,8 @@ export function InterviewPage() {
     } catch (err) {
       showToast(
         err instanceof ScreenSurfaceError
-          ? 'Share your entire screen, not a window or a tab, to carry on recording.'
-          : 'Nothing was shared. Choose a screen to carry on recording.',
+          ? STRINGS.candidateInterview.toast.reshareWrongSurface
+          : STRINGS.candidateInterview.toast.reshareNothingShared,
         'warning',
       );
     } finally {
@@ -302,12 +296,24 @@ export function InterviewPage() {
   }, [resumeScreenRecording, showToast]);
 
   // Fullscreen
+  // Leaving fullscreen is only a conduct matter once the interview is running. The screen-share picker itself takes
+  // the browser out of fullscreen, so the exits it caused used to be counted as warnings and reported to the
+  // reviewer before the interview had even begun.
+  const interviewRunningRef = useRef(false);
+  /** True while Begin is waiting for the candidate to enter fullscreen, so the box asking for it is shown. */
+  const [awaitingFullscreen, setAwaitingFullscreen] = useState(false);
   const { isFullscreen, enterFullscreen, fullscreenExitCount } = useFullscreen({
     onExitAttempt: (count) => {
+      if (!interviewRunningRef.current) return;
       showToast(MESSAGES.interview.fullscreenExit(count), 'warning');
       voiceInterview.sendProctoringEvent('fullscreen_exit', `Exit count: ${count}`);
     },
   });
+  /** How many exits had been counted when the interview began, so only the ones after it count. */
+  const fullscreenExitsAtStartRef = useRef(0);
+  const fullscreenExitsRef = useRef(0);
+  fullscreenExitsRef.current = fullscreenExitCount;
+  const fullscreenWarnings = Math.max(0, fullscreenExitCount - fullscreenExitsAtStartRef.current);
 
   // Face detection
   const {
@@ -337,66 +343,19 @@ export function InterviewPage() {
     },
   });
 
-  /**
-   * A second watcher on the paired phone's wide shot.
-   *
-   * <p>Its own instance rather than re-pointing the one above: both cameras
-   * need watching at the same time, and they are looking for different things.
-   * face-api caches its models and the dynamic import is module-scoped, so the
-   * second instance costs a detection loop, not a second model download.</p>
-   *
-   * <p>Only {@code onMultipleFaces} is wired. "No face" and "looking away" are
-   * meaningless on a room angle — the phone is often side-on and may not see
-   * the candidate's face at all — and firing them would bury the one signal
-   * that matters in noise the candidate cannot act on.</p>
-   *
-   * <p>{@code maxWarnings} is effectively infinite, so this can never end an
-   * interview. That is by construction rather than by configuration: a room
-   * angle picks up far more innocent movement than a face-on camera, and the
-   * decision about what it saw belongs to a reviewer.</p>
-   */
-  const roomWatch = useFaceDetection({
-    maxWarnings: Number.MAX_SAFE_INTEGER,
-    checkIntervalMs: PROCTORING_CONFIG.mobileCompanion.roomWatch.checkIntervalMs,
-    multipleFacesConsecutiveFrames: 2,
-    onMultipleFaces: (count) => {
-      showToast(MESSAGES.interview.roomSecondPerson(count), 'warning');
-      // A distinct type from the laptop camera's `multiple_faces`: a reviewer
-      // reading the log needs to know which camera saw it, because a second
-      // person in the wide shot and one leaning into the laptop frame are
-      // different situations.
-      voiceInterview.sendProctoringEvent(
-        'room_multiple_faces',
-        `${count} people visible on the phone camera`
-      );
+
+  // Leaving the interview tab or window. Recorded and warned, never ended: the same rule as every other conduct flag
+  // here, a reviewer reads them. Counted only once the interview is running, so the screen-share picker and the
+  // browser's own permission prompts before it do not count.
+  const tabSwitchesRef = useRef(0);
+  usePageVisibility({
+    onHidden: () => {
+      if (!PROCTORING_CONFIG.tabSwitch.enabled || !interviewRunningRef.current) return;
+      tabSwitchesRef.current += 1;
+      showToast(MESSAGES.interview.tabSwitch(tabSwitchesRef.current), 'warning');
+      voiceInterview.sendProctoringEvent('tab_switch', `Left the interview tab (${tabSwitchesRef.current})`);
     },
   });
-
-  /**
-   * Start watching the room once the phone is streaming and the interview is
-   * under way, and stop when either goes away.
-   *
-   * <p>Keyed on the stream rather than started alongside the laptop camera:
-   * the phone can pair before or after the interview begins, and a detector
-   * pointed at a video element with no source silently does nothing.</p>
-   */
-  useEffect(() => {
-    if (!PROCTORING_CONFIG.mobileCompanion.roomWatch.enabled) return;
-    if (voiceInterview.state !== 'active' && voiceInterview.state !== 'answering') return;
-    if (!remoteStream || !mobileVideoRef.current) return;
-
-    let cancelled = false;
-    const element = mobileVideoRef.current;
-    roomWatch.loadModels().then(() => {
-      if (!cancelled) roomWatch.startDetection(element);
-    });
-
-    return () => {
-      cancelled = true;
-      roomWatch.stopDetection();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remoteStream, voiceInterview.state]);
 
   // DevTools detection
   const { detectionCount: devToolsCount } = useDevToolsDetection();
@@ -451,6 +410,14 @@ export function InterviewPage() {
   }, [voiceInterview.state, instructionCountdown]);
 
   // Audio narration of instructions
+  /** The narration, built from the rules as they are listed on screen. */
+  const buildInstructionScript = useCallback(
+    () =>
+      'Please read the instructions carefully before starting the interview. ' +
+      buildProctoringRules().map((rule) => rule.text.trim().replace(/([^.!?])$/, '$1.')).join(' ') +
+      ' When you are ready, press Start Interview.',
+    [],
+  );
   const instructionAudioFiredRef = useRef(false);
   useEffect(() => {
     if (voiceInterview.state !== 'pre-start') return;
@@ -460,11 +427,7 @@ export function InterviewPage() {
       // The rules exactly as they are written on screen, so what is heard is
       // what is read. Built from the same list the screen renders, so a rule
       // added or switched off there changes the narration with it.
-      const script =
-        'Please read the instructions carefully before starting the interview. ' +
-        buildProctoringRules().map((rule) => rule.text.trim().replace(/([^.!?])$/, '$1.')).join(' ') +
-        ' When you are ready, press Start Interview.';
-      speakInstruction(script, { rate: 0.95 });
+      speakInstruction(buildInstructionScript(), { rate: 0.95 });
     }, 500);
     return () => {
       clearTimeout(timerId);
@@ -473,14 +436,19 @@ export function InterviewPage() {
     };
   }, [voiceInterview.state, speakInstruction, stopInstruction]);
 
+  /**
+   * Stops the narration while it is reading and reads it again from the start when it is not.
+   *
+   * The button used to flip between On and Muted, so once the narration had finished, pressing it did nothing:
+   * a candidate who wanted to hear the rules a second time had no way to.
+   */
   const toggleInstructionAudio = useCallback(() => {
-    if (isAudioMuted) {
-      setIsAudioMuted(false);
-    } else {
+    if (isSpeaking) {
       stopInstruction();
-      setIsAudioMuted(true);
+    } else {
+      speakInstruction(buildInstructionScript(), { rate: 0.95 });
     }
-  }, [isAudioMuted, stopInstruction]);
+  }, [isSpeaking, stopInstruction, speakInstruction, buildInstructionScript]);
 
   // WebSocket error callback
   useEffect(() => {
@@ -509,7 +477,7 @@ export function InterviewPage() {
     }
   }, [interview, user?.email]);
 
-  const totalWarnings = faceWarnings + fullscreenExitCount + devToolsCount;
+  const totalWarnings = faceWarnings + fullscreenWarnings + devToolsCount;
 
   /**
    * Whether the camera is opened at all once the interview starts.
@@ -556,19 +524,6 @@ export function InterviewPage() {
           });
         });
 
-        // Tell the paired phone to switch its camera off. Without this it
-        // kept filming an interview that had finished, and the candidate was
-        // left holding a page that still said "Live Proctoring".
-        if (mobileToken) {
-          try {
-            interviewWsService.send(`/app/mobile/ended/${mobileToken}`, { status: 'ended' });
-          } catch {
-            // The socket may already be closing. The phone releases the camera
-            // when the page closes anyway; this is the tidy path, not the only
-            // one.
-          }
-        }
-
         // The submission itself. Bounded (the call retries internally, so this
         // allows for that): a slow reply must not hold the candidate on this
         // screen.
@@ -584,9 +539,8 @@ export function InterviewPage() {
         // Straight out. It used to pause here to show a confirmation, which is
         // a candidate watching a screen for no reason once they have pressed
         // submit. The recordings carry on uploading in the background.
+        // Stays on screen until the candidate leaves: an interview that ends by itself must say so and say why.
         setPostCompletionStep('done');
-        showToast('Interview submitted.', 'success');
-        navigate(ROUTES.CANDIDATE.INTERVIEWS);
       } catch (err) {
         console.error('Post-completion flow error:', err);
         navigate(ROUTES.CANDIDATE.INTERVIEWS);
@@ -613,35 +567,71 @@ export function InterviewPage() {
     if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
     inactivityWarningShownRef.current = false;
   }, []);
+  const isCodingRef = useRef(false);
+  isCodingRef.current = voiceInterview.isCodingQuestion;
   const startInactivityTimers = useCallback(() => {
     clearInactivityTimers();
+    // Measured against the time the question was given, not a fixed figure: the warning comes thirty seconds before
+    // the time is up, and the "are you still there?" only after it.
+    const given = isCodingRef.current
+      ? APP_CONFIG.INTERVIEW_CODING_QUESTION_TIMEOUT_SECONDS
+      : APP_CONFIG.INTERVIEW_QUESTION_TIMEOUT_SECONDS;
     inactivityWarningRef.current = window.setTimeout(() => {
       inactivityWarningShownRef.current = true;
       showToast(MESSAGES.interview.inactivityWarning, 'warning');
-    }, APP_CONFIG.INTERVIEW_INACTIVITY_WARNING_SECONDS * 1000);
+    }, Math.max(30, given - 30) * 1000);
     inactivityTimeoutRef.current = window.setTimeout(() => {
       // Asks, rather than ends. Silence is not evidence of abandonment — a
       // candidate reading a question or writing code makes no sound at all,
       // and this used to end their interview after three minutes of it. An
       // interview now finishes only on a proctoring violation, on running out
       // of time, or because the candidate said they were done.
-      setStillThereOpen(true);
-    }, APP_CONFIG.INTERVIEW_INACTIVITY_TIMEOUT_SECONDS * 1000);
+      // A spoken question gets the 60-second nudge. A coding question has its own long limit and the candidate
+      // is typing, which restarts this timer, so it keeps the longer check.
+      if (!stillThereOpenRef.current) openStillThere(isCodingRef.current ? 'inactivity' : 'idle');
+    }, (isCodingRef.current
+      ? Math.max(APP_CONFIG.INTERVIEW_INACTIVITY_TIMEOUT_SECONDS, given + 120)
+      : APP_CONFIG.INTERVIEW_IDLE_PROMPT_SECONDS) * 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearInactivityTimers, showToast]);
+
+  // The "still there?" countdown. Unanswered, the interview is closed and submitted with what was said so far.
+  useEffect(() => {
+    if (!stillThereOpen || stillThereCauseRef.current === 'idle') return;
+    const id = window.setInterval(() => {
+      setStillThereSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [stillThereOpen]);
+
+  useEffect(() => {
+    if (!stillThereOpen || stillThereSeconds > 0 || stillThereCauseRef.current === 'idle') return;
+    setStillThereOpen(false);
+    endCauseRef.current = stillThereCauseRef.current;
+    voiceInterview.sendProctoringEvent(
+      'candidate_unresponsive',
+      STRINGS.stillThere.closedReason,
+    );
+    runPostCompletionFlowRef.current(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stillThereOpen, stillThereSeconds]);
 
   useEffect(() => {
     // Restarted on every keystroke in the editor, because the code length is a
     // dependency: someone typing is plainly still present, and the check exists
     // to notice an empty chair.
-    if (voiceInterview.state === 'active' && !voiceInterview.isPlaying) {
+    if (voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking) {
       startInactivityTimers();
     } else {
       clearInactivityTimers();
+      // The nudge is for a question waiting to be answered; once they start answering, or the next question is
+      // being spoken, it has done its job.
+      if (stillThereCauseRef.current === 'idle') setStillThereOpen(false);
     }
     return () => clearInactivityTimers();
   }, [
     voiceInterview.state,
-    voiceInterview.isPlaying,
+    voiceInterview.isInterviewerSpeaking,
     voiceInterview.codeContent.length,
     startInactivityTimers,
     clearInactivityTimers,
@@ -712,7 +702,9 @@ export function InterviewPage() {
         code: voiceInterview.codeContent,
         language: voiceInterview.codeLanguage,
       });
-      const output = res.data.output || res.data.error;
+      // Both: a program that printed something and then crashed has output and an error, and the error is what
+      // explains where the output stops.
+      const output = [res.data.output, res.data.error].filter(Boolean).join('\n');
       setCompileOutput(output);
       // Also held on the interview state, so it is submitted with the answer
       // rather than staying on this screen.
@@ -734,12 +726,44 @@ export function InterviewPage() {
     setCompileOutput('');
   }, [voiceInterview.conversation.length, voiceInterview.isCodingQuestion]);
 
+  // The three previews (camera, shared screen, phone) sit in the sidebar, which is only on the page once the
+  // interview has left the instructions. Their streams arrive earlier than that: the screen is shared and the
+  // phone connects before Begin finishes. An effect keyed on the stream alone ran while the video elements did not
+  // exist yet and never ran again, so the panels stayed black or showed a placeholder while everything was in fact
+  // being recorded. Keying them on the interview's state as well re-attaches the stream once the panel is there.
+  const sidebarShown = voiceInterview.state !== 'pre-start';
+
   // Video preview
   useEffect(() => {
     if (videoRef.current && recorderStream) {
       videoRef.current.srcObject = recorderStream;
+      void videoRef.current.play().catch(() => {});
     }
-  }, [recorderStream]);
+  }, [recorderStream, sidebarShown]);
+
+  /**
+   * Keeps every preview showing its stream, whenever its element turns up.
+   *
+   * Keyed on the stream or on the interview's state, the connection still missed: the sidebar mounts a render
+   * after the state that was being watched changes, so the elements were still absent when the effect ran and the
+   * screen, camera and phone panels stayed black until a share was restarted. This checks on every render, which
+   * costs a few property reads, and connects whichever element is present but not yet showing its stream.
+   */
+  useEffect(() => {
+    const show = (element: HTMLVideoElement | null, stream: MediaStream | null, clearWhenNone: boolean) => {
+      if (!element) return;
+      if (stream) {
+        if (element.srcObject !== stream) {
+          element.srcObject = stream;
+          void element.play().catch(() => {});
+        }
+      } else if (clearWhenNone && element.srcObject) {
+        element.srcObject = null;
+      }
+    };
+    show(videoRef.current, recorderStream, false);
+    show(screenPreviewRef.current, screenStream, true);
+  });
 
   // Screen-share preview. Cleared as well as set: a stopped share otherwise
   // leaves its last frame on screen, which reads as though it were still live.
@@ -747,7 +771,8 @@ export function InterviewPage() {
     const element = screenPreviewRef.current;
     if (!element) return;
     element.srcObject = screenStream;
-  }, [screenStream]);
+    if (screenStream) void element.play().catch(() => {});
+  }, [screenStream, sidebarShown]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -760,7 +785,6 @@ export function InterviewPage() {
       if (videoRef.current?.srcObject) {
         (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
       }
-      if (peerConnectionRef.current) peerConnectionRef.current.close();
     };
   }, []);
 
@@ -776,17 +800,9 @@ export function InterviewPage() {
    * row, which puts the question off-screen again.</p>
    */
   useEffect(() => {
+    // The editor is the last thing in the conversation now, so the bottom of it shows the question above the editor.
     const chat = chatContainerRef.current;
     if (chat) chat.scrollTop = chat.scrollHeight;
-
-    const column = columnRef.current;
-    if (!column) return;
-    const coding = codingSectionRef.current;
-    if (coding) {
-      column.scrollTo({ top: Math.max(0, coding.offsetTop - 8), behavior: 'smooth' });
-    } else {
-      column.scrollTop = column.scrollHeight;
-    }
   }, [voiceInterview.conversation, voiceInterview.streamingText]);
 
   /**
@@ -799,21 +815,37 @@ export function InterviewPage() {
   useEffect(() => {
     if (!voiceInterview.isCodingQuestion) return;
     const id = window.setTimeout(() => {
-      const column = columnRef.current;
+      const chat = chatContainerRef.current;
       const coding = codingSectionRef.current;
-      if (column && coding) {
-        column.scrollTo({ top: Math.max(0, coding.offsetTop - 8), behavior: 'smooth' });
+      // A little above the editor, so the question it answers is on screen with it.
+      if (chat && coding) {
+        chat.scrollTo({ top: Math.max(0, coding.offsetTop - 200), behavior: 'smooth' });
       }
     }, 150);
     return () => window.clearTimeout(id);
   }, [voiceInterview.isCodingQuestion]);
 
   // Natural completion detection
+  // The closing reply is the last thing the candidate hears, so the submit screen waits for it: a short pause for
+  // the spoken audio to arrive and start, then until it has finished playing (capped, so a stuck player cannot
+  // hold the candidate here).
+  const [closingGraceOver, setClosingGraceOver] = useState(false);
+  const closingAudioPlaying = voiceInterview.isPlaying;
   useEffect(() => {
-    if (voiceInterview.state === 'completed' && !postCompletionStartedRef.current) {
-      runPostCompletionFlow(true);
-    }
-  }, [voiceInterview.state, runPostCompletionFlow]);
+    if (voiceInterview.state !== 'completed' || postCompletionStartedRef.current) return;
+    const grace = window.setTimeout(() => setClosingGraceOver(true), 3000);
+    const cap = window.setTimeout(() => runPostCompletionFlowRef.current(true), 30000);
+    return () => {
+      window.clearTimeout(grace);
+      window.clearTimeout(cap);
+    };
+  }, [voiceInterview.state]);
+  useEffect(() => {
+    if (voiceInterview.state !== 'completed' || postCompletionStartedRef.current) return;
+    if (!closingGraceOver || closingAudioPlaying) return;
+    const settle = window.setTimeout(() => runPostCompletionFlowRef.current(true), 1500);
+    return () => window.clearTimeout(settle);
+  }, [voiceInterview.state, closingAudioPlaying, closingGraceOver]);
 
   // ---------- Mobile Companion Integration ----------
   // Generate token when interview is ready (before start)
@@ -869,11 +901,8 @@ export function InterviewPage() {
   /**
    * The phone's verification, read from the server.
    *
-   * The live socket used to be the only way the desktop learned the phone had passed its room scan, so a
-   * message that went astray left the phone saying "Verified" and this page still asking the candidate to
-   * pair, with Begin shut. The scan is now on the server's record, and this asks for it every few seconds
-   * until it appears. The socket still brings the live picture; it no longer decides whether the candidate
-   * can start.
+   * There is no live connection to the phone any more, so this is the only way the page learns that the phone has
+   * been scanned and that its room scan is done: it asks the server every few seconds until both are on record.
    */
   useEffect(() => {
     if (!interview?.id || !mobileToken || mobileVerified || mobileSkipped) return;
@@ -881,7 +910,10 @@ export function InterviewPage() {
     const check = async () => {
       try {
         const res = await interviewService.getMobilePairingState(interview.id, mobileToken);
-        if (!cancelled && res.data?.verified) {
+        if (cancelled) return;
+        // Scanned and on the page, but the room scan is not done yet.
+        if (res.data?.connected) setMobileConnected(true);
+        if (res.data?.verified) {
           setMobileConnected(true);
           setMobileVerified(true);
           showToast(MESSAGES.interview.mobileVerified, 'success');
@@ -910,156 +942,39 @@ export function InterviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interview?.id, mobileToken, mobileVerified, mobileSkipped]);
 
-  // 2. Connect WebSocket and register desktop
-  useEffect(() => {
-    const token = mobileToken;
-    if (!token) return;
-
-    interviewWsService.connect({
-      mobileToken: token,
-      onConnect: () => {
-        console.log('Desktop WS connected with mobileToken');
-        setWsConnected(true);
-        interviewWsService.send('/app/desktop/register', { token });
-      },
-      onDisconnect: () => {
-        console.log('Desktop WebSocket disconnected');
-        setWsConnected(false);
-      },
-    });
-
-    return () => {
-      interviewWsService.disconnect();
-    };
-  }, [mobileToken]);
-
-  // 3. WebRTC peer connection (only ONE)
-  useEffect(() => {
-    const token = mobileToken;
-    if (!token) return;
-
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    peerConnectionRef.current = pc;
-
-    pc.ontrack = (event) => {
-      console.log('Mobile track received', event.track.kind, event.streams[0]);
-      if (event.streams[0]) {
-        setRemoteStream(event.streams[0]);
-        setMobileConnected(true);
-      }
-      // Tracked separately because the stream object is the same one on both
-      // the video and the audio track's arrival — React sees no change, so
-      // reading getAudioTracks() off it during render would never update.
-      if (event.track.kind === 'audio') {
-        setMobileAudioAvailable(true);
-        event.track.addEventListener('ended', () => setMobileAudioAvailable(false));
-      }
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('Desktop sending ICE candidate to mobile');
-        interviewWsService.send('/app/mobile/ice/' + token, { candidate: event.candidate, target: 'mobile' });
-      }
-    };
-
-    return () => {
-      pc.close();
-    };
-  }, [mobileToken]);
-
-  // 4. Subscriptions for Mobile
-  useEffect(() => {
-    const token = mobileToken;
-    const pc = peerConnectionRef.current;
-    const isReady = token && pc && (wsConnected || voiceInterview.isWsConnected);
-
-    if (!isReady) return;
-
-    console.log('Setting up/refreshing mobile signaling subscriptions on desktop. WS Connected:', { local: wsConnected, global: voiceInterview.isWsConnected });
-
-    const handleOffer = (offer: RTCSessionDescriptionInit) => {
-      console.log('Received WebRTC offer from mobile', offer);
-      pc.setRemoteDescription(new RTCSessionDescription(offer))
-        .then(() => pc.createAnswer())
-        .then(answer => pc.setLocalDescription(answer))
-        .then(() => {
-          console.log('Sending WebRTC answer to mobile');
-          interviewWsService.send('/app/mobile/answer/' + token, pc.localDescription);
-        })
-        .catch(err => console.error('Error handling WebRTC offer:', err));
-    };
-    const handleIce = (data: { candidate: RTCIceCandidateInit; target: string }) => {
-      if (data.target === 'desktop' && data.candidate) {
-        console.log('Adding ICE candidate from mobile');
-        pc.addIceCandidate(new RTCIceCandidate(data.candidate))
-          .catch(err => console.error('Error adding ICE candidate:', err));
-      }
-    };
-
-    const handleReady = () => {
-      console.log('Mobile device reported ready');
-      setMobileConnected(true);
-    };
-    const handleVerified = () => {
-      setMobileVerified(true);
-      showToast(MESSAGES.interview.mobileVerified, 'success');
-    };
-    const handleWarning = (warning: { type: string; reason: string }) => {
-      showToast(MESSAGES.interview.proctoringWarning(warning.reason), 'error');
-      voiceInterview.sendProctoringEvent('mobile_malpractice', warning.reason);
-    };
-
-    interviewWsService.subscribe('/user/queue/mobile/offer', handleOffer);
-    interviewWsService.subscribe('/user/queue/mobile/ice', handleIce);
-    interviewWsService.subscribe('/user/queue/mobile/ready', handleReady);
-    interviewWsService.subscribe('/user/queue/mobile/verified', handleVerified);
-    interviewWsService.subscribe('/user/queue/mobile/warning', handleWarning);
-
-    // Re-register desktop to the token-session map on backend
-    interviewWsService.send('/app/desktop/register', { token });
-
-    // Signal to mobile that we are ready to receive stream
-    const timeout = setTimeout(() => {
-      console.log('Sending ready signal to mobile');
-      interviewWsService.send('/app/mobile/ready/' + token, { status: 'ready' });
-    }, 1000);
-
-    return () => {
-      clearTimeout(timeout);
-      interviewWsService.unsubscribe('/user/queue/mobile/offer');
-      interviewWsService.unsubscribe('/user/queue/mobile/ice');
-      interviewWsService.unsubscribe('/user/queue/mobile/ready');
-      interviewWsService.unsubscribe('/user/queue/mobile/verified');
-      interviewWsService.unsubscribe('/user/queue/mobile/warning');
-    };
-  }, [mobileToken, wsConnected, voiceInterview.isWsConnected]);
-
   /**
-   * Point the recorder at whichever microphone the candidate picked.
-   *
-   * Also the recovery path: if the phone drops mid-interview,
-   * `mobileAudioAvailable` goes false and this hands the recorder back to the
-   * device microphone before the next answer, rather than letting them speak
-   * into a track that has ended.
+   * Once the phone is verified, keep asking whether it is still checking in. A phone swiped out of the recent
+   * apps, or a camera taken away, stops checking in; the page then says so, and the server files the same
+   * absence for the reviewer (see MobileDisconnectWatcher). The interview carries on either way.
    */
   useEffect(() => {
-    const usePhone = micSource === 'phone' && mobileAudioAvailable && remoteStream;
-    voiceInterview.setExternalAudioSource(usePhone ? remoteStream : null);
-  }, [micSource, mobileAudioAvailable, remoteStream, voiceInterview.setExternalAudioSource]);
-
-  // Effect to attach mobile stream when connected and video ref is available
-  useEffect(() => {
-    if (remoteStream && mobileVideoRef.current) {
-      console.log('Attaching mobile stream to video element');
-      mobileVideoRef.current.srcObject = remoteStream;
-
-      // Ensure the video plays
-      mobileVideoRef.current.play().catch(err => {
-        console.warn('Auto-play failed for mobile video:', err);
-      });
-    }
-  }, [remoteStream, mobileConnected]);
+    if (!interview?.id || !mobileToken || !mobileVerified || mobileSkipped) return;
+    let cancelled = false;
+    let wasLost = false;
+    const check = async () => {
+      if (document.hidden) return;
+      try {
+        const res = await interviewService.getMobilePairingState(interview.id, mobileToken);
+        if (cancelled) return;
+        const lost = !res.data?.connected;
+        setMobileConnected(!lost);
+        if (lost && !wasLost) {
+          showToast(STRINGS.candidateInterview.toast.phoneDisconnected, 'warning');
+        } else if (!lost && wasLost) {
+          showToast(STRINGS.candidateInterview.toast.phoneBack, 'success');
+        }
+        wasLost = lost;
+      } catch {
+        // Not reachable this time; the next tick asks again.
+      }
+    };
+    const timer = window.setInterval(check, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interview?.id, mobileToken, mobileVerified, mobileSkipped]);
 
   const getMobileBaseUrl = () => {
     // Use environment variable or fallback to window.location.origin (for desktop)
@@ -1088,8 +1003,30 @@ export function InterviewPage() {
     }
   };
 
+  /**
+   * Whether Begin has been pressed and is still being worked through (screen picker, camera, server start).
+   *
+   * The screen picker is the slow part, and nothing on the page said the press had registered. A candidate who
+   * took their time choosing the screen pressed Begin again, which opened a second picker and sent a second
+   * start to the server while the first was still waiting. One press runs once, and the button says it is busy.
+   */
+  const beginningRef = useRef(false);
+  const [beginning, setBeginning] = useState(false);
+
   // Start interview handler
   const handleStartInterview = async () => {
+    if (beginningRef.current) return;
+    beginningRef.current = true;
+    setBeginning(true);
+    try {
+      await beginInterview();
+    } finally {
+      beginningRef.current = false;
+      setBeginning(false);
+    }
+  };
+
+  const beginInterview = async () => {
     if (!interview || !user?.email) return;
 
     if (!mobileVerified) {
@@ -1121,13 +1058,8 @@ export function InterviewPage() {
       showToast(MESSAGES.interview.proceedingWithoutRoom, 'info');
     }
 
-    if (wsConnected) {
-      interviewWsService.disconnect(); // disconnect mobile pairing WS
-    }
-
     stopInstruction();
     try {
-      if (PROCTORING_CONFIG.fullscreen.enabled) await enterFullscreen();
       // The models are a multi-megabyte download; fetching them for a check
       // that is switched off spends the candidate's bandwidth on nothing.
       if (PROCTORING_CONFIG.eyeDetection.enabled) await loadModels();
@@ -1149,10 +1081,31 @@ export function InterviewPage() {
           setScreenPermission('denied');
           showToast(
             err instanceof ScreenSurfaceError
-              ? 'Share your entire screen — not a window or a browser tab — and then press Begin again.'
-              : 'Screen sharing is required to start the interview. Choose your entire screen and press Begin again.',
+              ? STRINGS.candidateInterview.toast.beginWrongSurface
+              : STRINGS.candidateInterview.toast.beginScreenRequired,
             'warning',
           );
+          return;
+        }
+      }
+
+      // Fullscreen comes after the share, and before the interview starts. The screen picker takes the browser out
+      // of fullscreen, so entering it first meant the page dropped out as the interview began, the "return to
+      // fullscreen" box appeared over an interview that was already running behind it, and the candidate had to do
+      // it twice. Now it is entered once, here, and nothing starts until it is on.
+      if (PROCTORING_CONFIG.fullscreen.enabled && !document.fullscreenElement) {
+        await enterFullscreen();
+        // The picker can use up the click that allows this. The notice on screen has a button for it; wait for it.
+        const deadline = Date.now() + 5 * 60 * 1000;
+        setAwaitingFullscreen(true);
+        while (!document.fullscreenElement && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+        setAwaitingFullscreen(false);
+        if (!document.fullscreenElement) {
+          abortScreenRecording();
+          setScreenPermission('prompt');
+          showToast(STRINGS.candidateInterview.toast.enterFullscreen, 'warning');
           return;
         }
       }
@@ -1180,6 +1133,8 @@ export function InterviewPage() {
       if (started?.resumed) {
         showToast(MESSAGES.interview.resumed, 'info');
       }
+      interviewRunningRef.current = true;
+      fullscreenExitsAtStartRef.current = fullscreenExitsRef.current;
       // The recording audit, from the first moment. Says what this deployment
       // requires, so a reviewer who finds no recording can tell "it was
       // switched off" from "it was required and did not happen" — the two
@@ -1224,7 +1179,7 @@ export function InterviewPage() {
           voiceInterview.sendProctoringEvent('mic_processing', describeMicProcessing(mic));
           if (mediaStream && mediaStream.getAudioTracks().length > 0 && !mic.suppressed) {
             showToast(
-              'Your browser could not turn on noise reduction for the microphone. Move somewhere quiet, or use a headset with a microphone.',
+              STRINGS.candidateInterview.toast.noiseReduction,
               'warning',
             );
           }
@@ -1254,24 +1209,10 @@ export function InterviewPage() {
           );
         }
       }
-      // Started only now that capture is under way (a failed camera or screen
-      // is caught above, so it cannot skip this). It used to start first, and
-      // a deadline already in the past (the candidate coming back after the
-      // server had timed the interview out) expired it before either recorder
-      // existed — ending the interview with "nothing was captured" for both.
-      // Anchored to the server's deadline where it sends one. The clock used
-      // to be a fresh countdown of the configured length, so a reload handed
-      // the candidate another full interview — and a backgrounded tab or a
-      // closed laptop made it run slow, because a throttled interval simply
-      // stops counting. parseServerInstant reads a bare stamp as UTC; a
-      // deadline that has already passed expires immediately, which is the
-      // honest answer rather than time the server will not honour.
-      const deadline = started?.expiresAt ? parseServerInstant(started.expiresAt) : null;
-      if (deadline && !Number.isNaN(deadline.getTime())) {
-        startGlobalTimerAt(deadline.getTime());
-      } else {
-        startGlobalTimer();
-      }
+      // Started only now that capture is under way. Anchored to the start the server recorded, so reloading the
+      // page does not set the clock back to zero.
+      const startedAtMs = started?.startedAt ? parseServerInstant(started.startedAt).getTime() : NaN;
+      startElapsedAt(Number.isNaN(startedAtMs) ? undefined : startedAtMs);
     } catch (err) {
       console.error(err);
     }
@@ -1291,6 +1232,30 @@ export function InterviewPage() {
     if (stepIdx === currentIdx) return 'active';
     return 'pending';
   };
+  // What the candidate is told about how the interview ended: a thank-you when the interviewer closed it, and
+  // otherwise a plain statement that it was submitted and why.
+  const endCause = endCauseRef.current ?? voiceInterview.endReason;
+  const endMessage = (() => {
+    switch (endCause) {
+      case 'ai_closed':
+        return STRINGS.interviewEnd.aiClosed;
+      case 'question_limit':
+        return STRINGS.interviewEnd.questionLimit;
+      case 'time_up':
+        return STRINGS.interviewEnd.timeUp;
+      case 'candidate_ended':
+        return STRINGS.interviewEnd.candidateEnded;
+      case 'no_response_after_skips':
+      case 'inactivity':
+        return STRINGS.interviewEnd.noResponse;
+      case null:
+      case undefined:
+        return STRINGS.interviewEnd.unknown;
+      default:
+        return STRINGS.interviewEnd.other(endCause.replace(/^./, (c) => c.toUpperCase()));
+    }
+  })();
+
   if (loadingInterview) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -1301,9 +1266,9 @@ export function InterviewPage() {
   if (!interview) {
     return (
       <div className="text-center py-16">
-        <p className="text-lg text-[var(--textSecondary)]">No interview data found.</p>
+        <p className="text-lg text-[var(--textSecondary)]">{STRINGS.candidateInterview.noInterviewData}</p>
         <Button className="mt-4" onClick={() => navigate(ROUTES.CANDIDATE.INTERVIEWS)}>
-          Back to Interviews
+          {STRINGS.candidateInterview.backToInterviews}
         </Button>
       </div>
     );
@@ -1311,6 +1276,21 @@ export function InterviewPage() {
 
   const isCountdownActive = instructionCountdown > 0;
   const canStartInterview = !isCountdownActive && micPermission !== 'denied';
+
+  // The box asking the candidate back into fullscreen. Shown over the running interview, and over the setup screen
+  // while Begin is waiting for fullscreen (the interview has not started then, so the main screen is not on show).
+  const fullscreenNotice = (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center backdrop-blur-sm p-4">
+      <div className="bg-[var(--cardBg)] rounded-2xl p-6 sm:p-8 w-full max-w-md text-center space-y-4 shadow-2xl">
+        <div className="w-16 h-16 mx-auto rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+          <Maximize className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+        </div>
+        <h2 className="text-xl font-bold text-[var(--text)]">{STRINGS.candidateInterview.fullscreenRequired}</h2>
+        <p className="text-sm text-[var(--textSecondary)]">{STRINGS.candidateInterview.fullscreenPrompt}</p>
+        <Button onClick={enterFullscreen} size="lg">{STRINGS.candidateInterview.returnToFullscreen}</Button>
+      </div>
+    </div>
+  );
 
   // Pre-start screen with QR code.
   //
@@ -1326,6 +1306,8 @@ export function InterviewPage() {
     voiceInterview.state === 'error'
   ) {
     return (
+      <>
+      {PROCTORING_CONFIG.fullscreen.enabled && !isFullscreen && awaitingFullscreen && fullscreenNotice}
       <InterviewPreStartScreen
         jobPrefix={interview.jobPrefix}
         isSetupActive={isSetupActive}
@@ -1333,7 +1315,6 @@ export function InterviewPage() {
         mobileVerified={mobileVerified}
         mobileConnectUrl={`${getMobileBaseUrl()}/mobile-connect?token=${mobileToken}`}
         isSpeaking={isSpeaking}
-        isAudioMuted={isAudioMuted}
         onToggleAudio={toggleInstructionAudio}
         isCountdownActive={isCountdownActive}
         instructionCountdown={instructionCountdown}
@@ -1343,7 +1324,7 @@ export function InterviewPage() {
         mobileSkipped={mobileSkipped}
         onMobileSkippedChange={handleMobileSkippedChange}
         error={voiceInterview.error ?? undefined}
-        starting={voiceInterview.state === 'starting'}
+        starting={voiceInterview.state === 'starting' || beginning}
         canStartInterview={canStartInterview}
         onStart={handleStartInterview}
         scheduleId={interview.id}
@@ -1351,6 +1332,7 @@ export function InterviewPage() {
         capturesReady={capturesReady}
         onCapturesReadyChange={setCapturesReady}
       />
+      </>
     );
   }
 
@@ -1378,27 +1360,40 @@ export function InterviewPage() {
         </div>
       )}
 
-      {/* "Still there?" — shown after a long silence, and only ever asking.
-          Dismissing it restarts the check; nothing here ends the interview. */}
+      {/* "Still there?" — shown after a long silence or a run of skipped questions. Confirming carries on;
+          if it goes unanswered the interview is closed when the countdown reaches zero. It cannot be dismissed
+          any other way, so silence is never mistaken for an answer. */}
       <Modal
         isOpen={stillThereOpen}
-        onClose={() => setStillThereOpen(false)}
-        title="Are you still there?"
+        onClose={() => undefined}
+        title={STRINGS.stillThere.title}
         size="sm"
         footer={
           <Button
             onClick={() => {
               setStillThereOpen(false);
+              // The 60-second nudge is not an answer, so confirming it must not wipe the unanswered-question count.
+              if (stillThereCauseRef.current === 'idle') return;
+              questionTimer.resetSkipCounter();
               startInactivityTimers();
             }}
           >
-            Yes, I&apos;m still here
+            {STRINGS.stillThere.confirm}
           </Button>
         }
       >
         <p className="text-sm text-[var(--textSecondary)]">
-          We have not heard anything for a few minutes. Your interview is still running and nothing
-          has been submitted — carry on when you are ready.
+          {stillThereCauseRef.current === 'idle' ? (
+            STRINGS.stillThere.idle(APP_CONFIG.INTERVIEW_MAX_CONSECUTIVE_SKIPS)
+          ) : (
+            <>
+              {stillThereCauseRef.current === 'no_response_after_skips'
+                ? STRINGS.stillThere.afterSkips
+                : STRINGS.stillThere.afterSilence}{' '}
+              {STRINGS.stillThere.confirmPrompt} <strong>{stillThereSeconds}s</strong>
+              {STRINGS.stillThere.consequence}
+            </>
+          )}
         </p>
       </Modal>
 
@@ -1409,10 +1404,10 @@ export function InterviewPage() {
       <Modal
         isOpen={showRules}
         onClose={() => setShowRules(false)}
-        title="Interview Rules"
+        title={STRINGS.candidateInterview.topBar.rulesModalTitle}
         size="lg"
         contained={false}
-        footer={<Button onClick={() => setShowRules(false)}>Back to interview</Button>}
+        footer={<Button onClick={() => setShowRules(false)}>{STRINGS.candidateInterview.topBar.backToInterview}</Button>}
       >
         <ul className="space-y-3">
           {buildProctoringRules().map((rule) => (
@@ -1437,15 +1432,15 @@ export function InterviewPage() {
               {getStepStatus('ending') === 'done' ? (
                 <>
                   <CheckCircle2 size={36} className="mx-auto mb-2 text-emerald-500" />
-                  <h2 className="text-xl font-bold text-[var(--text)]">Interview submitted</h2>
+                  <h2 className="text-xl font-bold text-[var(--text)]">{STRINGS.interviewEnd.submittedTitle}</h2>
                   <p className="mt-1 text-sm text-[var(--textSecondary)]">
-                    Your answers are saved. Nothing below can change that.
+                    {STRINGS.candidateInterview.answersSaved}
                   </p>
                 </>
               ) : (
                 <>
                   <Loader2 size={36} className="mx-auto mb-2 animate-spin text-blue-500" />
-                  <h2 className="text-xl font-bold text-[var(--text)]">Submitting your interview…</h2>
+                  <h2 className="text-xl font-bold text-[var(--text)]">{STRINGS.candidateInterview.submitting}</h2>
                 </>
               )}
             </div>
@@ -1455,12 +1450,18 @@ export function InterviewPage() {
                 closed first, are finished the next time the app is opened. */}
             {getStepStatus('ending') === 'done' && (
               <p className="rounded-xl bg-[var(--surface1)] p-3 text-center text-xs text-[var(--textSecondary)]">
-                Your recording is being saved in the background. You do not need to wait for it.
+                {STRINGS.candidateInterview.recordingSavingInBackground}
               </p>
             )}
 
+            {getStepStatus('ending') === 'done' && (
+              <p className="text-center text-sm text-[var(--text)]">{endMessage}</p>
+            )}
+
             {postCompletionStep === 'done' && (
-              <p className="text-center text-sm font-medium text-emerald-500">Taking you back…</p>
+              <Button className="w-full" onClick={() => navigate(ROUTES.CANDIDATE.INTERVIEWS)}>
+                {STRINGS.candidateInterview.backToMyInterviews}
+              </Button>
             )}
           </div>
         </div>
@@ -1470,11 +1471,14 @@ export function InterviewPage() {
       <ConfirmDialog
         isOpen={showEndConfirm}
         onClose={() => setShowEndConfirm(false)}
-        onConfirm={() => runPostCompletionFlow(false)}
-        title="End Interview Early?"
-        message="This action cannot be undone. Your responses so far will be evaluated, but unanswered questions may affect your overall score."
-        confirmText="End Interview"
-        cancelText="Continue Interview"
+        onConfirm={() => {
+          endCauseRef.current = 'candidate_ended';
+          runPostCompletionFlow(false);
+        }}
+        title={STRINGS.candidateInterview.endEarly.title}
+        message={STRINGS.candidateInterview.endEarly.message}
+        confirmText={STRINGS.candidateInterview.endEarly.confirm}
+        cancelText={STRINGS.candidateInterview.endEarly.cancel}
         variant="warning"
       />
 
@@ -1483,46 +1487,35 @@ export function InterviewPage() {
           screen from the first frame with a button that put the candidate into
           a mode the deployment had turned off. */}
       {PROCTORING_CONFIG.fullscreen.enabled && !isFullscreen
-        && voiceInterview.state !== 'completed' && !postCompletionStep && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center backdrop-blur-sm p-4">
-          <div className="bg-[var(--cardBg)] rounded-2xl p-6 sm:p-8 w-full max-w-md text-center space-y-4 shadow-2xl">
-            <div className="w-16 h-16 mx-auto rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Maximize className="w-8 h-8 text-amber-600 dark:text-amber-400" />
-            </div>
-            <h2 className="text-xl font-bold text-[var(--text)]">Fullscreen Required</h2>
-            <p className="text-sm text-[var(--textSecondary)]">Please return to fullscreen to continue.</p>
-            <Button onClick={enterFullscreen} size="lg">Return to Fullscreen</Button>
-          </div>
-        </div>
-      )}
+        && voiceInterview.state !== 'completed' && !postCompletionStep && fullscreenNotice}
 
 
       {/* Top bar */}
       <div className="sticky top-0 z-20 bg-[var(--cardBg)] border-b border-[var(--border)] px-3 sm:px-4 py-2 sm:py-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 max-w-7xl mx-auto">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 w-full">
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <Badge variant="info">Voice Interview</Badge>
+            <Badge variant="info">{STRINGS.candidateInterview.topBar.voiceInterview}</Badge>
             <span className="truncate text-sm text-[var(--textSecondary)]">{interview.jobPrefix}</span>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {isScreenRecording && (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
                 <Monitor size={12} className="text-red-500" />
-                <span className="text-xs text-red-600 dark:text-red-400 font-medium">Screen REC</span>
+                <span className="text-xs text-red-600 dark:text-red-400 font-medium">{STRINGS.candidateInterview.topBar.screenRec}</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               </div>
             )}
             {screenPermission === 'denied' && (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                 <Monitor size={12} className="text-amber-500" />
-                <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">Screen Off</span>
+                <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">{STRINGS.candidateInterview.topBar.screenOff}</span>
               </div>
             )}
             <div className="flex items-center gap-1">
               {voiceInterview.isWsConnected ? <Wifi size={14} className="text-emerald-500" /> : <WifiOff size={14} className="text-red-500" />}
             </div>
-            <span className="text-xs text-[var(--textSecondary)]">Q: {voiceInterview.questionsAsked}</span>
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-semibold ${globalSecondsLeft <= 300 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-[var(--surface1)] text-[var(--text)]'}`}>
+            <span className="text-xs text-[var(--textSecondary)]">{STRINGS.candidateInterview.topBar.questionsShort(voiceInterview.questionsAsked)}</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-semibold bg-[var(--surface1)] text-[var(--text)]">
               {/* Counts up from 0:00, as the L2 and L3 rounds are run. The
                   deadline underneath is still a countdown to the server's
                   expiry — only what is shown is elapsed time, and the red
@@ -1541,38 +1534,36 @@ export function InterviewPage() {
                 <Shield size={14} /> <span className="text-xs font-semibold">{totalWarnings}</span>
               </div>
               <div className="absolute right-0 top-full mt-2 w-64 bg-[var(--cardBg)] rounded-lg shadow-lg border border-[var(--border)] p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-30">
-                <p className="text-xs font-semibold text-[var(--text)] mb-2">Warning Breakdown</p>
+                <p className="text-xs font-semibold text-[var(--text)] mb-2">{STRINGS.candidateInterview.topBar.warningBreakdown}</p>
                 <div className="space-y-1.5 text-xs text-[var(--textSecondary)]">
                   {PROCTORING_CONFIG.eyeDetection.enabled && (
-                    <div className="flex justify-between"><span>Face / eye</span><span className="font-mono">{faceWarnings}</span></div>
+                    <div className="flex justify-between"><span>{STRINGS.candidateInterview.topBar.faceEye}</span><span className="font-mono">{faceWarnings}</span></div>
                   )}
                   {PROCTORING_CONFIG.fullscreen.enabled && (
-                    <div className="flex justify-between"><span>Fullscreen exits</span><span className="font-mono">{fullscreenExitCount}</span></div>
+                    <div className="flex justify-between"><span>{STRINGS.candidateInterview.topBar.fullscreenExits}</span><span className="font-mono">{fullscreenWarnings}</span></div>
                   )}
-                  <div className="flex justify-between"><span>DevTools</span><span className="font-mono">{devToolsCount}</span></div>
+                  <div className="flex justify-between"><span>{STRINGS.candidateInterview.topBar.devTools}</span><span className="font-mono">{devToolsCount}</span></div>
                 </div>
                 <p className="mt-2 text-[11px] text-[var(--textSecondary)] border-t border-[var(--border)] pt-2">
-                  These are noted for the reviewer. They do not end your interview and they are
-                  not a score. Avoid reloading — if you do, reopen the interview and it picks up
-                  where you left off.
+                  {STRINGS.candidateInterview.topBar.warningNote}
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowRules(true)}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[var(--surface1)] text-[var(--textSecondary)] hover:bg-[var(--surface2)] hover:text-[var(--text)] text-sm font-medium transition-colors"
-              title="Interview rules"
+              title={STRINGS.candidateInterview.topBar.rulesTitle}
             >
-              <BookOpen size={14} /> <span className="hidden sm:inline">Rules</span>
+              <BookOpen size={14} /> <span className="hidden sm:inline">{STRINGS.candidateInterview.topBar.rules}</span>
             </button>
             <button onClick={() => setShowEndConfirm(true)} disabled={!!postCompletionStep} className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors">
-              <LogOut size={14} /> End
+              <LogOut size={14} /> {STRINGS.candidateInterview.topBar.end}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row w-full min-h-0">
         {/* Left Column. min-w-0 so a long transcript line or a wide code editor
             shrinks the column rather than pushing the sidebar off-screen — a
             flex child defaults to min-width:auto, which is what let the editor
@@ -1598,7 +1589,7 @@ export function InterviewPage() {
             />
             <div className="min-w-0 text-right">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--textTertiary)]">
-                Interviewer
+                {STRINGS.candidateInterview.chat.interviewer}
               </p>
               <p className="truncate text-sm font-semibold text-[var(--text)]">
                 {voiceInterview.interviewerName}
@@ -1609,7 +1600,7 @@ export function InterviewPage() {
           {/* Conversation area */}
           <div
             ref={chatContainerRef}
-            className="flex-1 min-h-[12rem] overflow-y-auto p-4 sm:p-6 space-y-4"
+            className="relative flex-1 min-h-[12rem] overflow-y-auto p-4 sm:p-6 space-y-4"
           >
             {voiceInterview.conversation.map((entry, idx) => (
               <div key={idx} className={`flex items-start gap-3 ${entry.role === 'candidate' ? 'flex-row-reverse' : ''} ${entry.role === 'filler' ? 'opacity-60' : ''}`}>
@@ -1619,74 +1610,60 @@ export function InterviewPage() {
                   </div>
                 )}
                 <div className={`max-w-[85%] sm:max-w-[70%] min-w-0 break-words p-3 sm:p-4 rounded-lg ${entry.role === 'interviewer' ? 'bg-[var(--surface1)] text-[var(--text)]' : entry.role === 'candidate' ? 'bg-[var(--primary)] text-white' : entry.role === 'system' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm border border-amber-200 dark:border-amber-800' : 'bg-transparent text-[var(--textTertiary)] italic text-sm p-2'} ${entry.isStreaming ? 'border border-blue-300 dark:border-blue-700' : ''}`}>
-                  <p className="text-sm whitespace-pre-wrap">{entry.content}</p>
+                  <p className="text-base leading-relaxed whitespace-pre-wrap">{entry.content}</p>
                   {entry.role !== 'filler' && entry.role !== 'system' && <p className={`text-xs mt-2 ${entry.role === 'interviewer' ? 'text-[var(--textTertiary)]' : 'text-white/70'}`}>{new Date(entry.timestamp).toLocaleTimeString()}</p>}
                 </div>
               </div>
             ))}
             {voiceInterview.state === 'processing' && !voiceInterview.streamingText && (
-              <div className="flex items-center gap-2 text-[var(--textSecondary)]"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Processing your answer...</span></div>
+              <div className="flex items-center gap-2 text-[var(--textSecondary)]"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">{STRINGS.candidateInterview.chat.processing}</span></div>
             )}
             {voiceInterview.state === 'completed' && !postCompletionStep && (
-              <div className="text-center py-4"><Badge variant="success" size="lg">Interview Complete</Badge><p className="text-sm text-[var(--textSecondary)] mt-2">Generating evaluation...</p></div>
+              <div className="text-center py-4"><Badge variant="success" size="lg">{STRINGS.candidateInterview.chat.complete}</Badge><p className="text-sm text-[var(--textSecondary)] mt-2">{STRINGS.candidateInterview.chat.generatingEvaluation}</p></div>
             )}
-          </div>
 
-          {/* Coding Editor & Compile.
-              No height cap of its own any more — the candidate sets the
-              editor's height with its grip, and the column scrolls. Capping it
-              at 55vh only meant a tall editor squeezed the transcript to
-              nothing and pushed the controls off-screen. */}
-          {voiceInterview.isCodingQuestion && voiceInterview.state !== 'completed' && !postCompletionStep && (
-            <div ref={codingSectionRef} className="flex-shrink-0 min-w-0 border-t border-[var(--border)] px-2 sm:px-4 py-2 sm:py-3 space-y-2">
-              {/* The question, pinned above the editor. The chat scrolls, and
-                  once the editor and its output are open the question that was
-                  asked is usually off the top of it — leaving the candidate
-                  writing code against something they can no longer read. It
-                  scrolls inside its own box so a long one cannot push the
-                  editor off the screen. */}
-              {currentQuestion && (
-                <details open className="rounded-lg border border-[var(--border)] bg-[var(--surface1)]">
-                  <summary className="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[var(--textSecondary)]">
-                    The question
-                  </summary>
-                  <p className="max-h-24 sm:max-h-48 overflow-y-auto whitespace-pre-wrap px-3 pb-3 text-sm text-[var(--text)]">
-                    {currentQuestion}
-                  </p>
-                </details>
-              )}
-              <CodingEditor code={voiceInterview.codeContent} language={voiceInterview.codeLanguage} onCodeChange={voiceInterview.setCodeContent} onLanguageChange={voiceInterview.setCodeLanguage} disabled={voiceInterview.state === 'processing'} />
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button size="sm" variant="outline" onClick={handleCompile} disabled={compiling || !voiceInterview.codeContent.trim()}>
-                  {compiling ? <Loader2 size={14} className="animate-spin mr-2" /> : <Play size={14} className="mr-2" />}
-                  Compile & Run
-                </Button>
-                {/* There was no way to submit code at all. The only route was
-                    to speak and stop the mic, so a candidate who had written a
-                    working solution and had nothing to say about it was stuck.
-                    Any spoken explanation already recorded goes with it. */}
-                <Button
-                  size="sm"
-                  onClick={() => voiceInterview.submitAnswer()}
-                  disabled={
-                    voiceInterview.state === 'processing' || !voiceInterview.codeContent.trim()
-                  }
-                  leftIcon={<Send size={14} />}
-                >
-                  Submit answer
-                </Button>
-              </div>
-              {compileOutput && (
-                <div className="mt-2 min-w-0 p-3 rounded-lg bg-[#1e1e1e] text-gray-200 font-mono text-xs sm:text-sm overflow-auto max-h-32 sm:max-h-48">
-                  {/* break-words as well as wrap: a stack trace or a long
-                      compiler path has no spaces to wrap at, and without it
-                      the panel stretches the whole column wider than the
-                      phone and the page scrolls sideways. */}
-                  <pre className="whitespace-pre-wrap break-words">{compileOutput}</pre>
+              {/* Coding Editor & Compile, inline in the conversation: it follows the question it belongs to and scrolls with it.
+                  No height cap of its own any more — the candidate sets the
+                  editor's height with its grip, and the column scrolls. Capping it
+                  at 55vh only meant a tall editor squeezed the transcript to
+                  nothing and pushed the controls off-screen. */}
+              {voiceInterview.isCodingQuestion && voiceInterview.state !== 'completed' && !postCompletionStep && (
+                <div ref={codingSectionRef} className="min-w-0 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-2 sm:p-3">
+                  <CodingEditor code={voiceInterview.codeContent} language={voiceInterview.codeLanguage} onCodeChange={voiceInterview.setCodeContent} onLanguageChange={voiceInterview.setCodeLanguage} disabled={voiceInterview.state === 'processing'} />
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={handleCompile} disabled={compiling || !voiceInterview.codeContent.trim()}>
+                      {compiling ? <Loader2 size={14} className="animate-spin mr-2" /> : <Play size={14} className="mr-2" />}
+                      {STRINGS.candidateInterview.chat.compileAndRun}
+                    </Button>
+                    {/* There was no way to submit code at all. The only route was
+                        to speak and stop the mic, so a candidate who had written a
+                        working solution and had nothing to say about it was stuck.
+                        Any spoken explanation already recorded goes with it. */}
+                    <Button
+                      size="sm"
+                      onClick={() => voiceInterview.submitAnswer()}
+                      disabled={
+                        voiceInterview.state === 'processing' ||
+                        voiceInterview.isSubmitting ||
+                        !voiceInterview.codeContent.trim()
+                      }
+                      leftIcon={<Send size={14} />}
+                    >
+                      {STRINGS.candidateInterview.chat.submitAnswer}
+                    </Button>
+                  </div>
+                  {compileOutput && (
+                    <div className="mt-2 min-w-0 p-3 rounded-lg bg-[#1e1e1e] text-gray-200 font-mono text-xs sm:text-sm overflow-auto max-h-32 sm:max-h-48">
+                      {/* break-words as well as wrap: a stack trace or a long
+                          compiler path has no spaces to wrap at, and without it
+                          the panel stretches the whole column wider than the
+                          phone and the page scrolls sideways. */}
+                      <pre className="whitespace-pre-wrap break-words">{compileOutput}</pre>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
+          </div>
 
           {/* Voice controls. Pinned to the bottom of the scrolling column: the
               mic is the one control the candidate must always be able to reach,
@@ -1696,27 +1673,19 @@ export function InterviewPage() {
               {voiceInterview.transcriptionError && (
                 <div className="mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-center gap-2">
                   <AlertTriangle size={14} className="text-amber-500" />
-                  <span className="text-xs text-amber-700 dark:text-amber-300">Speech not captured: {voiceInterview.transcriptionError}</span>
+                  <span className="text-xs text-amber-700 dark:text-amber-300">{STRINGS.candidateInterview.controls.speechNotCaptured(voiceInterview.transcriptionError)}</span>
                 </div>
               )}
-              {/* Captions, shown for the whole time the mic is open — not only
-                  once text arrives. An empty panel that says "listening" tells
-                  the candidate their microphone is live and nothing has been
-                  heard yet; rendering nothing at all told them neither, and a
-                  candidate whose speech was not being captured had no way to
-                  know before their answer was submitted empty. */}
+              {/* No live captions. The words were shown as they were heard, and background noise turned into
+                  stray words on the screen, which the candidate then took to be part of their answer. The
+                  audio is still recorded and converted to text for the interviewer; the candidate sees only
+                  that it is being heard, never the text. */}
               {voiceInterview.isRecording && (
-                <div className="mb-3 p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
-                  <p className="text-xs text-[var(--textTertiary)] mb-1">
-                    Live captions — this is what gets sent to the interviewer
+                <div className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface1)] p-3">
+                  <Mic size={14} className="text-emerald-500" />
+                  <p className="text-sm text-[var(--textSecondary)]">
+                    {STRINGS.candidateInterview.controls.listening}
                   </p>
-                  {voiceInterview.currentTranscript ? (
-                    <p className="text-sm text-[var(--text)]">{voiceInterview.currentTranscript}</p>
-                  ) : (
-                    <p className="text-sm italic text-[var(--textTertiary)]">
-                      Listening… your words will appear here as you speak.
-                    </p>
-                  )}
                 </div>
               )}
               {voiceInterview.isRecording && (
@@ -1728,14 +1697,14 @@ export function InterviewPage() {
                   <span className="text-xs text-[var(--textTertiary)] w-8 text-right">{voiceInterview.audioLevel ?? 0}%</span>
                 </div>
               )}
-              {questionTimer.isTimerActive && voiceInterview.state === 'active' && !voiceInterview.isPlaying && (
+              {questionTimer.isTimerActive && voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking && (
                 <div className="mb-3 flex items-center justify-center gap-3">
                   <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${questionTimer.secondsLeft <= 10 ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' : questionTimer.secondsLeft <= 20 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'}`}>
                     <Timer size={16} className={questionTimer.secondsLeft <= 10 ? 'text-red-500 animate-pulse' : questionTimer.secondsLeft <= 20 ? 'text-amber-500' : 'text-emerald-500'} />
                     <span className={`text-lg font-mono font-bold ${questionTimer.secondsLeft <= 10 ? 'text-red-600 dark:text-red-400' : questionTimer.secondsLeft <= 20 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{questionTimer.secondsLeft}s</span>
-                    <span className={`text-xs ${questionTimer.secondsLeft <= 10 ? 'text-red-500' : questionTimer.secondsLeft <= 20 ? 'text-amber-500' : 'text-emerald-500'}`}>to answer</span>
+                    <span className={`text-xs ${questionTimer.secondsLeft <= 10 ? 'text-red-500' : questionTimer.secondsLeft <= 20 ? 'text-amber-500' : 'text-emerald-500'}`}>{STRINGS.candidateInterview.controls.toAnswer}</span>
                   </div>
-                  {questionTimer.consecutiveSkips > 0 && <span className="text-xs text-amber-500 font-medium">Skipped: {questionTimer.consecutiveSkips}/{APP_CONFIG.INTERVIEW_MAX_CONSECUTIVE_SKIPS}</span>}
+                  {questionTimer.consecutiveSkips > 0 && <span className="text-xs text-amber-500 font-medium">{STRINGS.candidateInterview.controls.skipped(questionTimer.consecutiveSkips, APP_CONFIG.INTERVIEW_MAX_CONSECUTIVE_SKIPS)}</span>}
                 </div>
               )}
               {/* The control bar.
@@ -1747,7 +1716,7 @@ export function InterviewPage() {
                   big enough to hit, and sits on its own surface so it reads as
                   the place you act rather than more page. */}
               <div className="mx-auto w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900 p-3 shadow-xl sm:p-4 dark:bg-slate-950">
-                {voiceInterview.state === 'active' && !voiceInterview.isPlaying && (
+                {voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking && (
                   <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
                     <button
                       onClick={() => { if (!voiceInterview.isWsConnected) showToast(MESSAGES.interview.stillConnecting, 'info'); else voiceInterview.startAnswering(); }}
@@ -1756,7 +1725,7 @@ export function InterviewPage() {
                     >
                       <Mic size={24} className="shrink-0" />
                       <span className="truncate text-sm font-semibold sm:text-base">
-                        {voiceInterview.isWsConnected ? 'Start answering' : 'Connecting…'}
+                        {voiceInterview.isWsConnected ? STRINGS.candidateInterview.controls.startAnswering : STRINGS.candidateInterview.controls.connecting}
                       </span>
                     </button>
                     <button
@@ -1764,12 +1733,12 @@ export function InterviewPage() {
                       className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-4 text-white transition-colors hover:bg-white/20 active:scale-[0.98] sm:px-5"
                     >
                       <Volume2 size={20} className="shrink-0" />
-                      <span className="whitespace-nowrap text-sm font-medium">Hear it again</span>
+                      <span className="whitespace-nowrap text-sm font-medium">{STRINGS.candidateInterview.controls.hearAgain}</span>
                     </button>
                   </div>
                 )}
 
-                {voiceInterview.state === 'active' && voiceInterview.isPlaying && (
+                {voiceInterview.state === 'active' && voiceInterview.isInterviewerSpeaking && (
                   <div className="flex items-center justify-center gap-3 py-3">
                     <span className="flex gap-1">
                       <span className="h-4 w-1 animate-pulse rounded-full bg-emerald-400" />
@@ -1777,7 +1746,7 @@ export function InterviewPage() {
                       <span className="h-4 w-1 animate-pulse rounded-full bg-emerald-400 [animation-delay:300ms]" />
                     </span>
                     <span className="text-base font-medium text-white">
-                      The interviewer is speaking
+                      {STRINGS.candidateInterview.controls.interviewerSpeaking}
                     </span>
                   </div>
                 )}
@@ -1786,21 +1755,30 @@ export function InterviewPage() {
                   <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
                     <button
                       onClick={() => voiceInterview.submitAnswer()}
-                      className="flex flex-1 items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 px-6 py-4 text-white shadow-lg ring-2 ring-rose-500/20 transition-all hover:shadow-rose-500/30 hover:shadow-xl active:scale-[0.98]"
+                      disabled={voiceInterview.isSubmitting}
+                      className="flex flex-1 items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 px-6 py-4 text-white shadow-lg ring-2 ring-rose-500/20 transition-all hover:shadow-rose-500/30 hover:shadow-xl active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
                     >
-                      <Square size={22} className="shrink-0" />
-                      <span className="truncate text-sm font-semibold sm:text-base">Stop &amp; submit</span>
+                      {voiceInterview.isSubmitting ? (
+                        <Loader2 size={22} className="shrink-0 animate-spin" />
+                      ) : (
+                        <Square size={22} className="shrink-0" />
+                      )}
+                      <span className="truncate text-sm font-semibold sm:text-base">
+                        {voiceInterview.isSubmitting
+                          ? STRINGS.candidateInterview.controls.submitting
+                          : STRINGS.candidateInterview.controls.stopAndSubmit}
+                      </span>
                     </button>
                     <div className="flex shrink-0 items-center justify-center gap-3 px-1">
                       <span className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-400" />
-                        <span className="text-sm font-medium text-red-300">Recording</span>
+                        <span className="text-sm font-medium text-red-300">{STRINGS.candidateInterview.controls.recording}</span>
                       </span>
                       <span
                         className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-sm font-semibold ${answerSecondsLeft <= 30 ? 'bg-red-500/25 text-red-200' : answerSecondsLeft <= 60 ? 'bg-amber-500/25 text-amber-200' : 'bg-white/10 text-white'}`}
                       >
                         <Timer size={14} className={answerSecondsLeft <= 30 ? 'animate-pulse' : ''} />
-                        {Math.floor(answerSecondsLeft / 60)}:{String(answerSecondsLeft % 60).padStart(2, '0')}
+                        {formatClock(APP_CONFIG.INTERVIEW_ANSWER_TIMEOUT_SECONDS - answerSecondsLeft)}
                       </span>
                     </div>
                   </div>
@@ -1809,23 +1787,23 @@ export function InterviewPage() {
                 {voiceInterview.state === 'processing' && (
                   <div className="flex items-center justify-center gap-2 py-3 text-slate-300">
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    <span className="text-base">The interviewer is thinking…</span>
+                    <span className="text-base">{STRINGS.candidateInterview.controls.interviewerThinking}</span>
                   </div>
                 )}
 
                 {/* Readable rather than a 12px aside. This is the instruction
                     that tells a candidate what to do next. */}
                 <p className="mt-3 text-center text-xs text-slate-300 sm:text-sm">
-                  {voiceInterview.state === 'active' && !voiceInterview.isPlaying &&
+                  {voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking &&
                     (voiceInterview.isCodingQuestion
-                      ? 'Write your code above, then tap the mic to talk through it. Stop when you are done — both are submitted together.'
-                      : 'Tap the mic when you are ready to answer.')}
-                  {voiceInterview.state === 'active' && voiceInterview.isPlaying &&
-                    'Listen to the question — the mic unlocks when they finish.'}
+                      ? STRINGS.candidateInterview.controls.hintCodingTapMic
+                      : STRINGS.candidateInterview.controls.hintTapMic)}
+                  {voiceInterview.state === 'active' && voiceInterview.isInterviewerSpeaking &&
+                    STRINGS.candidateInterview.controls.hintListen}
                   {voiceInterview.state === 'answering' &&
                     (voiceInterview.isCodingQuestion
-                      ? 'Explaining your code. Tap stop when you have finished.'
-                      : 'Speak clearly, then tap stop when you have finished.')}
+                      ? STRINGS.candidateInterview.controls.hintCodingSpeak
+                      : STRINGS.candidateInterview.controls.hintSpeak)}
                 </p>
               </div>
             </div>
@@ -1843,8 +1821,8 @@ export function InterviewPage() {
               something that was never started. */}
           {PROCTORING_CONFIG.recording.screen.required && (
           <div className="p-3 rounded-xl bg-[var(--surface1)] border border-[var(--border)]">
-            <h3 className="text-[10px] font-bold text-[var(--textSecondary)] uppercase tracking-wider mb-2 flex items-center justify-between">
-              Shared Screen
+            <h3 className="text-xs font-bold text-[var(--textSecondary)] uppercase tracking-wider mb-2 flex items-center justify-between">
+              {STRINGS.candidateInterview.sidebar.sharedScreen}
               {isScreenRecording && (
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               )}
@@ -1864,8 +1842,8 @@ export function InterviewPage() {
               {!screenStream && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 text-center">
                   <MonitorUp size={18} className="text-[var(--textTertiary)]" />
-                  <span className="text-[10px] text-[var(--textTertiary)]">
-                    Screen is not being shared
+                  <span className="text-xs text-[var(--textTertiary)]">
+                    {STRINGS.candidateInterview.sidebar.screenNotShared}
                   </span>
                 </div>
               )}
@@ -1876,8 +1854,8 @@ export function InterviewPage() {
                 nothing is being captured — so it reads as an alert, says why
                 it most likely happened, and offers the fix. */}
             {screenStream ? (
-              <p className="mt-2 text-[10px] text-[var(--textTertiary)]">
-                This is what is being recorded and sent with your interview.
+              <p className="mt-2 text-xs text-[var(--textTertiary)]">
+                {STRINGS.candidateInterview.sidebar.screenBeingRecorded}
               </p>
             ) : (
               <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 dark:border-amber-700/60 dark:bg-amber-900/25">
@@ -1885,12 +1863,12 @@ export function InterviewPage() {
                   <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-500" />
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">
-                      Screen sharing stopped
+                      {STRINGS.candidateInterview.sidebar.shareStopped}
                     </p>
-                    <p className="mt-0.5 text-[10px] leading-snug text-amber-700 dark:text-amber-300">
+                    <p className="mt-0.5 text-xs leading-snug text-amber-700 dark:text-amber-300">
                       {screenShareStoppedEarly
-                        ? 'You pressed Stop sharing, or the window you picked was closed. Nothing is being recorded until you share again.'
-                        : 'Your screen is not being recorded. Share it to carry on.'}
+                        ? STRINGS.candidateInterview.sidebar.shareStoppedEarly
+                        : STRINGS.candidateInterview.sidebar.shareNotRecorded}
                     </p>
                   </div>
                 </div>
@@ -1905,11 +1883,10 @@ export function InterviewPage() {
                   ) : (
                     <MonitorUp size={12} />
                   )}
-                  {resharingScreen ? 'Waiting for your choice…' : 'Share my screen again'}
+                  {resharingScreen ? STRINGS.candidateInterview.sidebar.waitingForChoice : STRINGS.candidateInterview.sidebar.shareAgain}
                 </button>
-                <p className="mt-1 text-[9px] leading-snug text-amber-700/80 dark:text-amber-300/80">
-                  What you shared before this is already saved. Pick the same screen to keep the
-                  recording consistent.
+                <p className="mt-1 text-[11px] leading-snug text-amber-700/80 dark:text-amber-300/80">
+                  {STRINGS.candidateInterview.sidebar.shareAgainNote}
                 </p>
               </div>
             )}
@@ -1924,77 +1901,37 @@ export function InterviewPage() {
               <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
             </div>
             <div className="flex items-center gap-1 text-xs text-[var(--textSecondary)]">
-              <Video size={12} /> <span>{isVideoRecording ? 'Recording' : 'Camera'}</span>
+              <Video size={12} /> <span>{isVideoRecording ? STRINGS.candidateInterview.sidebar.cameraRecording : STRINGS.candidateInterview.sidebar.camera}</span>
               {isVideoRecording && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
             </div>
           </div>
           )}
 
-          {/* Mobile stream (second view) - Promoted to top of sidebar */}
+          {/* The phone, as a status. There is no live picture: the phone records and uploads on its own, and keeps a
+              photo only when a second person, or nobody, is in its view. */}
           <div className="p-3 rounded-xl bg-[var(--surface1)] border border-[var(--border)]">
-            <h3 className="text-[10px] font-bold text-[var(--textSecondary)] uppercase tracking-wider mb-2 flex items-center justify-between">
-              Mobile Feed (Proctoring)
-              {mobileConnected && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+            <h3 className="text-xs font-bold text-[var(--textSecondary)] uppercase tracking-wider mb-2 flex items-center justify-between">
+              {STRINGS.candidateInterview.sidebar.phoneCamera}
+              {mobileVerified && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
             </h3>
-            <div className={`aspect-video bg-black rounded-lg overflow-hidden relative shadow-inner ${!mobileConnected ? 'border-2 border-dashed border-[var(--border)]' : ''}`}>
-              {!mobileConnected ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-[var(--textTertiary)] p-4 text-center">
-                  <Smartphone size={24} className="mb-2 opacity-30" />
-                  {/* "Waiting" was shown even to candidates who had explicitly
-                      ticked the waiver, so a deliberate choice looked like a
-                      pairing that had failed and was still retrying. */}
-                  <p className="text-[10px] leading-tight">
-                    {mobileSkipped
-                      ? 'Running without a second camera.'
-                      : 'Waiting for mobile proctoring stream...'}
-                  </p>
-                </div>
-              ) : (
-                <video
-                  ref={mobileVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-              )}
+            <div className="flex items-center gap-2 text-sm">
+              <Smartphone
+                size={18}
+                className={mobileVerified ? 'flex-shrink-0 text-emerald-500' : 'flex-shrink-0 text-[var(--textTertiary)]'}
+              />
+              <p className={mobileVerified && !mobileSkipped && !mobileConnected ? 'font-medium text-red-600 dark:text-red-400' : mobileVerified ? 'font-medium text-emerald-600 dark:text-emerald-400' : 'text-[var(--textSecondary)]'}>
+                {mobileVerified && !mobileSkipped && !mobileConnected
+                  ? STRINGS.candidateInterview.sidebar.phoneDisconnected
+                  : mobileVerified && !mobileSkipped
+                  ? STRINGS.candidateInterview.sidebar.phoneConnectedRecording
+                  : mobileSkipped
+                    ? STRINGS.candidateInterview.sidebar.phoneSkipped
+                    : mobileConnected
+                      ? STRINGS.candidateInterview.sidebar.phoneConnected
+                      : STRINGS.candidateInterview.sidebar.phoneWaiting}
+              </p>
             </div>
-            {mobileConnected && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span className="text-[10px] text-emerald-500 font-semibold">SECURE CONNECTION ACTIVE</span>
-              </div>
-            )}
 
-            {/* Offered only once the phone's microphone has actually arrived —
-                a control for a source that is not there yet is a control that
-                does nothing when pressed. Disabled mid-answer because the swap
-                lands on the next recording, and a switch that silently takes
-                effect later reads as a switch that failed. */}
-            {mobileAudioAvailable && (
-              <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[var(--surface1)] px-2 py-1.5">
-                <span className="text-[10px] font-medium text-[var(--textSecondary)]">
-                  Microphone
-                </span>
-                <div className="flex items-center gap-1">
-                  {(['device', 'phone'] as const).map((source) => (
-                    <button
-                      key={source}
-                      type="button"
-                      disabled={voiceInterview.isRecording}
-                      onClick={() => setMicSource(source)}
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                        micSource === source
-                          ? 'bg-[var(--primary)] text-white'
-                          : 'text-[var(--textSecondary)] hover:bg-[var(--surface2)]'
-                      }`}
-                    >
-                      {source === 'device' ? 'This device' : 'Phone'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* The counters that used to live here — face warnings, fullscreen
@@ -2010,20 +1947,20 @@ export function InterviewPage() {
               {lookingAway && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <EyeOff size={14} className="text-amber-500 flex-shrink-0" />
-                  <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">Eyes back on the screen</span>
+                  <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">{STRINGS.candidateInterview.sidebar.eyesBack}</span>
                 </div>
               )}
               {multipleFaces && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
                   <Users size={14} className="text-red-500 flex-shrink-0" />
-                  <span className="text-xs text-red-600 dark:text-red-400 font-medium">More than one person in frame</span>
+                  <span className="text-xs text-red-600 dark:text-red-400 font-medium">{STRINGS.candidateInterview.sidebar.multiplePeople}</span>
                 </div>
               )}
             </div>
           )}
 
           {voiceInterview.isRecording && (
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20"><Mic size={14} className="text-red-500" /><span className="text-xs text-red-600 dark:text-red-400 font-medium">Audio Recording Active</span></div>
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20"><Mic size={14} className="text-red-500" /><span className="text-xs text-red-600 dark:text-red-400 font-medium">{STRINGS.candidateInterview.sidebar.audioActive}</span></div>
           )}
         </div>
       </div>

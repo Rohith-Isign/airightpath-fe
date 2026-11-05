@@ -54,6 +54,17 @@ export const jobApplicationService = {
     return api.post<ScreeningRun>(ENDPOINTS.JOB_APPLICATIONS.SCREEN, data);
   },
 
+  /**
+   * What candidates would score, with nothing changed: no status, no stored score. Each row's `matchPercent` is the
+   * score, or null when the resume could not be read.
+   */
+  checkScores(data: { jobPrefix: string; emails?: string[] }) {
+    return api.post<{ email: string; matchPercent: number | null; reason?: string }[]>(
+      ENDPOINTS.JOB_APPLICATIONS.SCORE_CHECK,
+      data,
+    );
+  },
+
   sendAckMail(data: { emails: string[]; jobPrefix: string; dateTime?: string; content?: string }) {
     return api.post<ApiResponse<unknown>>(ENDPOINTS.JOB_APPLICATIONS.SEND_ACK_MAIL, data);
   },

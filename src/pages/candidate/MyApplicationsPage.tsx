@@ -17,6 +17,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { STRINGS } from '@/constants/strings';
 import { jobApplicationService } from '@/services/job-application.service';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -29,27 +30,29 @@ import { formatDate } from '@/utils/format.utils';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { hasReferral } from '@/utils/referral.utils';
 import { ReferralFields } from '@/components/application/ReferralFields';
+import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
+import { useResumeViewer } from '@/hooks/useResumeViewer';
 import type { JobApplicationDTO } from '@/types/job.types';
 
 const STATUS_CONFIG: Record<
   string,
   { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'primary' | 'secondary' }
 > = {
-  APPLIED: { label: 'Applied', variant: 'info' },
-  SHORTLISTED: { label: 'Shortlisted', variant: 'success' },
-  ACKNOWLEDGED: { label: 'Acknowledged', variant: 'primary' },
-  ACKNOWLEDGED_BACK: { label: 'Acknowledged Back', variant: 'primary' },
-  RECONFIRMED: { label: 'Reconfirmed', variant: 'primary' },
-  EXAM_SENT: { label: 'Exam Sent', variant: 'warning' },
-  EXAM_COMPLETED: { label: 'Exam Completed', variant: 'info' },
-  INTERVIEW_SCHEDULED: { label: 'Interview Scheduled', variant: 'primary' },
-  INTERVIEW_COMPLETED: { label: 'Interview Completed', variant: 'info' },
-  SELECTED: { label: 'Selected', variant: 'success' },
-  REJECTED: { label: 'Rejected', variant: 'error' },
+  APPLIED: { label: STRINGS.myApplications.statusLabels.APPLIED, variant: 'info' },
+  SHORTLISTED: { label: STRINGS.myApplications.statusLabels.SHORTLISTED, variant: 'success' },
+  ACKNOWLEDGED: { label: STRINGS.myApplications.statusLabels.ACKNOWLEDGED, variant: 'primary' },
+  ACKNOWLEDGED_BACK: { label: STRINGS.myApplications.statusLabels.ACKNOWLEDGED_BACK, variant: 'primary' },
+  RECONFIRMED: { label: STRINGS.myApplications.statusLabels.RECONFIRMED, variant: 'primary' },
+  EXAM_SENT: { label: STRINGS.myApplications.statusLabels.EXAM_SENT, variant: 'warning' },
+  EXAM_COMPLETED: { label: STRINGS.myApplications.statusLabels.EXAM_COMPLETED, variant: 'info' },
+  INTERVIEW_SCHEDULED: { label: STRINGS.myApplications.statusLabels.INTERVIEW_SCHEDULED, variant: 'primary' },
+  INTERVIEW_COMPLETED: { label: STRINGS.myApplications.statusLabels.INTERVIEW_COMPLETED, variant: 'info' },
+  SELECTED: { label: STRINGS.myApplications.statusLabels.SELECTED, variant: 'success' },
+  REJECTED: { label: STRINGS.myApplications.statusLabels.REJECTED, variant: 'error' },
 };
 
 function getStatusBadge(status: string | undefined) {
-  const config = STATUS_CONFIG[status ?? ''] ?? { label: status ?? 'Unknown', variant: 'default' as const };
+  const config = STATUS_CONFIG[status ?? ''] ?? { label: status ?? STRINGS.myApplications.unknownStatus, variant: 'default' as const };
   return <Badge variant={config.variant} size="sm">{config.label}</Badge>;
 }
 
@@ -62,6 +65,8 @@ export function MyApplicationsPage() {
   const [searchQuery, setSearchQuery] = usePersistentState('myApplications:searchQuery', '');
   const [filterStatus, setFilterStatus] = usePersistentState('myApplications:filterStatus', '');
   const [selectedApp, setSelectedApp] = useState<JobApplicationDTO | null>(null);
+  // The resume sent with an application, opened from its details.
+  const resumeViewer = useResumeViewer();
 
   useEffect(() => {
     async function fetchApplications() {
@@ -85,7 +90,13 @@ export function MyApplicationsPage() {
   }, [applications]);
 
   const filteredApplications = useMemo(() => {
-    return applications.filter((app) => {
+    // Newest first: the application made last is the first one listed. The id breaks ties and stands in when a
+    // row has no creation time.
+    const newestFirst = [...applications].sort((a, b) => {
+      const byTime = (Date.parse(b.createdAt ?? '') || 0) - (Date.parse(a.createdAt ?? '') || 0);
+      return byTime || (b.id ?? 0) - (a.id ?? 0);
+    });
+    return newestFirst.filter((app) => {
       const matchesSearch =
         !searchQuery ||
         (app.jobTitle ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -98,21 +109,6 @@ export function MyApplicationsPage() {
     });
   }, [applications, searchQuery, filterStatus]);
 
-  const handleEdit = (app: JobApplicationDTO) => {
-    navigate(ROUTES.CANDIDATE.APPLY, {
-      state: {
-        job: {
-          jobPrefix: app.jobPrefix,
-          jobTitle: app.jobTitle ?? app.jobPrefix,
-          companyName: app.companyName ?? '',
-          applicationDeadline: app.applicationDeadline ?? '',
-          role: app.jobRole ?? '',
-        },
-        existingApplication: app,
-      },
-    });
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -124,9 +120,9 @@ export function MyApplicationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-[var(--text)]">My Applications</h1>
+        <h1 className="text-3xl font-bold text-[var(--text)]">{STRINGS.myApplications.title}</h1>
         <p className="mt-1 text-[var(--textSecondary)]">
-          Track the status of all your job applications
+          {STRINGS.myApplications.subtitle}
         </p>
       </div>
 
@@ -134,7 +130,7 @@ export function MyApplicationsPage() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
           <Input
-            placeholder="Search by job title, company, or prefix..."
+            placeholder={STRINGS.myApplications.searchPlaceholder}
             leftIcon={<Search size={18} />}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -143,7 +139,7 @@ export function MyApplicationsPage() {
         <div className="sm:w-48">
           <Select
             options={[
-              { value: '', label: 'All Statuses' },
+              { value: '', label: STRINGS.myApplications.allStatuses },
               ...statuses.map((status) => ({
                 value: status,
                 label: STATUS_CONFIG[status]?.label ?? status,
@@ -157,7 +153,7 @@ export function MyApplicationsPage() {
 
       {/* Results Count */}
       <p className="text-sm text-[var(--textSecondary)]">
-        Showing {filteredApplications.length} of {applications.length} applications
+        {STRINGS.myApplications.showing(filteredApplications.length, applications.length)}
       </p>
 
       {/* Applications List */}
@@ -165,16 +161,16 @@ export function MyApplicationsPage() {
         <div className="text-center py-16">
           <FileText className="w-12 h-12 mx-auto text-[var(--textTertiary)] mb-4" />
           <p className="text-lg font-medium text-[var(--text)]">
-            {applications.length === 0 ? 'No applications yet' : 'No matching applications'}
+            {applications.length === 0 ? STRINGS.myApplications.emptyTitle : STRINGS.myApplications.noMatchTitle}
           </p>
           <p className="text-[var(--textSecondary)] mt-1">
             {applications.length === 0
-              ? 'Browse available jobs and start applying.'
-              : 'Try adjusting your search or filter criteria.'}
+              ? STRINGS.myApplications.emptyBody
+              : STRINGS.myApplications.noMatchBody}
           </p>
           {applications.length === 0 && (
             <Button className="mt-4" onClick={() => navigate(ROUTES.CANDIDATE.EVENTS)}>
-              Browse Jobs
+              {STRINGS.myApplications.browseJobs}
             </Button>
           )}
         </div>
@@ -206,31 +202,31 @@ export function MyApplicationsPage() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-[var(--textSecondary)]">
                       <Briefcase size={14} className="flex-shrink-0" />
-                      <span>Ref: {app.jobPrefix}</span>
+                      <span>{STRINGS.myApplications.ref(app.jobPrefix)}</span>
                     </div>
                     {app.jobRole && (
                       <div className="flex items-center gap-2 text-sm text-[var(--textSecondary)]">
                         <Tag size={14} className="flex-shrink-0" />
-                        <span>Role: {app.jobRole}</span>
+                        <span>{STRINGS.myApplications.role(app.jobRole)}</span>
                       </div>
                     )}
                     {app.applicationDeadline && (
                       <div className="flex items-center gap-2 text-sm text-[var(--textSecondary)]">
                         <Calendar size={14} className="flex-shrink-0" />
-                        <span>Deadline: {formatDate(app.applicationDeadline)}</span>
+                        <span>{STRINGS.myApplications.deadline(formatDate(app.applicationDeadline))}</span>
                       </div>
                     )}
                     {app.resumeFileName && (
                       <div className="flex items-center gap-2 text-sm text-[var(--textSecondary)]">
                         <FileText size={14} className="flex-shrink-0" />
-                        <span className="truncate">Resume: {app.resumeFileName}</span>
+                        <span className="truncate">{STRINGS.myApplications.resume(app.resumeFileName)}</span>
                       </div>
                     )}
                     {hasReferral(app.referralName, app.referralId) && (
                       <div className="flex items-center gap-2 text-sm text-[var(--textSecondary)]">
                         <UserPlus size={14} className="flex-shrink-0" />
                         <span className="truncate">
-                          Referral: {app.referralName?.trim() || app.referralId?.trim()}
+                          {STRINGS.myApplications.referral(app.referralName?.trim() || app.referralId?.trim() || '')}
                         </span>
                       </div>
                     )}
@@ -244,14 +240,7 @@ export function MyApplicationsPage() {
                       onClick={() => setSelectedApp(app)}
                       leftIcon={<ExternalLink size={16} />}
                     >
-                      View
-                    </Button>
-                    <Button
-                      className="flex-1"
-                      onClick={() => handleEdit(app)}
-                      leftIcon={<FileText size={16} />}
-                    >
-                      Edit
+                      {STRINGS.myApplications.view}
                     </Button>
                   </div>
                 </div>
@@ -261,20 +250,22 @@ export function MyApplicationsPage() {
         </div>
       )}
 
+      {/* The resume sent with the application, on top of its details */}
+      {resumeViewer.resume && (
+        <ResumeViewerModal resume={resumeViewer.resume} onClose={resumeViewer.close} />
+      )}
+
       {/* Application Details Modal */}
       {selectedApp && (
         <Modal
           isOpen={!!selectedApp}
           onClose={() => setSelectedApp(null)}
-          title="Application Details"
+          title={STRINGS.myApplications.detailsTitle}
           size="lg"
           footer={
             <>
               <Button variant="ghost" onClick={() => setSelectedApp(null)}>
-                Close
-              </Button>
-              <Button onClick={() => { setSelectedApp(null); handleEdit(selectedApp); }}>
-                Edit Application
+                {STRINGS.myApplications.close}
               </Button>
             </>
           }
@@ -301,12 +292,12 @@ export function MyApplicationsPage() {
 
             {/* Personal Information */}
             <div>
-              <h4 className="text-sm font-semibold text-[var(--text)] mb-3">Personal Information</h4>
+              <h4 className="text-sm font-semibold text-[var(--text)] mb-3">{STRINGS.myApplications.personalInformation}</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-2 text-sm">
                   <User size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Full Name</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.myApplications.fullName}</p>
                     <p className="text-[var(--text)] font-medium">
                       {selectedApp.firstName} {selectedApp.lastName}
                     </p>
@@ -315,7 +306,7 @@ export function MyApplicationsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Mail size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Email</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.myApplications.email}</p>
                     <p className="text-[var(--text)] font-medium">
                       {selectedApp.email || selectedApp.userEmail}
                     </p>
@@ -324,30 +315,30 @@ export function MyApplicationsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Phone size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Mobile</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.myApplications.mobile}</p>
                     <p className="text-[var(--text)] font-medium">
-                      {selectedApp.mobileNumber || 'N/A'}
+                      {selectedApp.mobileNumber || STRINGS.myApplications.notAvailable}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Clock size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Experience</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.myApplications.experience}</p>
                     <p className="text-[var(--text)] font-medium">{selectedApp.experience}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <MapPin size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Address</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.myApplications.address}</p>
                     <p className="text-[var(--text)] font-medium">{selectedApp.address}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Briefcase size={16} className="text-[var(--primary)] flex-shrink-0" />
                   <div>
-                    <p className="text-[var(--textTertiary)] text-xs">Applied Role</p>
+                    <p className="text-[var(--textTertiary)] text-xs">{STRINGS.myApplications.appliedRole}</p>
                     <p className="text-[var(--text)] font-medium">{selectedApp.jobRole}</p>
                   </div>
                 </div>
@@ -361,39 +352,39 @@ export function MyApplicationsPage() {
 
             {/* Application Status */}
             <div>
-              <h4 className="text-sm font-semibold text-[var(--text)] mb-3">Application Status</h4>
+              <h4 className="text-sm font-semibold text-[var(--text)] mb-3">{STRINGS.myApplications.applicationStatus}</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
-                  <span className="text-sm text-[var(--textSecondary)]">Status</span>
+                  <span className="text-sm text-[var(--textSecondary)]">{STRINGS.myApplications.status}</span>
                   {getStatusBadge(selectedApp.status)}
                 </div>
                 {selectedApp.confirmationStatus && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
-                    <span className="text-sm text-[var(--textSecondary)]">Confirmation</span>
+                    <span className="text-sm text-[var(--textSecondary)]">{STRINGS.myApplications.confirmation}</span>
                     <span className="text-sm font-medium text-[var(--text)]">{selectedApp.confirmationStatus}</span>
                   </div>
                 )}
                 {selectedApp.acknowledgedStatus && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
-                    <span className="text-sm text-[var(--textSecondary)]">Acknowledged</span>
+                    <span className="text-sm text-[var(--textSecondary)]">{STRINGS.myApplications.acknowledged}</span>
                     <span className="text-sm font-medium text-[var(--text)]">{selectedApp.acknowledgedStatus}</span>
                   </div>
                 )}
                 {selectedApp.reconfirmationStatus && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
-                    <span className="text-sm text-[var(--textSecondary)]">Reconfirmation</span>
+                    <span className="text-sm text-[var(--textSecondary)]">{STRINGS.myApplications.reconfirmation}</span>
                     <span className="text-sm font-medium text-[var(--text)]">{selectedApp.reconfirmationStatus}</span>
                   </div>
                 )}
                 {selectedApp.writtenTestStatus && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
-                    <span className="text-sm text-[var(--textSecondary)]">Written Test</span>
+                    <span className="text-sm text-[var(--textSecondary)]">{STRINGS.myApplications.writtenTest}</span>
                     <span className="text-sm font-medium text-[var(--text)]">{selectedApp.writtenTestStatus}</span>
                   </div>
                 )}
                 {selectedApp.interview && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
-                    <span className="text-sm text-[var(--textSecondary)]">Interview</span>
+                    <span className="text-sm text-[var(--textSecondary)]">{STRINGS.myApplications.interview}</span>
                     <span className="text-sm font-medium text-[var(--text)]">{selectedApp.interview}</span>
                   </div>
                 )}
@@ -405,9 +396,24 @@ export function MyApplicationsPage() {
               <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
                 <FileText size={20} className="text-[var(--primary)] flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text)]">Resume</p>
+                  <p className="text-sm font-medium text-[var(--text)]">{STRINGS.myApplications.resumeHeading}</p>
                   <p className="text-xs text-[var(--textSecondary)] truncate">{selectedApp.resumeFileName}</p>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  isLoading={resumeViewer.loading}
+                  leftIcon={<ExternalLink size={15} />}
+                  onClick={() =>
+                    resumeViewer.open(
+                      selectedApp.email || selectedApp.userEmail,
+                      selectedApp.resumeFileName,
+                      selectedApp.jobPrefix,
+                    )
+                  }
+                >
+                  {STRINGS.myApplications.view}
+                </Button>
               </div>
             )}
 
@@ -416,7 +422,7 @@ export function MyApplicationsPage() {
               <div className="flex items-center gap-2 p-3 rounded-lg bg-[var(--surface1)] border border-[var(--border)]">
                 <Calendar size={16} className="text-[var(--primary)] flex-shrink-0" />
                 <span className="text-sm text-[var(--text)]">
-                  Application Deadline: {formatDate(selectedApp.applicationDeadline)}
+                  {STRINGS.myApplications.applicationDeadline(formatDate(selectedApp.applicationDeadline))}
                 </span>
               </div>
             )}

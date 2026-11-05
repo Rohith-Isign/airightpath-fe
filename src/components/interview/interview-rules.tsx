@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import {
   Video,
   Monitor,
@@ -13,7 +14,6 @@ import {
   BatteryCharging,
   BellOff,
 } from 'lucide-react';
-import { APP_CONFIG } from '@/config/app.config';
 import { PROCTORING_CONFIG } from '@/config/proctoring.config';
 
 /** One rule as the instructions and the interview screen both render it. */
@@ -38,63 +38,63 @@ export function buildProctoringRules(): ProctoringRule[] {
 
   rules.push({
     icon: <Monitor size={18} />,
-    text: 'Take this interview on a desktop or laptop with a webcam. Phones and tablets are not supported.',
+    text: STRINGS.rules.device,
   });
   rules.push({
     icon: <Clock size={18} />,
-    text: `The interview lasts up to ${APP_CONFIG.INTERVIEW_TIMER_MINUTES} minutes and ends automatically when the timer reaches ${APP_CONFIG.INTERVIEW_TIMER_MINUTES}:00. The timer counts up from 0:00.`,
+    text: STRINGS.rules.duration,
   });
   rules.push({
     icon: <Mic size={18} />,
-    text: 'You speak with an AI interviewer. Click the microphone to answer, and stop when you are done — your answers are transcribed live.',
+    text: STRINGS.rules.speak,
   });
 
   if (p.camera.required) {
     rules.push({
       icon: <Camera size={18} />,
-      text: 'Your camera must stay on for the whole interview. If it is switched off or blocked, the interview cannot continue.',
+      text: STRINGS.rules.cameraOn,
     });
   }
   if (p.identityPhoto.required) {
     rules.push({
       icon: <Camera size={18} />,
-      text: 'One photo of you is taken before the interview starts, to confirm who sat it.',
+      text: STRINGS.rules.photo,
     });
   }
   if (p.roomScan.required) {
     rules.push({
       icon: <ScanLine size={18} />,
-      text: 'You will be asked to turn slowly on the spot and scan your room with your camera before you begin.',
+      text: STRINGS.rules.roomScan,
     });
   }
   if (p.recording.camera.required) {
     rules.push({
       icon: <Video size={18} />,
-      text: 'Your camera and microphone are recorded for the whole interview and stored with your answers.',
+      text: STRINGS.rules.cameraRecorded,
     });
   }
   if (p.recording.screen.required) {
     rules.push({
       icon: <Monitor size={18} />,
-      text: 'Your screen is recorded for the whole interview. You will be asked to share it when the interview starts — share your entire screen, and do not stop the share.',
+      text: STRINGS.rules.screenRecorded,
     });
   }
   if (p.eyeDetection.enabled) {
     rules.push({
       icon: <Users size={18} />,
-      text: 'You must be alone and facing the screen. A second face in frame, or no face at all, is recorded as a warning.',
+      text: STRINGS.rules.alone,
     });
   }
   if (p.fullscreen.enabled) {
     rules.push({
       icon: <Maximize size={18} />,
-      text: 'The interview runs in fullscreen. Leaving fullscreen, or opening developer tools, is recorded as a warning.',
+      text: STRINGS.rules.fullscreen,
     });
   }
   if (p.tabSwitch.enabled) {
     rules.push({
       icon: <Monitor size={18} />,
-      text: 'Do not switch tabs, windows or applications during the interview. Each switch is recorded as a warning.',
+      text: STRINGS.rules.tabs,
     });
   }
 
@@ -104,7 +104,7 @@ export function buildProctoringRules(): ProctoringRule[] {
     // twice over: the number was a disabled threshold, and the server was
     // ending interviews at five of its own. Nothing ends an interview on a
     // warning count now — they are recorded, and a person reads them.
-    text: 'Warnings are recorded against your interview for a reviewer to read. They do not end it and they are not a score.',
+    text: STRINGS.rules.warnings,
   });
   rules.push({
     icon: <RotateCcw size={18} />,
@@ -112,19 +112,19 @@ export function buildProctoringRules(): ProctoringRule[] {
     // running and the camera checks stop — but no longer fatal, so the rule no
     // longer says it is. Telling a candidate their interview is unrecoverable
     // when it is not turns a recoverable blip into a panic.
-    text: 'Do not reload, close, or navigate away once the interview begins. If your connection drops or the page reloads, reopen the interview and it picks up where you left off — but leaving is recorded, and the clock keeps running.',
+    text: STRINGS.rules.noReload,
   });
   rules.push({
     icon: <Wifi size={18} />,
-    text: 'Use a stable internet connection. If it drops, the timer keeps running — reconnect on the same device and continue.',
+    text: STRINGS.rules.connection,
   });
   rules.push({
     icon: <BatteryCharging size={18} />,
-    text: 'Keep your device plugged in and disable sleep. A device that sleeps mid-interview is treated as leaving it.',
+    text: STRINGS.rules.power,
   });
   rules.push({
     icon: <BellOff size={18} />,
-    text: 'Close other applications and silence notifications. A call or pop-up that takes focus counts as leaving the interview.',
+    text: STRINGS.rules.distractions,
   });
 
   return rules;

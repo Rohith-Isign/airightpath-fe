@@ -129,6 +129,7 @@ function App() {
         <Route path="jobs" element={<AdminJobsPage />} />
         <Route path="jobs/create" element={<JobPostFormPage />} />
         <Route path="jobs/:jobPrefix/edit" element={<JobPostFormPage />} />
+        <Route path="jobs/:jobPrefix/view" element={<JobPostFormPage />} />
         <Route path="candidates" element={<CandidateDetailsPage />} />
         <Route path="users" element={<UserListPage />} />
         <Route path="question-bank" element={<QuestionBankPage />} />

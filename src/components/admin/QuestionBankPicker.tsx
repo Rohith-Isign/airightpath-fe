@@ -53,7 +53,10 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
   const [scope, setScope] = useState<'THIS' | 'ALL'>('THIS');
   const otherJobs = scope === 'ALL';
   const unusedOnly = show === 'UNUSED';
-  const [perLevel, setPerLevel] = useState('2');
+  // Coding is picked per difficulty level; an aptitude paper is simply a number of questions, so the figure means
+  // "in total" there. Asking for 30 and getting 90 (30 from each of three levels) is what this guards against.
+  const perLevelMode = type === 'CODING';
+  const [perLevel, setPerLevel] = useState(perLevelMode ? '2' : '30');
   const [pickKind, setPickKind] = useState<'UNUSED' | 'ASSIGNED' | 'ALL'>('UNUSED');
 
   useEffect(() => {
@@ -72,6 +75,7 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
         setScope(all.some((q) => q.jobPrefix === jobPrefix && q.timesAssigned === 0) ? 'THIS' : 'ALL');
         setShow('UNUSED');
         setDifficulty('ALL');
+        setPerLevel(type === 'CODING' ? '2' : '30');
       })
       .catch(() => !cancelled && setFailed(true))
       .finally(() => !cancelled && setLoading(false));
@@ -109,8 +113,9 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
     });
 
   /**
-   * N never-assigned questions from each difficulty level, easiest first, never more than the number of
-   * questions asked for. Questions with no level only count when no question has one.
+   * Coding: N questions from each difficulty level, easiest first.
+   * Aptitude: N questions in total, spread across the levels in turn, easiest first.
+   * Questions with no level only count when no question has one.
    */
   const fillPerLevel = () => {
     const n = Math.max(1, Math.floor(Number(perLevel) || 0));
@@ -121,12 +126,16 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
       (a, b) => rankOf(a) - rankOf(b) || a.localeCompare(b),
     );
     const byLevel = levels.map((level) =>
-      pickFrom.filter((q) => (q.difficulty || 'Unspecified') === level).slice(0, n).map((q) => q.id),
+      pickFrom
+        .filter((q) => (q.difficulty || 'Unspecified') === level)
+        .slice(0, perLevelMode ? n : undefined)
+        .map((q) => q.id),
     );
-    const limit = Infinity;
+    const limit = perLevelMode ? Infinity : n;
+    const rounds = perLevelMode ? n : Math.max(0, ...byLevel.map((list) => list.length));
     const ids: number[] = [];
     // One from each level in turn, so a short count still spans the levels instead of exhausting the first.
-    for (let round = 0; round < n && ids.length < limit; round++) {
+    for (let round = 0; round < rounds && ids.length < limit; round++) {
       for (const list of byLevel) {
         if (round < list.length && ids.length < limit) ids.push(list[round]);
       }
@@ -157,7 +166,7 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
           <span className="text-xs text-[var(--textSecondary)]">
             {canUse
               ? `${chosen.length} question${chosen.length === 1 ? '' : 's'} selected, in the order shown.`
-              : 'Pick the questions for the paper, or use the quick pick above.'}
+              : 'Pick the questions for the paper, or use Pick automatically above.'}
           </span>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>
@@ -176,87 +185,113 @@ export function QuestionBankPicker({ isOpen, onClose, jobPrefix, type, onUse }: 
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div className="flex items-start gap-2 rounded-lg bg-[var(--surface1)] p-3 text-xs text-[var(--textSecondary)]">
           <Info size={14} className="mt-0.5 flex-shrink-0 text-[var(--primary)]" />
           <p>
-            Decide how many questions the paper should have, tick that many on the left, then put them in the order
-            candidates should get them using the arrows on the right. Nothing is generated, so there is no waiting for
-            the AI. The paper is recorded against each candidate it is assigned to, so the bank can show who has seen
-            each question and how often.
+            Two ways to build the paper, and you can use both: let the page pick questions for you (step 1), then review
+            them and tick or untick questions yourself (step 2). Nothing is generated, so there is no waiting for the AI.
+            The paper is recorded against each candidate it is assigned to, so the bank can show who has seen each
+            question and how often.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border-2 border-[var(--primary)] bg-[var(--primary)]/5 p-3 text-sm text-[var(--text)]">
-          <Sparkles size={16} className="text-[var(--primary)]" />
-          <span className="font-medium">Quick pick</span>
-          <input
-            type="number"
-            min={1}
-            value={perLevel}
-            onChange={(e) => setPerLevel(e.target.value)}
-            aria-label="Questions per level"
-            className="h-9 w-16 rounded border border-[var(--border)] bg-transparent px-2"
-          />
-          <span>from each level, taken from</span>
-          <div className="w-52">
+        {/* Step 1: automatic */}
+        <section className="rounded-xl border-2 border-[var(--primary)] bg-[var(--primary)]/5 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-[var(--primary)]" />
+            <h3 className="text-sm font-semibold text-[var(--text)]">Step 1 · Pick automatically</h3>
+            <span className="rounded-full bg-[var(--surface1)] px-2 py-0.5 text-[11px] font-medium text-[var(--textSecondary)]">
+              Optional
+            </span>
+          </div>
+          <p className="text-xs text-[var(--textSecondary)]">
+            {perLevelMode
+              ? 'Takes the number you set from every difficulty level, easiest first. Replaces whatever is selected now.'
+              : 'Takes the number you set in total, spread across the difficulty levels, easiest first. Replaces whatever is selected now.'}
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[var(--textSecondary)]" htmlFor="quick-pick-count">
+                {perLevelMode ? 'Questions per level' : 'Total questions'}
+              </label>
+              <input
+                id="quick-pick-count"
+                type="number"
+                min={1}
+                value={perLevel}
+                onChange={(e) => setPerLevel(e.target.value)}
+                className="h-10 w-24 rounded-lg border border-[var(--border)] bg-[var(--cardBg)] px-3 text-sm text-[var(--text)]"
+              />
+            </div>
+            <div className="w-60">
+              <Select
+                label="Take them from"
+                value={pickKind}
+                onChange={(e) => setPickKind(e.target.value as typeof pickKind)}
+                options={[
+                  { value: 'UNUSED', label: 'Never-assigned questions' },
+                  { value: 'ASSIGNED', label: 'Already-assigned questions' },
+                  { value: 'ALL', label: 'Both' },
+                ]}
+              />
+            </div>
+            <Button
+              disabled={quickPool.length === 0}
+              onClick={fillPerLevel}
+              leftIcon={<Sparkles size={15} />}
+              title={
+                perLevelMode
+                  ? 'Replaces the selection with this many questions from each difficulty level'
+                  : 'Replaces the selection with this many questions in total, spread across the difficulty levels'
+              }
+            >
+              Pick automatically
+            </Button>
+          </div>
+        </section>
+
+        {/* Step 2: manual */}
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-[var(--text)]">Step 2 · Choose or adjust by hand</h3>
+            <span className="rounded-full bg-[var(--primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--primary)]">
+              {chosen.length} selected
+            </span>
+          </div>
+          <p className="text-xs text-[var(--textSecondary)]">
+            Questions picked automatically are already ticked below. Filter the bank to find more, tick or untick
+            questions, and use the arrows on the right to set the order candidates will get them in.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <Input label="Search" placeholder="Words in the question…" value={search} onChange={(e) => setSearch(e.target.value)} />
             <Select
-              aria-label="Kind of question to pick"
-              value={pickKind}
-              onChange={(e) => setPickKind(e.target.value as typeof pickKind)}
+              label="Difficulty"
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value)}
+              options={[{ value: 'ALL', label: 'Any level' }, ...difficulties.map((d) => ({ value: d, label: d }))]}
+            />
+            <Select
+              label="Show"
+              value={show}
+              onChange={(e) => setShow(e.target.value as typeof show)}
               options={[
-                { value: 'UNUSED', label: 'Never-assigned questions' },
-                { value: 'ASSIGNED', label: 'Already-assigned questions' },
+                { value: 'UNUSED', label: 'Only never-assigned' },
+                { value: 'ASSIGNED', label: 'Only already-assigned' },
                 { value: 'ALL', label: 'Both' },
               ]}
             />
+            <Select
+              label="Jobs"
+              value={scope}
+              onChange={(e) => setScope(e.target.value as typeof scope)}
+              options={[
+                { value: 'THIS', label: 'This job only' },
+                { value: 'ALL', label: 'All jobs' },
+              ]}
+            />
           </div>
-          <Button
-            size="sm"
-            disabled={quickPool.length === 0}
-            onClick={fillPerLevel}
-            title="Replaces the selection with this many questions from each difficulty level"
-          >
-            Pick
-          </Button>
-          <span className="text-xs text-[var(--textSecondary)]">The number of questions follows from this.</span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <Input
-            label="Number of questions"
-            value={String(chosen.length)}
-            readOnly
-            disabled
-            title="Counted from the questions you select"
-          />
-          <Input label="Search" placeholder="Words in the question…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <Select
-            label="Difficulty"
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-            options={[{ value: 'ALL', label: 'Any level' }, ...difficulties.map((d) => ({ value: d, label: d }))]}
-          />
-          <Select
-            label="Show"
-            value={show}
-            onChange={(e) => setShow(e.target.value as typeof show)}
-            options={[
-              { value: 'UNUSED', label: 'Only never-assigned' },
-              { value: 'ASSIGNED', label: 'Only already-assigned' },
-              { value: 'ALL', label: 'Both' },
-            ]}
-          />
-          <Select
-            label="Jobs"
-            value={scope}
-            onChange={(e) => setScope(e.target.value as typeof scope)}
-            options={[
-              { value: 'THIS', label: 'This job only' },
-              { value: 'ALL', label: 'All jobs' },
-            ]}
-          />
-        </div>
+        </section>
 
         {loading && (
           <div className="flex justify-center py-12">

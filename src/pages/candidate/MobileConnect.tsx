@@ -2,20 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PROCTORING_CONFIG } from '@/config/proctoring.config';
 import { MIC_AUDIO_CONSTRAINTS } from '@/config/audio.config';
-import { interviewWsService } from '@/services/interview-ws.service';
 import { APP_CONFIG } from '@/config/app.config';
 import axios from 'axios';
 import { useRemoteStreamRecorder } from '@/hooks/useRemoteStreamRecorder';
 import { mobileUploadService } from '@/services/mobile-upload.service';
 import { recordingSync } from '@/services/recording-sync.service';
+import { usePhoneProctor } from '@/hooks/usePhoneProctor';
 
 export default function MobileConnect() {
     const [searchParams] = useSearchParams();
     const token = searchParams.get('token');
     const [verified, setVerified] = useState(false);
-    const [streaming, setStreaming] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
-    const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
 
     const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
     /** What the room check said, so the candidate knows what to change. */
@@ -38,6 +36,8 @@ export default function MobileConnect() {
      * its indicator lit, until the candidate thought to close the tab.
      */
     const streamRef = useRef<MediaStream | null>(null);
+    /** Bumped to open the camera again after the candidate exited and came back. */
+    const [cameraRestart, setCameraRestart] = useState(0);
 
     /**
      * Whether the candidate has read the recording notice and agreed to share
@@ -51,8 +51,6 @@ export default function MobileConnect() {
     const [cameraDenied, setCameraDenied] = useState(false);
     /** The open camera. State as well as a ref, because the recorder has to react to it changing. */
     const [captureStream, setCaptureStream] = useState<MediaStream | null>(null);
-    /** Why the live picture to the computer is not up, shown without stopping the recording. */
-    const [streamIssue, setStreamIssue] = useState<string | null>(null);
 
     /**
      * This phone's own recording.
@@ -79,42 +77,18 @@ export default function MobileConnect() {
     const recorderRef = useRef(recorder);
     recorderRef.current = recorder;
 
-    useEffect(() => {
-        if (!token) return;
+    // A photo only when something is wrong in the phone's view: a second person, or nobody. Once the room is
+    // verified and until the interview is over.
+    usePhoneProctor({
+        videoRef,
+        enabled: verified && !finished && consented,
+        onAlert: (reason, photo) => {
+            if (token) void mobileUploadService.proctorCapture(token, reason, photo).catch(() => {});
+        },
+    });
 
-        console.log('Connecting to WebSocket with token:', token);
-
-        // Connect WebSocket using token (no scheduleId)
-        interviewWsService.connect({
-            mobileToken: token,   // use mobileToken
-            onConnect: () => {
-                interviewWsService.send('/app/mobile/register', { token });
-
-                // Subscribe to desktop responses
-                interviewWsService.subscribe('/user/queue/mobile/answer', (answer) => {
-                    if (peerConnectionRef.current) {
-                        peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-                    }
-                });
-                interviewWsService.subscribe('/user/queue/mobile/ice', (data: { candidate: RTCIceCandidateInit; target: string }) => {
-                    if (data.target === 'mobile' && data.candidate && peerConnectionRef.current) {
-                        console.log('Mobile adding ICE candidate from desktop');
-                        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate))
-                            .catch(err => console.error('Error adding ICE candidate:', err));
-                    }
-                });
-                interviewWsService.subscribe('/user/queue/mobile/ready', () => {
-                    console.log('Desktop is ready signal received, starting stream');
-                    startStreaming();
-                });
-            },
-        });
-        return () => interviewWsService.disconnect();
-    }, [token]);
-
-    // The camera: one stream, shared by the preview, the recording and the live
-    // picture. They used to open it separately, and a phone only ever lets one
-    // of them have it — the others got a dead track.
+    // The camera: one stream, shared by the preview, the recording and the face check. They used to open it
+    // separately, and a phone only ever lets one of them have it — the others got a dead track.
     useEffect(() => {
         if (!consented) return;
         let stream: MediaStream | null = null;
@@ -153,15 +127,6 @@ export default function MobileConnect() {
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
                 }
-                // Already connected to the computer (the camera was switched):
-                // give the live picture the new camera.
-                const connection = peerConnectionRef.current;
-                if (connection) {
-                    connection.getSenders().forEach((sender) => {
-                        const next = stream?.getTracks().find((track) => track.kind === sender.track?.kind);
-                        if (next) void sender.replaceTrack(next);
-                    });
-                }
             } catch (err) {
                 console.error("Error accessing camera:", err);
                 if (!cancelled) {
@@ -184,7 +149,7 @@ export default function MobileConnect() {
             setCaptureStream((current) => (current === stream ? null : current));
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [facingMode, consented]);
+    }, [facingMode, consented, cameraRestart]);
 
     // Keep the screen on while recording. A phone that dims and locks stops the
     // camera, and an interview's recording ended there.
@@ -228,8 +193,7 @@ export default function MobileConnect() {
             const state = await mobileUploadService.pairingState(token);
             if (cancelled) return;
             if (state === 'ended') {
-                // The interview is over. Close the recording and send its last part, exactly as the
-                // desktop's message would have: that message is not always delivered.
+                // The interview is over. Close the recording and send its last part.
                 void endSession('ended');
                 return;
             }
@@ -240,29 +204,45 @@ export default function MobileConnect() {
             setFinished('closed');
         };
         void check();
-        // Every 20 seconds: this is the fallback for a missed socket message, not the main route, and it
-        // is one request per phone for as long as an interview runs.
-        const timer = window.setInterval(check, 20_000);
+        // Every 15 seconds. This is how the phone learns the interview is over, and how the server knows the
+        // phone is still there: there is no live connection any more, so these check-ins are the only signal.
+        const timer = window.setInterval(check, 15_000);
         return () => {
             cancelled = true;
             window.clearInterval(timer);
         };
     }, [token, finished]);
 
+    // The page opens at the top. The consent screen above it is tall and centred, and the browser kept its scroll
+    // position into the live view, so on a phone the page appeared part-way down with Exit out of sight.
+    useEffect(() => {
+        window.scrollTo({ top: 0 });
+    }, [consented, verified]);
+
     const acceptConsent = () => {
         consentedRef.current = true;
         setConsented(true);
     };
 
+    // The preview is kept on its stream on every render. The element can mount after the stream is ready (the live view
+    // replaces the consent screen), and Chrome on a phone pauses a preview when the page is backgrounded; either left
+    // a black box that looked like a dead camera while the recording and the live picture were working.
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !captureStream) return;
+        if (video.srcObject !== captureStream) video.srcObject = captureStream;
+        if (video.paused) void video.play().catch(() => {});
+    });
+    useEffect(() => {
+        const resume = () => {
+            if (document.visibilityState === 'visible') void videoRef.current?.play().catch(() => {});
+        };
+        document.addEventListener('visibilitychange', resume);
+        return () => document.removeEventListener('visibilitychange', resume);
+    }, []);
+
     const toggleCamera = () => {
         setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
-    };
-
-    const bypassVerification = () => {
-        setVerified(true);
-        alert('Verification skipped. Starting stream...');
-        interviewWsService.send('/app/mobile/verified/' + token, { status: 'verified' });
-        startStreaming();
     };
 
     /**
@@ -312,8 +292,6 @@ export default function MobileConnect() {
             }
             await mobileUploadService.roomScan(token, photos);
             setVerified(true);
-            interviewWsService.send('/app/mobile/verified/' + token, { status: 'verified' });
-            startStreaming();
         } catch (err) {
             console.error('Room scan upload error:', err);
             const status = axios.isAxiosError(err) ? err.response?.status : undefined;
@@ -335,120 +313,7 @@ export default function MobileConnect() {
     };
 
     /**
-     * Whether a start is already in flight.
-     *
-     * <p>`ready` can now arrive more than once — the backend sends one the
-     * moment both sides are registered, and the interview page sends another
-     * a second later as a retry. Two overlapping starts would open the camera
-     * twice and send two offers, and the desktop would answer the one that
-     * lost.</p>
-     */
-    const startingRef = useRef(false);
-
-    const startStreaming = async () => {
-        // The desktop's ready signal can beat the candidate's consent; the
-        // camera must not open before they have agreed.
-        if (!consentedRef.current) return;
-        // An established connection does not need rebuilding. A dead one does
-        // — the desktop reloading is exactly when the phone must renegotiate
-        // rather than sit on a peer connection nothing is listening to.
-        const existing = peerConnectionRef.current;
-        if (existing) {
-            const state = existing.connectionState;
-            if (state === 'new' || state === 'connecting' || state === 'connected') {
-                console.log('Ignoring ready signal: already paired', state);
-                return;
-            }
-            existing.close();
-            peerConnectionRef.current = null;
-        }
-        if (startingRef.current) return;
-        startingRef.current = true;
-
-        try {
-            // The camera is already open and, once verified, recording; the live
-            // picture shares it. It may not be ready the instant the computer asks.
-            let mediaStream = streamRef.current;
-            for (let waited = 0; !mediaStream && waited < 10_000; waited += 250) {
-                await new Promise((resolve) => setTimeout(resolve, 250));
-                mediaStream = streamRef.current;
-            }
-            if (!mediaStream) throw new Error('The camera is not ready');
-            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            peerConnectionRef.current = pc;
-
-            // Picture always. Sound only where the phone is offered to the computer
-            // as a microphone — the recording keeps the sound either way, and sending
-            // it would let the candidate answer through a phone they may have
-            // propped across the room.
-            mediaStream.getTracks()
-                .filter(track => track.kind === 'video' || PROCTORING_CONFIG.mobileCompanion.audio)
-                .forEach(track => pc.addTrack(track, mediaStream));
-
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    console.log('Mobile sending ICE candidate to desktop');
-                    interviewWsService.send('/app/mobile/ice/' + token, { candidate: event.candidate, target: 'desktop' });
-                }
-            };
-
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            console.log('Sending WebRTC offer to desktop');
-            interviewWsService.send('/app/mobile/offer/' + token, pc.localDescription);
-            setStreaming(true);
-        } catch (err) {
-            // Not an alert, and not an error: the live picture is optional. An alert
-            // covers the camera preview, and this phone is still recording.
-            console.error('Streaming start error:', err);
-            setStreamIssue('The live picture to your computer could not start. This phone is still recording.');
-        } finally {
-            // Cleared either way: a start that failed on a denied camera must
-            // not lock out the retry the candidate gets after allowing it.
-            startingRef.current = false;
-        }
-    };
-
-    const monitorRoom = async () => {
-        if (!videoRef.current || !token) return;
-        const canvas = document.createElement('canvas');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(videoRef.current, 0, 0);
-        canvas.toBlob(async (blob) => {
-            if (!blob) return;
-            const formData = new FormData();
-            formData.append('photo', blob, 'monitor.jpg');
-            const backendBaseUrl = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8082`;
-            const url = `${backendBaseUrl}/api/mobile/monitor?token=${token}`;
-            try {
-                await fetch(url, { method: 'POST', body: formData });
-            } catch (err) {
-                console.error('Monitoring error:', err);
-            }
-        }, 'image/jpeg');
-    };
-
-    useEffect(() => {
-        // window.setInterval, not the bare global: the bare one is typed as
-        // Node's and `NodeJS.Timeout` does not exist in a browser tsconfig, so
-        // this file failed the typecheck on every run.
-        let interval: number | null = null;
-        // Whenever the room is verified and the interview has not ended — not only
-        // while the live picture is up. The photos are kept as evidence now, and
-        // a stream that failed to connect is exactly when they matter most.
-        if (verified && !finished) {
-            interval = window.setInterval(monitorRoom, 20000); // Check every 20 seconds
-        }
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [verified, finished, token]);
-
-    /**
-     * Release the camera and the connection, once.
+     * Release the camera, once.
      *
      * Safe to call twice — the candidate may hit Exit at the same moment the
      * desktop says the interview is over, and neither path should depend on
@@ -458,9 +323,6 @@ export default function MobileConnect() {
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
         if (videoRef.current) videoRef.current.srcObject = null;
-        peerConnectionRef.current?.close();
-        peerConnectionRef.current = null;
-        setStreaming(false);
     }, []);
 
     /**
@@ -476,24 +338,15 @@ export default function MobileConnect() {
         }
         shutDown();
         setFinished(reason);
-    }, [shutDown]);
+        if (reason === 'exited' && token) void mobileUploadService.sendEvent(token, 'mobile_exited', 'Candidate left phone proctoring');
+    }, [shutDown, token]);
 
-    /**
-     * The desktop telling this phone the interview has finished.
-     *
-     * Subscribed separately from the signalling above because it has to stay
-     * live for the whole session — the phone otherwise kept filming into an
-     * interview that had already ended.
-     */
-    useEffect(() => {
-        if (!token) return;
-        const onEnded = () => {
-            void endSession('ended');
-        };
-        interviewWsService.subscribe('/user/queue/mobile/ended', onEnded);
-        return () => interviewWsService.unsubscribe('/user/queue/mobile/ended');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [token, shutDown]);
+    /** Back in after an exit, without scanning the QR code or the room again. */
+    const reconnect = () => {
+        if (token) void mobileUploadService.sendEvent(token, 'mobile_reconnected', 'Candidate reconnected the phone');
+        setFinished(null);
+        setCameraRestart((n) => n + 1);
+    };
 
     useEffect(() => {
         return () => {
@@ -542,8 +395,16 @@ export default function MobileConnect() {
                                 : uploadStatus === 'none'
                                 ? 'Your camera is switched off. You can close this page.'
                                 : 'Your camera is switched off and your recording has been saved. You can close this page.'
-                            : 'Your camera has been switched off. Reopen the QR code on your computer if you need to pair again.'}
+                            : 'Your camera has been switched off. If this was a mistake, tap Reconnect: there is no need to scan the QR code again.'}
                     </p>
+                    {finished === 'exited' && (
+                        <button
+                            onClick={reconnect}
+                            className="mt-5 w-full rounded-xl bg-indigo-600 py-3 font-bold text-white shadow-lg active:scale-95"
+                        >
+                            Reconnect camera
+                        </button>
+                    )}
                     <p className="mt-4 text-xs text-gray-400">
                         {ended && (uploadStatus === 'uploading' || uploadStatus === 'not-sent')
                             ? 'Please do not close this tab yet.'
@@ -599,7 +460,8 @@ export default function MobileConnect() {
 
     return (
         <div className="min-h-screen p-4 bg-gray-50 flex flex-col items-center">
-            <div className="mb-6 flex w-full max-w-md items-center justify-between">
+            {/* Pinned to the top, so Exit is always on screen however far the page is scrolled. */}
+            <div className="sticky top-0 z-20 mb-4 flex w-full max-w-md items-center justify-between bg-gray-50 py-2">
                 <h1 className="text-2xl font-bold text-gray-800">Mobile Proctoring</h1>
                 {/* Leaving deliberately releases the camera. Closing the tab
                     does too, eventually, but a candidate who has finished
@@ -620,10 +482,10 @@ export default function MobileConnect() {
             <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
                 <div className="relative aspect-video bg-black">
                     <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                    {streaming && (
+                    {verified && (
                         <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600/80 px-3 py-1 rounded-full animate-pulse">
                             <div className="w-2 h-2 rounded-full bg-white"></div>
-                            <span className="text-white text-xs font-bold uppercase">Live Proctoring</span>
+                            <span className="text-white text-xs font-bold uppercase">Recording</span>
                         </div>
                     )}
                 </div>
@@ -636,7 +498,7 @@ export default function MobileConnect() {
                                     <h2 className="text-lg font-semibold text-gray-800">Room Verification</h2>
                                     <button
                                         onClick={toggleCamera}
-                                        className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded flex items-center gap-1"
+                                        className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 active:scale-95"
                                     >
                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                                         Switch to {facingMode === 'user' ? 'Back' : 'Front'}
@@ -671,15 +533,6 @@ export default function MobileConnect() {
                                 >
                                     {scanProgress ? `Scanning… ${Math.min(scanProgress.taken + 1, scanProgress.total)} of ${scanProgress.total}. Keep turning slowly` : checking ? 'Saving…' : 'Scan My Room'}
                                 </button>
-                                {/* A way past the room scan, for local testing only: shipped, it was a button any candidate could press. */}
-                                {import.meta.env.DEV && (
-                                <button
-                                    onClick={bypassVerification}
-                                    className="w-full border-2 border-indigo-600 text-indigo-600 font-bold py-2 rounded-xl hover:bg-indigo-50 transition-all text-sm"
-                                >
-                                    Skip Verification (Test Mode)
-                                </button>
-                                )}
                             </div>
                         </>
                     ) : (
@@ -687,7 +540,7 @@ export default function MobileConnect() {
                             <div className="flex justify-end">
                                 <button
                                     onClick={toggleCamera}
-                                    className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded flex items-center gap-1"
+                                    className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 active:scale-95"
                                 >
                                     Switch Camera
                                 </button>
@@ -703,20 +556,10 @@ export default function MobileConnect() {
                                     ? 'This phone is recording the room and sending the recording to your interview.'
                                     : 'Your mobile camera is set up for the interview.'}
                             </p>
-                            {/* The live picture is a bonus: it may take a moment, or not
-                                connect at all, and the recording does not depend on it. */}
-                            {streaming ? (
-                                <p className="text-xs text-green-700">Your computer can also see this phone live.</p>
-                            ) : (
-                                <p className="text-xs text-gray-500">
-                                    The live picture on your computer is optional and connects when it is ready.
-                                </p>
-                            )}
-                            {streamIssue && !streaming && (
-                                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
-                                    <p className="text-sm text-amber-900">{streamIssue}</p>
-                                </div>
-                            )}
+                            <p className="text-xs text-gray-500">
+                                Keep the phone where it can see you and your computer screen. If another person comes into view, or you
+                                leave the picture, a photo is kept for the reviewer.
+                            </p>
                             {PROCTORING_CONFIG.recording.mobile.required && (
                                 <p className="text-xs text-gray-500">
                                     Keep the screen on and this page open until the interview finishes. Use Wi-Fi if you can.

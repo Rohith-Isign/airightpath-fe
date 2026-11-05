@@ -86,6 +86,14 @@ export const interviewService = {
     );
   },
 
+  /** Moves the window of an interview the candidate has not started; they are emailed unless `notify` is false. */
+  rescheduleInterview(
+    id: number,
+    data: { assignedAt: string; deadlineTime: string; notify?: boolean },
+  ) {
+    return api.patch<InterviewSchedule>(ENDPOINTS.INTERVIEWS.RESCHEDULE(id), data);
+  },
+
   /**
    * The interviews a candidate still has in front of them.
    *
@@ -125,6 +133,14 @@ export const interviewService = {
     });
   },
 
+  /** Has the AI grade the interview again from its transcript and replaces the stored evaluation and score. */
+  reEvaluate(id: number) {
+    return api.post<InterviewSchedule>(ENDPOINTS.INTERVIEWS.RE_EVALUATE(id), undefined, {
+      // Grading is a long model call.
+      timeout: 180_000,
+    } as never);
+  },
+
   /** Puts a removed result back on the list. */
   restoreResult(id: number) {
     return api.post<InterviewSchedule>(ENDPOINTS.INTERVIEWS.RESTORE_RESULT(id));
@@ -162,7 +178,7 @@ export const interviewService = {
 
   /** Whether the phone behind this token has saved its room scan. Read from the server, not a live message. */
   getMobilePairingState(scheduleId: number, token: string) {
-    return api.get<{ verified: boolean }>(ENDPOINTS.INTERVIEWS.MOBILE_PAIRING_STATE(scheduleId), {
+    return api.get<{ verified: boolean; connected?: boolean }>(ENDPOINTS.INTERVIEWS.MOBILE_PAIRING_STATE(scheduleId), {
       params: { token },
       _skipErrorToast: true,
     } as never);
@@ -278,18 +294,6 @@ export const interviewService = {
   getConversation(scheduleId: number) {
     return api.get<VoiceConversationEntryDTO[]>(
       ENDPOINTS.INTERVIEW_ADMIN.CONVERSATION(scheduleId),
-    );
-  },
-
-  verifyRoom(token: string, photo: File) {
-    const formData = new FormData();
-    formData.append("photo", photo);
-    return api.post<{ valid: boolean }>(
-      `/api/mobile/verify-room?token=${token}`,
-      formData,
-      {
-        headers: { "Content-Type": "multipart/form-data" },
-      },
     );
   },
 };

@@ -78,7 +78,7 @@ const PROMPT_TABS: PromptTab[] = [
     promptType: 'INTERVIEW_L2_TECHNICAL',
     promptStage: 'START',
     description:
-      'System prompt for the L2 technical interview. Sent at the start of the round. Left empty, the round falls back to the shared Interview prompt below.',
+      'System prompt for the L2 technical interview, sent at the start of the round. Until this job has its own, the built-in default is used.',
     placeholders: [...JOB_PLACEHOLDERS, '{{email}}', '{{interviewerName}}', '{{categories}}'],
   },
   {
@@ -87,8 +87,26 @@ const PROMPT_TABS: PromptTab[] = [
     promptType: 'INTERVIEW_L3_BEHAVIORAL',
     promptStage: 'START',
     description:
-      'System prompt for the L3 behavioural round — the one usually called the HR interview. Left empty, it falls back to the shared Interview prompt below.',
+      'System prompt for the L3 behavioural round, the one usually called the HR interview. Until this job has its own, the built-in default is used.',
     placeholders: [...JOB_PLACEHOLDERS, '{{email}}', '{{interviewerName}}', '{{categories}}'],
+  },
+  {
+    key: 'interview-l2-summary',
+    label: 'L2 Evaluation',
+    promptType: 'INTERVIEW_L2_TECHNICAL',
+    promptStage: 'SUMMARY',
+    description:
+      'Extra criteria for grading L2 technical interviews. Added to the built-in grader, which already sets the score and recommendation format, so write criteria here and not a new output format.',
+    placeholders: [...JOB_PLACEHOLDERS],
+  },
+  {
+    key: 'interview-l3-summary',
+    label: 'L3 Evaluation',
+    promptType: 'INTERVIEW_L3_BEHAVIORAL',
+    promptStage: 'SUMMARY',
+    description:
+      'Extra criteria for grading L3 behavioural interviews. Added to the built-in grader, so write criteria here and not a new output format.',
+    placeholders: [...JOB_PLACEHOLDERS],
   },
   {
     // Kept for jobs configured before rounds existed: both rounds fall back to
@@ -103,6 +121,11 @@ const PROMPT_TABS: PromptTab[] = [
     placeholders: [...JOB_PLACEHOLDERS, '{{email}}', '{{interviewerName}}', '{{categories}}'],
   },
 ];
+
+/** The parts of the categories that are saved, as one string to compare with. */
+function categoriesKey(list: Array<{ categoryName: string; weight: number; description?: string | null }>): string {
+  return JSON.stringify(list.map((c) => [c.categoryName, c.weight, c.description ?? '']));
+}
 
 export function JobPromptPage() {
   const { showToast } = useToast();
@@ -150,6 +173,14 @@ export function JobPromptPage() {
   // Combined interview save state + existing prompt tracking
   const [savingInterview, setSavingInterview] = useState(false);
   const [existingPromptKeys, setExistingPromptKeys] = useState<Set<string>>(new Set());
+  // What is saved on the server, as last loaded or saved here. The save buttons stay off until the editor differs
+  // from it, so pressing one always means something changed.
+  const [savedContents, setSavedContents] = useState<Record<string, string>>({});
+  // The built-in prompt for each tab, and which tabs are showing it because the job has none saved.
+  const [defaultContents, setDefaultContents] = useState<Record<string, string>>({});
+  const [usingDefault, setUsingDefault] = useState<Set<string>>(new Set());
+  const [savedEvaluation, setSavedEvaluation] = useState('');
+  const [savedCategoriesJson, setSavedCategoriesJson] = useState('');
 
   useEffect(() => {
     fetchJobs();
@@ -157,9 +188,11 @@ export function JobPromptPage() {
 
   // Open directly in edit mode for a job when navigated here (e.g. from Assign).
   useEffect(() => {
-    const navState = location.state as { jobPrefix?: string } | null;
+    const navState = location.state as { jobPrefix?: string; tab?: string } | null;
     if (navState?.jobPrefix) {
       openEditor(navState.jobPrefix);
+      // Straight to the prompt being worked on, e.g. the L2 prompt of the round just being booked.
+      if (navState.tab && PROMPT_TABS.some((t) => t.key === navState.tab)) setActiveTab(navState.tab);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -220,33 +253,70 @@ export function JobPromptPage() {
     }
   }
 
+  /**
+   * The built-in prompts, keyed by tab. Asked for once per visit: they are the same for every job.
+   * A failure leaves the tabs empty, as they were before defaults existed, and is not worth a toast.
+   */
+  async function loadDefaults(): Promise<Record<string, string>> {
+    if (Object.keys(defaultContents).length > 0) return defaultContents;
+    try {
+      const res = await promptService.getDefaults({ silent: true });
+      const byTab: Record<string, string> = {};
+      for (const tab of PROMPT_TABS) {
+        const match = (res.data ?? []).find(
+          (d) => d.promptType === tab.promptType && (d.promptStage ?? null) === tab.promptStage,
+        );
+        if (match?.prompt) byTab[tab.key] = match.prompt;
+      }
+      setDefaultContents(byTab);
+      return byTab;
+    } catch {
+      return {};
+    }
+  }
+
   async function fetchPrompts() {
     if (!selectedPrefix) return;
     setLoadingPrompt(true);
     try {
       const res = await promptService.getByJob(selectedPrefix);
       const prompts = res.data ?? [];
+      const defaults = await loadDefaults();
       const contents: Record<string, string> = {};
+      const saved = new Set<string>();
+      const defaulted = new Set<string>();
       for (const tab of PROMPT_TABS) {
         const match = prompts.find((p) => p.promptType === tab.promptType && (p.promptStage ?? null) === tab.promptStage);
-        contents[tab.key] = match?.prompt ?? '';
+        if (match?.prompt) {
+          contents[tab.key] = match.prompt;
+          saved.add(tab.key);
+        } else if (defaults[tab.key]) {
+          // Nothing saved for this job: show the built-in prompt it is actually using, not an empty box.
+          contents[tab.key] = defaults[tab.key];
+          defaulted.add(tab.key);
+        } else {
+          contents[tab.key] = '';
+        }
       }
       setPromptContents(contents);
+      setSavedContents(contents);
+      setUsingDefault(defaulted);
 
       // Extract INTERVIEW/SUMMARY prompt into evaluation instructions
       const summaryMatch = prompts.find((p) => p.promptType === 'INTERVIEW' && p.promptStage === 'SUMMARY');
       setEvaluationInstructions(summaryMatch?.prompt ?? '');
+      setSavedEvaluation(summaryMatch?.prompt ?? '');
 
       // Track which prompts already exist (for Save vs Update label)
-      const keys = new Set<string>();
-      for (const [key, value] of Object.entries(contents)) {
-        if (value) keys.add(key);
-      }
+      const keys = new Set<string>(saved);
       if (summaryMatch?.prompt) keys.add('interview-start');
       setExistingPromptKeys(keys);
     } catch {
       setPromptContents({});
+      setSavedContents({});
+      setUsingDefault(new Set());
       setEvaluationInstructions('');
+      setSavedEvaluation('');
       setExistingPromptKeys(new Set());
     } finally {
       setLoadingPrompt(false);
@@ -260,17 +330,21 @@ export function JobPromptPage() {
       const res = await promptService.getEvaluationCategories(selectedPrefix);
       const data = res.data ?? [];
       if (data.length > 0) {
-        setCategories(data.map(({ categoryName, weight, description, id }) => ({
+        const loaded = data.map(({ categoryName, weight, description, id }) => ({
           id,
           categoryName,
           weight,
           description,
-        })));
+        }));
+        setCategories(loaded);
+        setSavedCategoriesJson(categoriesKey(loaded));
       } else {
         setCategories([...DEFAULT_CATEGORIES]);
+        setSavedCategoriesJson(categoriesKey(DEFAULT_CATEGORIES));
       }
     } catch {
       setCategories([...DEFAULT_CATEGORIES]);
+      setSavedCategoriesJson(categoriesKey(DEFAULT_CATEGORIES));
     } finally {
       setLoadingCategories(false);
     }
@@ -309,7 +383,7 @@ export function JobPromptPage() {
         const match = prompts.find(
           (p) => p.promptType === tab.promptType && (p.promptStage ?? null) === tab.promptStage
         );
-        contents[tab.key] = match?.prompt ?? '';
+        contents[tab.key] = match?.prompt ?? defaultContents[tab.key] ?? '';
       }
       setPromptContents(contents);
 
@@ -368,6 +442,12 @@ export function JobPromptPage() {
       );
       showToast(MESSAGES.admin.prompts.promptSaved(tab.label), 'success');
       setExistingPromptKeys((prev) => new Set([...prev, activeTab]));
+      setSavedContents((prev) => ({ ...prev, [activeTab]: content }));
+      setUsingDefault((prev) => {
+        const next = new Set(prev);
+        next.delete(activeTab);
+        return next;
+      });
     } catch (err) {
       // Pass the server's reason through when it has one — "prompt too long" or
       // "job not found" are actionable in a way "please try again" is not.
@@ -444,6 +524,9 @@ export function JobPromptPage() {
       if (failed.length === 0) {
         showToast(MESSAGES.admin.prompts.interviewSaved, 'success');
         setExistingPromptKeys((prev) => new Set([...prev, 'interview-start']));
+        setSavedContents((prev) => ({ ...prev, 'interview-start': startPrompt }));
+        setSavedEvaluation(evaluationInstructions);
+        setSavedCategoriesJson(categoriesKey(categories));
       } else if (failed.length === labels.length) {
         showToast(MESSAGES.admin.prompts.interviewSaveFailed, 'error');
       } else {
@@ -473,6 +556,11 @@ export function JobPromptPage() {
 
   const totalWeight = categories.reduce((sum, c) => sum + c.weight, 0);
   const currentTab = PROMPT_TABS.find((t) => t.key === activeTab)!;
+  const promptChanged = (promptContents[activeTab] ?? '') !== (savedContents[activeTab] ?? '');
+  const interviewChanged =
+    (promptContents['interview-start'] ?? '') !== (savedContents['interview-start'] ?? '') ||
+    evaluationInstructions !== savedEvaluation ||
+    categoriesKey(categories) !== savedCategoriesJson;
 
   const jobOptions = [
     { value: '', label: 'Select a job' },
@@ -708,6 +796,32 @@ export function JobPromptPage() {
                       </div>
                     )}
 
+                    {usingDefault.has(activeTab) && (
+                      <div className="flex items-start gap-2 p-3 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/5 text-sm">
+                        <Info size={16} className="text-[var(--primary)] mt-0.5 shrink-0" />
+                        <p className="text-[var(--textSecondary)]">
+                          <span className="font-semibold text-[var(--text)]">Using the built-in default.</span> This job
+                          has no prompt of its own yet, so this is the text it runs on. Edit it and save to give this job
+                          its own version; the default itself is not changed.
+                        </p>
+                      </div>
+                    )}
+                    {!usingDefault.has(activeTab) &&
+                      defaultContents[activeTab] &&
+                      (promptContents[activeTab] ?? '') !== defaultContents[activeTab] && (
+                        <div className="flex justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setPromptContents((prev) => ({ ...prev, [activeTab]: defaultContents[activeTab] }))
+                            }
+                          >
+                            Restore the built-in default text
+                          </Button>
+                        </div>
+                      )}
+
                     <Textarea
                       label={`${currentTab.label} Content`}
                       placeholder={`Enter the ${currentTab.label.toLowerCase()} for this job...`}
@@ -723,6 +837,7 @@ export function JobPromptPage() {
                         <Button
                           onClick={handleSave}
                           isLoading={saving}
+                          disabled={!promptChanged}
                           leftIcon={!saving ? <Save size={16} /> : undefined}
                         >
                           {existingPromptKeys.has(activeTab) ? 'Update' : 'Save'} {currentTab.label} Prompt
@@ -897,7 +1012,7 @@ export function JobPromptPage() {
                     onClick={handleSaveInterview}
                     isLoading={savingInterview}
                     leftIcon={!savingInterview ? <Save size={16} /> : undefined}
-                    disabled={totalWeight !== 100}
+                    disabled={totalWeight !== 100 || !interviewChanged}
                   >
                     {existingPromptKeys.has('interview-start') ? 'Update' : 'Save'} Interview Prompt
                   </Button>

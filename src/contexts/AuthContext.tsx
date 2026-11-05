@@ -9,15 +9,13 @@ import {
 } from 'react';
 import { authService } from '@/services/auth.service';
 import {
-  setAccessToken,
-  getAccessToken,
-  clearTokens,
+  noteSession,
+  forgetSession,
+  ensureSessionTiming,
   broadcastAuthChange,
-  refreshAccessToken,
   isAuthRejection,
   authChannel,
 } from '@/services/api.service';
-import { isJwtExpired } from '@/utils/jwt.utils';
 import type { RoleName } from '@/config/roles';
 import type { PermissionName } from '@/config/permissions';
 import type { UserInfo, LoginRequest, RegisterRequest } from '@/types/auth.types';
@@ -58,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setRoles([]);
     setPermissions([]);
-    clearTokens();
+    forgetSession();
   }, []);
 
   /**
@@ -95,25 +93,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const bootstrapSession = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = getAccessToken();
-
-      if (token && !isJwtExpired(token)) {
-        await loadMe();
+      // The session is a cookie script cannot see, so the only way to know is to
+      // ask. /me answers from the access cookie; if that has expired, the
+      // request interceptor refreshes once (single-flight, so a reload never
+      // spends the rotating refresh cookie twice) and asks again. A visitor with
+      // no session gets a quiet 401 and lands on the signed-out state.
+      const me = await loadMe();
+      if (me) {
+        // Learns when the session began, if this browser has lost track, so the
+        // page can refresh ahead of expiry from here on.
+        void ensureSessionTiming();
         return;
       }
-
-      try {
-        // Shared single-flight refresh. Calling authService.refresh() directly
-        // here bypassed the interceptor's guard, so a page load could spend the
-        // rotated token twice — and the server reads a second use as theft and
-        // revokes the whole session, logging the user out on every refresh.
-        await refreshAccessToken();
-        await loadMe();
-        return;
-      } catch {
-        // No usable refresh cookie — fall through to a signed-out state.
-      }
-
       clearSession();
     } finally {
       setIsLoading(false);
@@ -137,10 +128,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (e.data?.type === 'logout') {
         clearSession();
       } else if (e.data?.type === 'login') {
-        // Another tab logged in. Adopt the session only when this tab is still
-        // signed out — the access token is shared storage now, so holding one
-        // says nothing about whether this tab has loaded its user yet.
-        if (!isAuthenticatedRef.current) {
+        // Another tab logged in. The session cookies are shared by every tab, so
+        // from this moment this tab belongs to whoever just signed in. A signed-out
+        // tab adopts the session; a signed-in one re-reads who it is, otherwise it
+        // keeps showing the previous user (an admin's name over a candidate's
+        // session) until it is reloaded.
+        if (isAuthenticatedRef.current) {
+          void loadMe();
+        } else {
           bootstrapSession();
         }
       }
@@ -156,13 +151,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authChannel?.removeEventListener('message', handleMessage);
       window.removeEventListener('auth:forceLogout', handleForceLogout);
     };
-  }, [bootstrapSession, clearSession]);
+  }, [bootstrapSession, clearSession, loadMe]);
 
   const login = useCallback(
     async (data: LoginRequest): Promise<{ roles: RoleName[] }> => {
       const response = await authService.login(data);
       const loginData = response.data.data;
-      setAccessToken(loginData.accessToken);
+      // The server has set the session cookies. The body's token is not read or
+      // kept; only how long the session lasts, so it can be refreshed in time.
+      noteSession(loginData.expiresIn);
       setUser(loginData.user);
       const normalizedRoles = loginData.roles.map(normalizeRole);
       setRoles(normalizedRoles);
@@ -187,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setRoles([]);
       setPermissions([]);
-      clearTokens();
+      forgetSession();
       // Signal other tabs to tear down their session as well.
       broadcastAuthChange('logout');
     }

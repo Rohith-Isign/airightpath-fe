@@ -52,12 +52,14 @@ export function NoiseLevelMeter({ band, level, measuring, blocksStart }: Readonl
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+      {/* A fixed height, whatever the state says: "Some background noise" wraps onto two lines in a narrow column and
+          "Quiet" does not, and the row changing height moved everything under it every time the level crossed the line. */}
+      <div className="flex min-h-[2.75rem] items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-[var(--text)]">
           <Mic size={16} className="text-[var(--primary)]" />
           Background noise
         </span>
-        <span className={`flex items-center gap-1.5 text-sm font-semibold ${measuring ? style.text : 'text-[var(--textTertiary)]'}`}>
+        <span className={`flex flex-shrink-0 items-center gap-1.5 text-right text-sm font-semibold ${measuring ? style.text : 'text-[var(--textTertiary)]'}`}>
           <Icon size={16} />
           {measuring ? style.label : 'Listening…'}
         </span>
@@ -84,7 +86,8 @@ export function NoiseLevelMeter({ band, level, measuring, blocksStart }: Readonl
         <span>Noisy</span>
       </div>
 
-      <p className={`text-xs ${band === 'loud' && measuring ? style.text : 'text-[var(--textSecondary)]'}`}>
+      {/* Always room for the longest sentence, so a change of band never moves what is below the meter. */}
+      <p className={`min-h-[3.75rem] text-xs ${band === 'loud' && measuring ? style.text : 'text-[var(--textSecondary)]'}`}>
         {measuring
           ? style.help
           : 'Measuring the noise around you. Please stay quiet for a moment.'}

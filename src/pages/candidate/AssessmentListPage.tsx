@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck, Play, Loader2, AlertCircle, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { STRINGS } from '@/constants/strings';
 import { assessmentService } from '@/services/assessment.service';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -9,6 +10,8 @@ import { Badge } from '@/components/ui/Badge';
 import { ROUTES } from '@/config/routes';
 import { formatDate, formatDateTime } from '@/utils/format.utils';
 import { useNow } from '@/hooks/useNow';
+import { useBackgroundRefresh } from '@/hooks/useBackgroundRefresh';
+import { CANDIDATE_REFRESH_MS } from '@/config/refresh.config';
 import type { Assessment } from '@/types/assessment.types';
 
 export function AssessmentListPage() {
@@ -37,6 +40,17 @@ export function AssessmentListPage() {
     fetchAssessments();
   }, [user?.email]);
 
+  // Quietly re-read the list, so an exam an admin sends while this page is open appears without a reload.
+  useBackgroundRefresh(async () => {
+    if (!user?.email) return;
+    try {
+      const res = await assessmentService.getCandidateAssessments(user.email, { silent: true });
+      setAssessments(res.data ?? []);
+    } catch {
+      // Keep what is on screen.
+    }
+  }, CANDIDATE_REFRESH_MS);
+
   const handleStart = (assessment: Assessment) => {
     navigate(ROUTES.CANDIDATE.INSTRUCTIONS, { state: { assessment } });
   };
@@ -51,14 +65,14 @@ export function AssessmentListPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-[var(--text)]">My Assessments</h1>
+      <h1 className="text-3xl font-bold text-[var(--text)]">{STRINGS.myAssessments.title}</h1>
 
       {assessments.length === 0 ? (
         <div className="text-center py-16">
           <ClipboardCheck className="w-12 h-12 mx-auto text-[var(--textTertiary)] mb-4" />
-          <p className="text-lg font-medium text-[var(--text)]">No assessments assigned</p>
+          <p className="text-lg font-medium text-[var(--text)]">{STRINGS.myAssessments.emptyTitle}</p>
           <p className="text-[var(--textSecondary)] mt-1">
-            Check back later for new assessment assignments.
+            {STRINGS.myAssessments.emptyBody}
           </p>
         </div>
       ) : (
@@ -98,7 +112,7 @@ export function AssessmentListPage() {
                           slot when there is one; the assigned date is only
                           bookkeeping. */}
                       <dt className="text-xs text-[var(--textTertiary)] mb-0.5">
-                        {startsAt ? 'Starts' : 'Assigned'}
+                        {startsAt ? STRINGS.myAssessments.starts : STRINGS.myAssessments.assigned}
                       </dt>
                       <dd className="text-sm text-[var(--textSecondary)]">
                         {startsAt
@@ -107,7 +121,7 @@ export function AssessmentListPage() {
                       </dd>
                     </div>
                     <div className="min-w-0">
-                      <dt className="text-xs text-[var(--textTertiary)] mb-0.5">Deadline</dt>
+                      <dt className="text-xs text-[var(--textTertiary)] mb-0.5">{STRINGS.myAssessments.deadline}</dt>
                       <dd className="text-sm text-[var(--textSecondary)]">
                         {formatDate(assessment.deadline)}
                       </dd>
@@ -134,22 +148,22 @@ export function AssessmentListPage() {
               <thead>
                 <tr className="border-b border-[var(--border)]">
                   <th className="text-left px-6 py-4 text-sm font-semibold text-[var(--textSecondary)] w-[14%]">
-                    Type
+                    {STRINGS.myAssessments.columnType}
                   </th>
                   <th className="text-left px-6 py-4 text-sm font-semibold text-[var(--textSecondary)] w-[22%]">
-                    Job
+                    {STRINGS.myAssessments.columnJob}
                   </th>
                   <th className="text-left px-6 py-4 text-sm font-semibold text-[var(--textSecondary)] w-[17%]">
-                    Starts
+                    {STRINGS.myAssessments.columnStarts}
                   </th>
                   <th className="text-left px-6 py-4 text-sm font-semibold text-[var(--textSecondary)] w-[17%]">
-                    Deadline
+                    {STRINGS.myAssessments.columnDeadline}
                   </th>
                   <th className="text-left px-6 py-4 text-sm font-semibold text-[var(--textSecondary)] w-[15%]">
-                    Status
+                    {STRINGS.myAssessments.columnStatus}
                   </th>
                   <th className="text-left px-6 py-4 text-sm font-semibold text-[var(--textSecondary)] w-[15%]">
-                    Action
+                    {STRINGS.myAssessments.columnAction}
                   </th>
                 </tr>
               </thead>
@@ -258,14 +272,14 @@ function StatusBadge({
   if (assessment.examAttended) {
     return (
       <Badge variant="success" size="sm">
-        Attended
+        {STRINGS.myAssessments.attended}
       </Badge>
     );
   }
   if (isExpired) {
     return (
       <Badge variant="error" size="sm">
-        Expired
+        {STRINGS.myAssessments.expired}
       </Badge>
     );
   }
@@ -273,13 +287,13 @@ function StatusBadge({
   if (notOpenYet) {
     return (
       <Badge variant="info" size="sm">
-        Scheduled
+        {STRINGS.myAssessments.scheduled}
       </Badge>
     );
   }
   return (
     <Badge variant="warning" size="sm">
-      Pending
+      {STRINGS.myAssessments.pending}
     </Badge>
   );
 }
@@ -308,13 +322,15 @@ function ActionCell({
         leftIcon={<Play size={14} />}
         onClick={() => onStart(assessment)}
       >
-        Start
+        {STRINGS.myAssessments.start}
       </Button>
     );
   }
   if (assessment.examAttended) {
     return (
-      <span className={`block text-sm text-[var(--textSecondary)] ${className}`}>Completed</span>
+      <span className={`block text-sm text-[var(--textSecondary)] ${className}`}>
+        {STRINGS.myAssessments.completed}
+      </span>
     );
   }
   // Naming the moment it opens, not just refusing: "Locked" on its own leaves
@@ -324,7 +340,7 @@ function ActionCell({
       <div className={`flex items-start gap-1.5 text-sm text-[var(--textSecondary)] ${className}`}>
         <Clock size={14} className="mt-0.5 flex-shrink-0" />
         <span className="min-w-0">
-          <span className="block">Starts</span>
+          <span className="block">{STRINGS.myAssessments.starts}</span>
           <span className="block text-xs text-[var(--textTertiary)]">
             {startsAt ? formatDateTime(startsAt.toISOString()) : '--'}
           </span>
@@ -335,7 +351,7 @@ function ActionCell({
   return (
     <div className={`flex items-center gap-1 text-sm text-[var(--error)] ${className}`}>
       <AlertCircle size={14} />
-      <span>Expired</span>
+      <span>{STRINGS.myAssessments.expired}</span>
     </div>
   );
 }

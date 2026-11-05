@@ -1,3 +1,4 @@
+import { STRINGS } from '@/constants/strings';
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -47,8 +48,8 @@ function RuleRow({ icon, text }: Readonly<{ icon: React.ReactNode; text: string 
 
 /** What the capture step is called, given which captures are switched on. */
 function captureStepTitle(photoRequired: boolean, roomScanRequired: boolean): string {
-  if (photoRequired && roomScanRequired) return 'Identity Photo and Room Scan';
-  return photoRequired ? 'Identity Photo' : 'Room Scan';
+  if (photoRequired && roomScanRequired) return STRINGS.preStart.captureTitlePhotoAndScan;
+  return photoRequired ? STRINGS.preStart.captureTitlePhoto : STRINGS.preStart.captureTitleScan;
 }
 
 /** The QR link, shown as text for a phone whose camera will not scan it. */
@@ -86,7 +87,7 @@ function ManualPairingLink({ url }: Readonly<{ url: string }>) {
           leftIcon={copied ? <Check size={14} /> : <Copy size={14} />}
           className="flex-shrink-0 sm:w-auto"
         >
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? STRINGS.preStart.copied : STRINGS.preStart.copy}
         </Button>
       </div>
       <p className="text-xs text-[var(--textTertiary)]">
@@ -105,7 +106,6 @@ interface InterviewPreStartScreenProps {
   /** QR value: the mobile-connect URL with token. */
   mobileConnectUrl: string;
   isSpeaking: boolean;
-  isAudioMuted: boolean;
   onToggleAudio: () => void;
   isCountdownActive: boolean;
   instructionCountdown: number;
@@ -145,7 +145,6 @@ export function InterviewPreStartScreen({
   mobileVerified,
   mobileConnectUrl,
   isSpeaking,
-  isAudioMuted,
   onToggleAudio,
   isCountdownActive,
   instructionCountdown,
@@ -235,37 +234,37 @@ export function InterviewPreStartScreen({
    */
   const blockers: string[] = [];
   if (micPermission === 'denied') {
-    blockers.push('Microphone access is blocked. Enable it in your browser settings, then reload.');
+    blockers.push(STRINGS.preStart.blockers.micBlocked);
   }
   if (cameraRequired && cameraPermission === 'denied') {
-    blockers.push('Camera access is blocked. Enable it in your browser settings, then reload.');
+    blockers.push(STRINGS.preStart.blockers.cameraBlocked);
   }
   if (!rulesRead) {
-    blockers.push('Finish reading the rules — the countdown has to reach zero.');
+    blockers.push(STRINGS.preStart.blockers.countdown);
   }
   if (capturesNeeded && !capturesReady) {
     // Only a gate while at least one capture is switched on. Waiting on a step
     // that is configured off would leave Start permanently disabled.
     if (photoRequired && roomScanRequired) {
-      blockers.push('Take your photo and complete the room scan in the system check.');
+      blockers.push(STRINGS.preStart.blockers.photoAndScan);
     } else if (photoRequired) {
-      blockers.push('Take your photo in the system check.');
+      blockers.push(STRINGS.preStart.blockers.photoOnly);
     } else {
-      blockers.push('Complete the room scan in the system check.');
+      blockers.push(STRINGS.preStart.blockers.scanOnly);
     }
   }
   if (isSetupActive && !mobileSettled) {
     blockers.push(
       mobileRequired
-        ? 'Pair your phone — this interview requires it as a second camera.'
-        : 'Choose whether to use your phone: pair it, or tick "Continue without my phone".',
+        ? STRINGS.preStart.blockers.pairRequired
+        : STRINGS.preStart.blockers.pairChoice,
     );
   }
   if (mobileVerified && !canStartInterview) {
-    blockers.push('Finishing the phone check…');
+    blockers.push(STRINGS.preStart.blockers.phoneChecking);
   }
   if (!agreed) {
-    blockers.push('Tick the box to confirm you have read and understood the instructions.');
+    blockers.push(STRINGS.preStart.blockers.agree);
   }
 
   const canStart = blockers.length === 0;
@@ -277,35 +276,31 @@ export function InterviewPreStartScreen({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-[var(--text)] sm:text-3xl">
-              Interview Instructions
+              {STRINGS.preStart.title}
             </h1>
             <p className="mt-1 text-[var(--textSecondary)]">
-              AI Voice Interview &ndash; {jobPrefix}
+              {STRINGS.preStart.subtitle(jobPrefix)}
             </p>
           </div>
 
           {/* Audio narration */}
           <div className="flex flex-shrink-0 items-center gap-2">
-            {isSpeaking && !isAudioMuted && (
+            {isSpeaking && (
               <span className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1.5 dark:border-blue-800 dark:bg-blue-900/20">
                 <Volume2 size={13} className="animate-pulse text-blue-500" />
                 <span className="text-xs font-medium text-blue-700 dark:text-blue-300">
-                  Reading&hellip;
+                  {STRINGS.preStart.reading}
                 </span>
               </span>
             )}
             <button
               type="button"
               onClick={onToggleAudio}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                isAudioMuted
-                  ? 'bg-[var(--surface1)] text-[var(--textSecondary)] hover:bg-[var(--surface2)]'
-                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30'
-              }`}
-              title={isAudioMuted ? 'Audio narration muted' : 'Mute audio narration'}
+              className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
+              title={isSpeaking ? STRINGS.preStart.stopAudioHint : STRINGS.preStart.playAudioHint}
             >
-              {isAudioMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-              {isAudioMuted ? 'Muted' : 'Audio On'}
+              {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              {isSpeaking ? STRINGS.preStart.stopAudio : STRINGS.preStart.playAudio}
             </button>
           </div>
         </div>
@@ -317,7 +312,7 @@ export function InterviewPreStartScreen({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="flex items-center gap-2">
                   <Shield className="h-5 w-5 text-[var(--primary)]" />
-                  Rules and Guidelines
+                  {STRINGS.preStart.rulesTitle}
                 </span>
                 {isCountdownActive && (
                   <span className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface2)] px-3 py-1.5">
@@ -332,7 +327,7 @@ export function InterviewPreStartScreen({
             </CardTitle>
             {isCountdownActive && (
               <p className="mt-2 text-sm text-[var(--textSecondary)]">
-                Read these through. The start button unlocks when the countdown reaches zero.
+                {STRINGS.preStart.rulesCountdown}
               </p>
             )}
           </CardHeader>
@@ -351,7 +346,7 @@ export function InterviewPreStartScreen({
             <CardTitle>
               <div className="flex items-center gap-2">
                 <Camera className="h-5 w-5 text-[var(--primary)]" />
-                System Check
+                {STRINGS.preStart.systemCheck}
               </div>
             </CardTitle>
           </CardHeader>
@@ -359,19 +354,19 @@ export function InterviewPreStartScreen({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex items-center gap-3 rounded-lg bg-[var(--surface2)] p-3">
                 <PermissionIcon status={micPermission} />
-                <span className="text-sm text-[var(--text)]">Microphone</span>
+                <span className="text-sm text-[var(--text)]">{STRINGS.preStart.microphone}</span>
                 {micPermission === 'denied' && (
                   <span className="ml-auto text-right text-xs text-red-500">
-                    Enable in browser settings
+                    {STRINGS.preStart.enableInSettings}
                   </span>
                 )}
               </div>
               <div className="flex items-center gap-3 rounded-lg bg-[var(--surface2)] p-3">
                 <PermissionIcon status={cameraPermission} />
-                <span className="text-sm text-[var(--text)]">Camera</span>
+                <span className="text-sm text-[var(--text)]">{STRINGS.preStart.camera}</span>
                 {cameraPermission === 'denied' && (
                   <span className="ml-auto text-right text-xs text-red-500">
-                    {cameraRequired ? 'Enable in browser settings' : 'Optional for this interview'}
+                    {cameraRequired ? STRINGS.preStart.enableInSettings : STRINGS.preStart.cameraOptional}
                   </span>
                 )}
               </div>
@@ -379,7 +374,7 @@ export function InterviewPreStartScreen({
                 <div className="flex items-center gap-3 rounded-lg bg-[var(--surface2)] p-3 sm:col-span-2">
                   <Monitor size={16} className="flex-shrink-0 text-[var(--primary)]" />
                   <span className="text-sm text-[var(--text)]">
-                    Screen sharing is requested when the interview starts
+                    {STRINGS.preStart.screenShareRequested}
                   </span>
                 </div>
               )}
@@ -387,7 +382,7 @@ export function InterviewPreStartScreen({
                 <div className="flex items-center gap-3 rounded-lg bg-[var(--surface2)] p-3 sm:col-span-2">
                   <Maximize size={16} className="flex-shrink-0 text-[var(--primary)]" />
                   <span className="text-sm text-[var(--text)]">
-                    Fullscreen is activated when the interview starts
+                    {STRINGS.preStart.fullscreenActivated}
                   </span>
                 </div>
               )}
@@ -405,7 +400,7 @@ export function InterviewPreStartScreen({
                   leftIcon={<Camera size={18} />}
                   className="w-full"
                 >
-                  Enable Camera &amp; Microphone
+                  {STRINGS.preStart.enableDevices}
                 </Button>
               )}
 
@@ -417,16 +412,14 @@ export function InterviewPreStartScreen({
                     {captureStepTitle(photoRequired, roomScanRequired)}
                   </h3>
                   <p className="mt-1 text-sm text-[var(--textSecondary)]">
-                    This is how we confirm who sat the interview and what was around them.
+                    {STRINGS.preStart.captureWhy}
                   </p>
                 </div>
 
                 <div className="flex items-start gap-2 rounded-lg bg-[var(--surface2)] p-3 text-sm text-[var(--textSecondary)]">
                   <ScanLine size={16} className="mt-0.5 flex-shrink-0 text-[var(--textTertiary)]" />
                   <p>
-                    Look straight at the camera for the photo, with nobody else in frame. Then turn
-                    slowly on the spot for the room scan so the whole room is captured — it takes a
-                    few seconds, so keep turning until it finishes.
+                    {STRINGS.preStart.captureHow}
                   </p>
                 </div>
 
@@ -442,7 +435,7 @@ export function InterviewPreStartScreen({
                   />
                 ) : (
                   <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                    Allow camera and microphone access first — this step needs both.
+                    {STRINGS.preStart.allowDevicesFirst}
                   </p>
                 )}
               </div>
@@ -457,18 +450,18 @@ export function InterviewPreStartScreen({
               <CardTitle>
                 <div className="flex items-center gap-2">
                   <Smartphone className="h-5 w-5 text-[var(--primary)]" />
-                  Connect Your Phone
+                  {STRINGS.preStart.phone.title}
                   {mobileVerified && (
                     <span className="ml-1 flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                      <CheckCircle2 size={12} /> Verified
+                      <CheckCircle2 size={12} /> {STRINGS.preStart.phone.verifiedBadge}
                     </span>
                   )}
                 </div>
               </CardTitle>
               <p className="mt-1 text-sm text-[var(--textSecondary)]">
                 {mobileRequired
-                  ? 'A second camera, showing you and your screen together. This interview requires it.'
-                  : 'A second camera, showing you and your screen together.'}
+                  ? STRINGS.preStart.phone.purposeRequired
+                  : STRINGS.preStart.phone.purposeOptional}
               </p>
             </CardHeader>
             <CardContent>
@@ -487,16 +480,15 @@ export function InterviewPreStartScreen({
                       className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                     />
                     <span className="text-sm text-[var(--text)]">
-                      Continue without my phone.
+                      {STRINGS.preStart.phone.continueWithout}
                       <span className="mt-0.5 block text-xs text-[var(--textSecondary)]">
-                        The interview goes ahead with one camera, the QR code is switched off, and it is
-                        recorded that the second camera was not used.
+                        {STRINGS.preStart.phone.continueWithoutNote}
                       </span>
                     </span>
                   </label>
                   {!mobileSkipped && !wantsPhone && (
                     <Button variant="outline" onClick={() => setWantsPhone(true)} leftIcon={<ScanLine size={16} />}>
-                      Use my phone — show the QR code
+                      {STRINGS.preStart.phone.usePhone}
                     </Button>
                   )}
                 </div>
@@ -510,20 +502,17 @@ export function InterviewPreStartScreen({
                     </div>
                     <div className="min-w-0 flex-1 space-y-2">
                       <p className="text-sm font-semibold text-[var(--text)]">
-                        Scan this with your phone camera
+                        {STRINGS.preStart.phone.scanThis}
                       </p>
                       <ul className="space-y-1.5 text-sm text-[var(--textSecondary)]">
+                        <li>{STRINGS.preStart.phone.tipPlacement}</li>
                         <li>
-                          Stand the phone to one side of your desk, about an arm&rsquo;s length
-                          away, in landscape.
+                          {STRINGS.preStart.phone.tipAngleBefore}
+                          <strong className="text-[var(--text)]">{STRINGS.preStart.phone.tipAngleBold}</strong>
+                          {STRINGS.preStart.phone.tipAngleAfter}
                         </li>
-                        <li>
-                          Angle it so the camera sees{' '}
-                          <strong className="text-[var(--text)]">both you and your screen</strong> in
-                          the same shot — that is the whole point of the second camera.
-                        </li>
-                        <li>Keep it plugged in, and do not let it lock or sleep.</li>
-                        <li>Leave the browser tab open on the phone for the whole interview.</li>
+                        <li>{STRINGS.preStart.phone.tipPower}</li>
+                        <li>{STRINGS.preStart.phone.tipTab}</li>
                       </ul>
                     </div>
                   </div>
@@ -535,7 +524,7 @@ export function InterviewPreStartScreen({
 
                   <p className="flex items-start gap-2 text-xs text-[var(--textTertiary)]">
                     <Lock size={12} className="mt-0.5 flex-shrink-0" />
-                    The phone feed is used for proctoring this interview only.
+                    {STRINGS.preStart.phone.proctoringOnly}
                   </p>
                 </div>
               )}
@@ -545,11 +534,11 @@ export function InterviewPreStartScreen({
                   <div className="flex items-center justify-center gap-2">
                     <Monitor className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                     <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                      Phone connected
+                      {STRINGS.preStart.phone.connected}
                     </p>
                   </div>
                   <p className="text-center text-xs text-[var(--textSecondary)]">
-                    Finish the room check on your phone.
+                    {STRINGS.preStart.phone.finishRoomCheck}
                   </p>
                 </div>
               )}
@@ -559,11 +548,11 @@ export function InterviewPreStartScreen({
                   <div className="flex items-center justify-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                      Phone verified
+                      {STRINGS.preStart.phone.verified}
                     </p>
                   </div>
                   <p className="text-center text-xs text-[var(--textSecondary)]">
-                    Leave it exactly where it is. You can start the interview now.
+                    {STRINGS.preStart.phone.leaveInPlace}
                   </p>
                 </div>
               )}
@@ -572,14 +561,14 @@ export function InterviewPreStartScreen({
               {mobileSkipped && !mobileVerified && !mobileRequired && (
                 <div className="flex items-center justify-center gap-2 py-2">
                   <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Phone skipped</p>
+                  <p className="text-sm font-medium text-amber-600 dark:text-amber-400">{STRINGS.preStart.phone.skipped}</p>
                 </div>
               )}
 
               {mobileRequired && !mobileVerified && (
                 <p className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
                   <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
-                  This interview cannot be started without a paired phone.
+                  {STRINGS.preStart.phone.cannotStart}
                 </p>
               )}
             </CardContent>
@@ -598,8 +587,7 @@ export function InterviewPreStartScreen({
                   className="mt-1 h-4 w-4 flex-shrink-0 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                 />
                 <span className="text-sm text-[var(--text)]">
-                  I have read and understood all the instructions above. I agree to follow the rules
-                  and understand that violations may end my interview automatically.
+                  {STRINGS.preStart.agreement}
                 </span>
               </label>
 
@@ -615,7 +603,7 @@ export function InterviewPreStartScreen({
                   role="alert"
                   className="space-y-1.5 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-900/20"
                 >
-                  <li className="text-sm font-semibold text-[var(--text)]">Before you can begin:</li>
+                  <li className="text-sm font-semibold text-[var(--text)]">{STRINGS.preStart.beforeYouBegin}</li>
                   {blockers.map((blocker) => (
                     <li
                       key={blocker}
@@ -638,7 +626,7 @@ export function InterviewPreStartScreen({
                 isLoading={starting}
                 disabled={!canStart}
               >
-                {mobileSkipped && !mobileVerified ? 'Begin Without a Phone' : 'Begin AI Interview'}
+                {mobileSkipped && !mobileVerified ? STRINGS.preStart.beginWithoutPhone : STRINGS.preStart.begin}
               </Button>
             </div>
           </CardContent>

@@ -38,7 +38,8 @@ const EMPTY: RoundEligibility = { assignable: [], blocked: [], repeats: 0 };
  */
 function isOutstanding(schedule: InterviewSchedule): boolean {
   if (schedule.attemptStatus === 'COMPLETED') return false;
-  return !!schedule.deadlineTime && !isPast(schedule.deadlineTime);
+  // No end time recorded means it was never closed: still the candidate's to sit.
+  return !(schedule.deadlineTime && isPast(schedule.deadlineTime));
 }
 
 /** Work out who a round can be booked for, out of one selection. */

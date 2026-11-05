@@ -1,3 +1,6 @@
+import { isAtsRejected, isAtsShortlisted, usableAtsScore } from '@/utils/ats-status.utils';
+import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
+import { resumeExtensionForType } from '@/utils/file.utils';
 import { useState, useEffect, useMemo } from 'react';
 import {
   Loader2,
@@ -12,15 +15,12 @@ import {
   Clock,
   TrendingUp,
   Search,
-  Download,
-  ExternalLink,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
-import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { BackLink } from '@/components/ui/BackLink';
 import { jobService } from '@/services/job.service';
@@ -34,6 +34,7 @@ import { AtsResultsTable } from '@/components/admin/AtsResultsTable';
 import { ScreeningRunReport } from '@/components/admin/ScreeningRunReport';
 import { getAppEmail } from '@/utils/application.utils';
 import { MESSAGES } from '@/config/messages';
+import { STRINGS } from '@/constants/strings';
 import type { JobPostDTO, JobApplicationDTO, ScreeningRun } from '@/types/job.types';
 
 type FilterTab = 'all' | 'shortlisted' | 'rejected';
@@ -59,6 +60,13 @@ export function AtsScreeningPage() {
   const [sortField, setSortField] = usePersistentState<SortField>('ats:sortField', 'matchPercent');
   const [sortDirection, setSortDirection] = usePersistentState<SortDirection>('ats:sortDirection', 'desc');
   const [searchQuery, setSearchQuery] = usePersistentState('ats:searchQuery', '');
+  /** Only candidates scoring at least this, as typed; empty means no limit. */
+  const [minScore, setMinScore] = useState('');
+  /** Rows ticked in the results, by lower-case email, to screen just those. */
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  /** Scores from "Check score": shown in the table, never saved. */
+  const [checkedScores, setCheckedScores] = useState<Record<string, number>>({});
+  const [checking, setChecking] = useState(false);
 
   // Candidates ticked on the Candidates page before coming here. Screening
   // defaults to just these — the admin already said who they meant.
@@ -71,7 +79,7 @@ export function AtsScreeningPage() {
   const [selectedCandidate, setSelectedCandidate] = useState<JobApplicationDTO | null>(null);
 
   // Resume viewer
-  const [resumeView, setResumeView] = useState<{ url: string; name: string } | null>(null);
+  const [resumeView, setResumeView] = useState<{ url: string; name: string; type: string } | null>(null);
   const [resumeLoading, setResumeLoading] = useState(false);
 
   useEffect(() => {
@@ -92,7 +100,11 @@ export function AtsScreeningPage() {
     try {
       const res = await resumeService.view(email, { _skipErrorToast: true });
       const url = URL.createObjectURL(res.data);
-      setResumeView({ url, name: candidate.resumeFileName || `${email}-resume.pdf` });
+      setResumeView({
+        url,
+        name: candidate.resumeFileName || `${email}-resume${resumeExtensionForType(res.data.type)}`,
+        type: res.data.type,
+      });
     } catch (err) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
       showToast(
@@ -111,16 +123,6 @@ export function AtsScreeningPage() {
       if (prev) URL.revokeObjectURL(prev.url);
       return null;
     });
-  }
-
-  function downloadResume() {
-    if (!resumeView) return;
-    const a = document.createElement('a');
-    a.href = resumeView.url;
-    a.download = resumeView.name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
   }
 
   // Re-derive the selected job from the persisted prefix once jobs load,
@@ -179,12 +181,13 @@ export function AtsScreeningPage() {
     }
   }
 
-  async function handleScreenCandidates() {
+  async function handleScreenCandidates(emailsOverride?: string[]) {
     if (!selectedPrefix) {
       showToast(MESSAGES.admin.common.selectJobFirst, 'warning');
       return;
     }
-    const screenSelectedOnly = scope === 'selected' && scopeEmails.length > 0;
+    const emailsToScreen = emailsOverride ?? (scope === 'selected' ? scopeEmails : []);
+    const screenSelectedOnly = emailsToScreen.length > 0;
 
     setScreening(true);
     setRun(null);
@@ -192,7 +195,7 @@ export function AtsScreeningPage() {
       // Passing emails screens only those; omitting them screens the whole job.
       const res = await jobApplicationService.screen({
         jobPrefix: selectedPrefix,
-        ...(screenSelectedOnly ? { emails: scopeEmails } : {}),
+        ...(screenSelectedOnly ? { emails: emailsToScreen } : {}),
       });
       const report = res.data;
       setRun(report ?? null);
@@ -221,6 +224,31 @@ export function AtsScreeningPage() {
       // by the server's own message).
     } finally {
       setScreening(false);
+    }
+  }
+
+  /** Looks up what the ticked candidates would score. Changes nothing: no stage, no stored score. */
+  async function handleCheckScores() {
+    if (!selectedPrefix || picked.size === 0) return;
+    setChecking(true);
+    try {
+      const res = await jobApplicationService.checkScores({ jobPrefix: selectedPrefix, emails: Array.from(picked) });
+      const found: Record<string, number> = {};
+      (res.data ?? []).forEach((row) => {
+        if (row.matchPercent != null) found[row.email.toLowerCase()] = row.matchPercent;
+      });
+      setCheckedScores((prev) => ({ ...prev, ...found }));
+      const missing = (res.data ?? []).filter((row) => row.matchPercent == null).length;
+      showToast(
+        missing > 0
+          ? `Scores checked. ${missing} had no readable resume. Nothing was changed.`
+          : 'Scores checked. Nothing was changed.',
+        'info',
+      );
+    } catch {
+      // Error toast auto-handled by the interceptor.
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -253,14 +281,12 @@ export function AtsScreeningPage() {
   const stats = useMemo(() => {
     const list = visibleCandidates;
     const total = list.length;
-    const shortlisted = list.filter((c) => c.status === 'SHORTLISTED').length;
-    const rejected = list.filter((c) => c.status === 'REJECTED').length;
-    const avgScore = total > 0
-      ? list.reduce((sum, c) => sum + (c.matchPercent ?? 0), 0) / total
-      : 0;
-    const topScore = total > 0
-      ? Math.max(...list.map((c) => c.matchPercent ?? 0))
-      : 0;
+    const shortlisted = list.filter(isAtsShortlisted).length;
+    const rejected = list.filter(isAtsRejected).length;
+    // Over the candidates that have a believable score only: an unscored one is not a 0.
+    const scores = list.map(usableAtsScore).filter((s): s is number => s != null);
+    const avgScore = scores.length > 0 ? scores.reduce((sum, s) => sum + s, 0) / scores.length : 0;
+    const topScore = scores.length > 0 ? Math.max(...scores) : 0;
     return { total, shortlisted, rejected, avgScore, topScore };
   }, [visibleCandidates]);
 
@@ -270,9 +296,15 @@ export function AtsScreeningPage() {
 
     // Tab filter
     if (activeTab === 'shortlisted') {
-      list = list.filter((c) => c.status === 'SHORTLISTED');
+      list = list.filter(isAtsShortlisted);
     } else if (activeTab === 'rejected') {
-      list = list.filter((c) => c.status === 'REJECTED');
+      list = list.filter(isAtsRejected);
+    }
+
+    // Score: only those at or above the limit. A candidate with no score on record cannot meet it.
+    const limit = minScore.trim() === '' ? null : Number(minScore);
+    if (limit !== null && Number.isFinite(limit)) {
+      list = list.filter((c) => (usableAtsScore(c) ?? -1) >= limit);
     }
 
     // Search
@@ -301,7 +333,7 @@ export function AtsScreeningPage() {
     });
 
     return list;
-  }, [visibleCandidates, activeTab, searchQuery, sortField, sortDirection]);
+  }, [visibleCandidates, activeTab, searchQuery, minScore, sortField, sortDirection]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -388,15 +420,25 @@ export function AtsScreeningPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <Tag size={20} className="text-[var(--primary)]" />
-              <CardTitle>Required Skills</CardTitle>
+              <CardTitle>{STRINGS.atsScreening.scoringHeading}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             {selectedJob ? (
               <div className="space-y-4">
-                <p className="text-sm text-[var(--textSecondary)]">
-                  These skills will be matched against candidate resumes for ATS scoring:
-                </p>
+                <p className="text-sm text-[var(--textSecondary)]">{STRINGS.atsScreening.scoringIntro}</p>
+                <ul className="space-y-1 text-sm text-[var(--textSecondary)]">
+                  {STRINGS.atsScreening.scoringParts.map((part) => (
+                    <li key={part.name} className="flex gap-2">
+                      <span className="w-10 flex-shrink-0 font-semibold text-[var(--text)]">{part.weight}%</span>
+                      <span>
+                        <span className="font-medium text-[var(--text)]">{part.name}</span>: {part.detail}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-[var(--textTertiary)]">{STRINGS.atsScreening.scoringNote}</p>
+                <p className="text-sm font-medium text-[var(--text)]">{STRINGS.atsScreening.keySkillsHeading}</p>
                 <div className="flex flex-wrap gap-2">
                   {selectedJob.keySkills.split(',').map((skill, idx) => (
                     <Badge key={idx} variant="secondary" size="md">
@@ -468,7 +510,7 @@ export function AtsScreeningPage() {
                 </div>
 
                 <Button
-                  onClick={handleScreenCandidates}
+                  onClick={() => handleScreenCandidates()}
                   isLoading={screening}
                   leftIcon={!screening ? <BarChart3 size={18} /> : undefined}
                   className="w-full"
@@ -602,13 +644,25 @@ export function AtsScreeningPage() {
                 </button>
               ))}
             </div>
-            <div className="w-full sm:w-64">
-              <Input
-                placeholder="Search candidates..."
-                leftIcon={<Search size={16} />}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <div className="w-full sm:w-36">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="Min score %"
+                  value={minScore}
+                  onChange={(e) => setMinScore(e.target.value)}
+                />
+              </div>
+              <div className="w-full sm:w-64">
+                <Input
+                  placeholder="Search candidates..."
+                  leftIcon={<Search size={16} />}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
@@ -621,6 +675,24 @@ export function AtsScreeningPage() {
                     ? `Just Screened (${filteredCandidates.length})`
                     : `Screening Results (${filteredCandidates.length})`}
                 </CardTitle>
+
+                {picked.size > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" isLoading={checking} onClick={handleCheckScores}>
+                      Check score ({picked.size})
+                    </Button>
+                    <Button
+                      size="sm"
+                      isLoading={screening}
+                      onClick={() => handleScreenCandidates(Array.from(picked))}
+                    >
+                      Screen selected ({picked.size})
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+                      Clear
+                    </Button>
+                  </div>
+                )}
 
                 {/* After a scoped run the table is narrowed to those
                     candidates — say so, and offer the way back. */}
@@ -673,6 +745,23 @@ export function AtsScreeningPage() {
                   sortDirection={sortDirection}
                   onSort={toggleSort}
                   onView={setSelectedCandidate}
+                  selected={picked}
+                  checkedScores={checkedScores}
+                  onToggle={(email) =>
+                    setPicked((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(email)) next.delete(email);
+                      else next.add(email);
+                      return next;
+                    })
+                  }
+                  onToggleAll={(emails, checked) =>
+                    setPicked((prev) => {
+                      const next = new Set(prev);
+                      emails.forEach((e) => (checked ? next.add(e) : next.delete(e)));
+                      return next;
+                    })
+                  }
                 />
               )}
             </CardContent>
@@ -691,37 +780,7 @@ export function AtsScreeningPage() {
       )}
 
       {/* Resume viewer */}
-      {resumeView && (
-        <Modal
-          isOpen={!!resumeView}
-          onClose={closeResume}
-          title={resumeView.name}
-          size="xl"
-          footer={
-            <>
-              <Button variant="ghost" onClick={closeResume}>
-                Close
-              </Button>
-              <Button
-                variant="outline"
-                leftIcon={<ExternalLink size={16} />}
-                onClick={() => window.open(resumeView.url, '_blank', 'noopener,noreferrer')}
-              >
-                Open in New Tab
-              </Button>
-              <Button leftIcon={<Download size={16} />} onClick={downloadResume}>
-                Download
-              </Button>
-            </>
-          }
-        >
-          <iframe
-            src={resumeView.url}
-            title="Resume"
-            className="w-full h-[70vh] rounded-lg border border-[var(--border)] bg-white"
-          />
-        </Modal>
-      )}
+      {resumeView && <ResumeViewerModal resume={resumeView} onClose={closeResume} />}
     </div>
   );
 }
