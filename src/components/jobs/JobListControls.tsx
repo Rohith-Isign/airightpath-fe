@@ -7,6 +7,7 @@ import type { JobListing, JobStatusFilter } from '@/hooks/useJobListing';
 
 const STATUS_OPTIONS: { value: JobStatusFilter; label: string }[] = [
   { value: 'active', label: STRINGS.jobList.statusActive },
+  { value: 'closingSoon', label: STRINGS.jobList.statusClosingSoon },
   { value: 'expired', label: STRINGS.jobList.statusExpired },
   { value: 'all', label: STRINGS.jobList.statusAll },
 ];
@@ -66,7 +67,9 @@ export function JobListCount({ listing }: { listing: JobListing }) {
       ? STRINGS.jobList.jobsAll
       : status === 'active'
         ? STRINGS.jobList.jobsActive
-        : STRINGS.jobList.jobsExpired;
+        : status === 'closingSoon'
+          ? STRINGS.jobList.jobsClosingSoon
+          : STRINGS.jobList.jobsExpired;
 
   return (
     <p className="text-sm text-[var(--textSecondary)]">

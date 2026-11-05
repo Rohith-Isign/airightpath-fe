@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePersistentState } from './usePersistentState';
-import { canonicalJobType } from '@/utils/job.utils';
+import { canonicalJobType, deadlineUrgency } from '@/utils/job.utils';
 import type { JobPostDTO } from '@/types/job.types';
 
 /**
@@ -12,7 +12,8 @@ import type { JobPostDTO } from '@/types/job.types';
  * server-side paging contract this hook should switch to once it exists.
  */
 
-export type JobStatusFilter = 'active' | 'expired' | 'all';
+/** `closingSoon` is the active jobs whose deadline is within `DEADLINE_SOON_DAYS`. */
+export type JobStatusFilter = 'active' | 'closingSoon' | 'expired' | 'all';
 
 /**
  * Multiples of six, so every full page fills its last row whether the grid shows one, two or three cards across. A
@@ -31,6 +32,11 @@ export const DEFAULT_JOB_PAGE_SIZE = 18;
  */
 export function jobDisplayName(job: Pick<JobPostDTO, 'role' | 'jobTitle'>): string {
   return job.jobTitle?.trim() || job.role?.trim() || '';
+}
+
+/** A job still open whose deadline is close (see `DEADLINE_SOON_DAYS`). */
+export function isJobClosingSoon(job: Pick<JobPostDTO, 'applicationDeadline'>): boolean {
+  return !isJobExpired(job) && deadlineUrgency(job.applicationDeadline) === 'soon';
 }
 
 /** A job is expired once its application deadline is before today. */
@@ -59,7 +65,7 @@ export interface JobListing {
   paged: JobPostDTO[];
   totalPages: number;
   /** How many of the search/type matches fall in each status bucket. */
-  counts: { all: number; active: number; expired: number };
+  counts: { all: number; active: number; closingSoon: number; expired: number };
 }
 
 export function useJobListing(jobs: JobPostDTO[], storagePrefix: string): JobListing {
@@ -109,7 +115,12 @@ export function useJobListing(jobs: JobPostDTO[], storagePrefix: string): JobLis
 
   const counts = useMemo(() => {
     const expired = matches.filter(isJobExpired).length;
-    return { all: matches.length, active: matches.length - expired, expired };
+    return {
+      all: matches.length,
+      active: matches.length - expired,
+      closingSoon: matches.filter(isJobClosingSoon).length,
+      expired,
+    };
   }, [matches]);
 
   const filtered = useMemo(() => {
@@ -122,6 +133,7 @@ export function useJobListing(jobs: JobPostDTO[], storagePrefix: string): JobLis
       for (const job of matches) (isJobExpired(job) ? expired : active).push(job);
       return [...active, ...expired];
     }
+    if (status === 'closingSoon') return matches.filter(isJobClosingSoon);
     const wantExpired = status === 'expired';
     return matches.filter((job) => isJobExpired(job) === wantExpired);
   }, [matches, status]);
