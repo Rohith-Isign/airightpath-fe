@@ -412,16 +412,25 @@ export function InterviewResultsPage() {
   // The rows the table, the count and both exports describe. Local midnight to local end of day, so a bound of the
   // 14th includes everything submitted on the 14th; an interview with no end time cannot satisfy a date range.
   const interviews = useMemo(() => {
-    if (!dateFilterActive) return allInterviews;
     const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
     const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : null;
-    return allInterviews.filter((row) => {
-      const at = submittedAtOf(row);
-      if (!at) return false;
-      if (from && at < from) return false;
-      if (to && at > to) return false;
-      return true;
-    });
+    const inRange = dateFilterActive
+      ? allInterviews.filter((row) => {
+          const at = submittedAtOf(row);
+          if (!at) return false;
+          if (from && at < from) return false;
+          if (to && at > to) return false;
+          return true;
+        })
+      : allInterviews;
+    // Newest first, in the table and in both exports: when it was submitted, or failing that when it started or was
+    // booked, with the id breaking a tie. An interview that was never finished still sits where it happened.
+    const stamp = (row: InterviewSchedule) => {
+      const raw = row.endedAt ?? row.startedAt ?? row.assignedAt;
+      const time = raw ? parseServerInstant(raw).getTime() : NaN;
+      return Number.isNaN(time) ? 0 : time;
+    };
+    return [...inRange].sort((a, b) => stamp(b) - stamp(a) || (b.id ?? 0) - (a.id ?? 0));
   }, [allInterviews, dateFilterActive, dateFrom, dateTo]);
 
   const roundOrUndefined = roundFilter === 'ALL' ? undefined : roundFilter;
