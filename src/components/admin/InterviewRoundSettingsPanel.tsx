@@ -55,6 +55,10 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
 
   /** The round's own categories, or null when it is using the shared list. */
   const [override, setOverride] = useState<DraftCategory[] | null>(null);
+  /** Whether the server holds an own list for this round right now, i.e. whether there is anything to remove. */
+  const [storedOverride, setStoredOverride] = useState(false);
+  /** The form as last loaded or saved, to tell whether there is anything to save. */
+  const [savedSnapshot, setSavedSnapshot] = useState('');
   /** What the round is scored on today, whether overridden or not. */
   const [effective, setEffective] = useState<DraftCategory[]>([]);
 
@@ -75,13 +79,20 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
       setTemplate(resolved);
       // Blank where the job has not overridden, so the placeholder can show the
       // platform's number rather than presenting it as this job's choice.
-      setMinQuestions(resolved?.configured ? String(resolved.minQuestions) : '');
-      setMaxQuestions(resolved?.configured ? String(resolved.maxQuestions) : '');
-      setDifficulty(resolved?.baselineDifficulty ?? 'STANDARD');
-      setAdaptive(resolved?.adaptiveDifficulty ?? true);
+      const loadedMin = resolved?.configured ? String(resolved.minQuestions) : '';
+      const loadedMax = resolved?.configured ? String(resolved.maxQuestions) : '';
+      const loadedDifficulty = resolved?.baselineDifficulty ?? 'STANDARD';
+      const loadedAdaptive = resolved?.adaptiveDifficulty ?? true;
+      setMinQuestions(loadedMin);
+      setMaxQuestions(loadedMax);
+      setDifficulty(loadedDifficulty);
+      setAdaptive(loadedAdaptive);
 
       const own = ownRes.data ?? [];
-      setOverride(own.length > 0 ? own.map(toDraft) : null);
+      const loadedOverride = own.length > 0 ? own.map(toDraft) : null;
+      setOverride(loadedOverride);
+      setStoredOverride(own.length > 0);
+      setSavedSnapshot(snapshotOf(loadedMin, loadedMax, loadedDifficulty, loadedAdaptive, loadedOverride));
       setEffective((effectiveRes.data ?? []).map(toDraft));
     } catch {
       showToast('Could not load this round’s settings.', 'error');
@@ -94,6 +105,8 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
     load();
   }, [load]);
 
+  const dirty = snapshotOf(minQuestions, maxQuestions, difficulty, adaptive, override) !== savedSnapshot;
+
   const totalWeight = (override ?? effective).reduce((sum, c) => sum + (c.weight || 0), 0);
 
   function updateCategory(index: number, patch: Partial<DraftCategory>) {
@@ -103,6 +116,7 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
   }
 
   async function saveSettings() {
+    if (!dirty) return;
     const min = minQuestions.trim() === '' ? null : Number(minQuestions);
     const max = maxQuestions.trim() === '' ? null : Number(maxQuestions);
 
@@ -149,11 +163,15 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
       });
       // An empty list is how an override is removed: the save replaces the
       // round's rows with nothing, and resolution falls back to the shared list.
-      await promptService.saveEvaluationCategories({
-        jobPrefix,
-        round,
-        categories: (override ?? []).map((c) => ({ ...c, jobPrefix })),
-      });
+      // Only sent when there is a list to save or one to remove; a round already on the shared list has nothing to
+      // change, and the call would only be an empty list for the server to reject.
+      if (override || storedOverride) {
+        await promptService.saveEvaluationCategories({
+          jobPrefix,
+          round,
+          categories: (override ?? []).map((c) => ({ ...c, jobPrefix })),
+        });
+      }
       showToast(`${INTERVIEW_ROUND_LABELS[round]} settings saved.`, 'success');
       load();
     } catch {
@@ -362,7 +380,12 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
             </div>
 
             <div className="flex justify-end border-t border-[var(--border)] pt-4">
-              <Button onClick={saveSettings} isLoading={saving} disabled={saving}>
+              <Button
+                onClick={saveSettings}
+                isLoading={saving}
+                disabled={saving || !dirty}
+                title={dirty ? undefined : 'Nothing has changed since the last save.'}
+              >
                 Save {INTERVIEW_ROUND_LABELS[round]} settings
               </Button>
             </div>
@@ -371,6 +394,23 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
       </CardContent>
     </Card>
   );
+}
+
+/** Everything the form can change, as one string, so "has anything changed" is a comparison. */
+function snapshotOf(
+  min: string,
+  max: string,
+  difficulty: InterviewDifficulty,
+  adaptive: boolean,
+  override: DraftCategory[] | null
+): string {
+  return JSON.stringify([
+    min.trim(),
+    max.trim(),
+    difficulty,
+    adaptive,
+    override?.map((c) => [c.categoryName, c.weight, c.description ?? '']) ?? null,
+  ]);
 }
 
 function toDraft(category: EvaluationCategory): DraftCategory {

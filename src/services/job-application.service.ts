@@ -1,7 +1,7 @@
 import api from './api.service';
 import { ENDPOINTS } from '@/config/api.endpoints';
 import type { ApiResponse } from '@/types/api.types';
-import type { JobApplicationDTO, ScreeningRun } from '@/types/job.types';
+import type { JobApplicationDTO, ScoreBreakdown, ScreeningRun } from '@/types/job.types';
 
 export const jobApplicationService = {
   apply(data: FormData) {
@@ -63,6 +63,11 @@ export const jobApplicationService = {
       ENDPOINTS.JOB_APPLICATIONS.SCORE_CHECK,
       data,
     );
+  },
+
+  /** Why one application scores what it does: the weighted parts, and the key skills found and missing. */
+  getScoreBreakdown(applicationId: number) {
+    return api.get<ScoreBreakdown>(ENDPOINTS.JOB_APPLICATIONS.SCORE_BREAKDOWN(applicationId));
   },
 
   sendAckMail(data: { emails: string[]; jobPrefix: string; dateTime?: string; content?: string }) {

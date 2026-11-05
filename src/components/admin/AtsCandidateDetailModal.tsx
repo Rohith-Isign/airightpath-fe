@@ -1,11 +1,13 @@
-import { Mail, Phone, Clock, Briefcase, MapPin, FileText, Loader2, Eye, TrendingUp, TrendingDown } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Mail, Phone, Clock, Briefcase, MapPin, FileText, Loader2, Eye, TrendingUp, TrendingDown, Check, X } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ReferralFields } from '@/components/application/ReferralFields';
 import { getAppEmail } from '@/utils/application.utils';
 import { getScoreColor, getScoreBg } from '@/utils/score.utils';
-import type { JobApplicationDTO } from '@/types/job.types';
+import { jobApplicationService } from '@/services/job-application.service';
+import type { JobApplicationDTO, ScoreBreakdown } from '@/types/job.types';
 
 interface AtsCandidateDetailModalProps {
   candidate: JobApplicationDTO;
@@ -48,6 +50,30 @@ export function AtsCandidateDetailModal({
     ? !/not/i.test(candidate.shortlistStatus)
     : candidate.status === 'SHORTLISTED';
   const verdict = scoreVerdict(score);
+
+  const [breakdown, setBreakdown] = useState<ScoreBreakdown | null>(null);
+  const [breakdownState, setBreakdownState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  useEffect(() => {
+    if (candidate.id == null) {
+      setBreakdownState('failed');
+      return;
+    }
+    let cancelled = false;
+    setBreakdownState('loading');
+    jobApplicationService
+      .getScoreBreakdown(candidate.id)
+      .then((res) => {
+        if (cancelled) return;
+        setBreakdown(res.data);
+        setBreakdownState('ready');
+      })
+      .catch(() => {
+        if (!cancelled) setBreakdownState('failed');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [candidate.id]);
 
   return (
     <Modal
@@ -105,6 +131,116 @@ export function AtsCandidateDetailModal({
             </span>
             <span className="text-xs text-[var(--textTertiary)]">100%</span>
           </div>
+        </div>
+
+        {/* Why this score */}
+        <div>
+          <h4 className="text-sm font-semibold text-[var(--text)] mb-1">How this score was worked out</h4>
+          <p className="text-xs text-[var(--textSecondary)] mb-3">
+            The resume is compared with the job posting in up to five parts. Each part is marked out of 100, then
+            counted by its share of the total.
+          </p>
+          {breakdownState === 'loading' && (
+            <div className="flex items-center gap-2 text-sm text-[var(--textSecondary)]">
+              <Loader2 size={16} className="animate-spin" /> Loading the breakdown…
+            </div>
+          )}
+          {breakdownState === 'failed' && (
+            <p className="text-sm text-[var(--textSecondary)]">The breakdown could not be loaded. Try again later.</p>
+          )}
+          {breakdownState === 'ready' && breakdown && (
+            <div className="space-y-4">
+              {breakdown.note && <p className="text-sm text-[var(--textSecondary)]">{breakdown.note}</p>}
+              {breakdown.parts.length > 0 && (
+                <div className="rounded-lg border border-[var(--border)] overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[var(--surface1)] text-xs text-[var(--textTertiary)]">
+                      <tr>
+                        <th className="text-left font-medium px-3 py-2">Part</th>
+                        <th className="text-right font-medium px-3 py-2">Resume scores</th>
+                        <th className="text-right font-medium px-3 py-2">Share of total</th>
+                        <th className="text-right font-medium px-3 py-2">Adds</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {breakdown.parts.map((part) => (
+                        <tr key={part.name} className="border-t border-[var(--border)]">
+                          <td className="px-3 py-2">
+                            <p className="font-medium text-[var(--text)]">{part.name}</p>
+                            <p className="text-xs text-[var(--textSecondary)]">{part.note}</p>
+                          </td>
+                          <td className={`px-3 py-2 text-right font-medium ${getScoreColor(part.score)}`}>
+                            {part.score.toFixed(0)}%
+                          </td>
+                          <td className="px-3 py-2 text-right text-[var(--textSecondary)]">
+                            {part.weight.toFixed(0)}%
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-[var(--text)]">
+                            {part.points.toFixed(1)}
+                          </td>
+                        </tr>
+                      ))}
+                      {breakdown.percent != null && (
+                        <tr className="border-t border-[var(--border)] bg-[var(--surface1)]">
+                          <td className="px-3 py-2 font-semibold text-[var(--text)]" colSpan={3}>
+                            Total
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold text-[var(--text)]">
+                            {breakdown.percent.toFixed(1)}%
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {breakdown.percent != null &&
+                breakdown.storedPercent != null &&
+                Math.abs(breakdown.percent - breakdown.storedPercent) >= 0.1 && (
+                  <p className="text-xs text-[var(--warning)]">
+                    The score above was saved at {breakdown.storedPercent.toFixed(1)}%. The job posting or the resume
+                    has changed since, so it comes to {breakdown.percent.toFixed(1)}% today. Run screening again to
+                    update it.
+                  </p>
+                )}
+              {(breakdown.matchedSkills.length > 0 || breakdown.missingSkills.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-[var(--textTertiary)] mb-2">
+                      Key skills found ({breakdown.matchedSkills.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {breakdown.matchedSkills.length === 0 && (
+                        <span className="text-xs text-[var(--textSecondary)]">None</span>
+                      )}
+                      {breakdown.matchedSkills.map((skill) => (
+                        <Badge key={skill} variant="success" size="sm">
+                          <Check size={12} className="mr-1 inline" />
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-[var(--textTertiary)] mb-2">
+                      Key skills not found ({breakdown.missingSkills.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {breakdown.missingSkills.length === 0 && (
+                        <span className="text-xs text-[var(--textSecondary)]">None</span>
+                      )}
+                      {breakdown.missingSkills.map((skill) => (
+                        <Badge key={skill} variant="error" size="sm">
+                          <X size={12} className="mr-1 inline" />
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Personal Details */}

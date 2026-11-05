@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { ROUTES } from '@/config/routes';
-import { jobApplicationSchema } from '@/config/validation';
+import { jobApplicationSchema, sanitizeExperience } from '@/config/validation';
 import { MESSAGES } from '@/config/messages';
 import { STRINGS } from '@/constants/strings';
 import {
@@ -461,6 +461,10 @@ export function JobApplicationPage() {
               label={STRINGS.applyForm.experience}
               required
               {...register('experience')}
+              onChange={(e) => {
+                e.target.value = sanitizeExperience(e.target.value);
+                void register('experience').onChange(e);
+              }}
               error={errors.experience?.message}
               placeholder={STRINGS.applyForm.experiencePlaceholder}
             />

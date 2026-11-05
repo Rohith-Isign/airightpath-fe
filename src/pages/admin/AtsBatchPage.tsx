@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Loader2, BarChart3, FileStack } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { usePersistentState } from '@/hooks/usePersistentState';
+import { Loader2, BarChart3, FileStack, Trash2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
@@ -10,14 +11,52 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { atsService, type BatchScreenResult } from '@/services/ats.service';
 import { MESSAGES } from '@/config/messages';
+import { clearFiles, loadFiles, saveFiles } from '@/utils/file-store.utils';
+
+const FILES_KEY = 'atsBatch:files';
 
 export function AtsBatchPage() {
   const { showToast } = useToast();
 
   const [files, setFiles] = useState<File[]>([]);
-  const [jobDescription, setJobDescription] = useState('');
+  // Everything on this page survives a refresh: the job description and the ranked results (sessionStorage, for the
+  // tab), and the chosen resumes themselves (IndexedDB, since a File cannot go in sessionStorage). "Clear all" empties
+  // all of it.
+  const [jobDescription, setJobDescription] = usePersistentState('atsBatch:jobDescription', '');
+  const [results, setResults] = usePersistentState<BatchScreenResult[]>('atsBatch:results', []);
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<BatchScreenResult[]>([]);
+  // False until the kept files are read back, so the empty list on first render is not saved over them.
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFiles(FILES_KEY).then((kept) => {
+      if (cancelled) return;
+      setFiles(kept);
+      setRestored(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (restored) void saveFiles(FILES_KEY, files);
+  }, [files, restored]);
+
+  function clearAll() {
+    setFiles([]);
+    setResults([]);
+    setJobDescription('');
+    void clearFiles(FILES_KEY);
+  }
+
+  /** The list changed: a resume taken out takes its result with it, a resume added leaves the others as they are. */
+  function handleFilesChange(next: File[]) {
+    setFiles(next);
+    const names = new Set(next.map((f) => f.name));
+    setResults((prev) => prev.filter((r) => !r.fileName || names.has(r.fileName)));
+  }
 
   async function handleSubmit() {
     if (files.length === 0) {
@@ -67,9 +106,22 @@ export function AtsBatchPage() {
         {/* Upload Section */}
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <FileStack size={20} className="text-[var(--primary)]" />
-              <CardTitle>Upload Resumes</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileStack size={20} className="text-[var(--primary)]" />
+                <CardTitle>Upload Resumes{files.length > 0 ? ` (${files.length})` : ''}</CardTitle>
+              </div>
+              {(files.length > 0 || results.length > 0 || jobDescription) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAll}
+                  disabled={loading}
+                  leftIcon={<Trash2 size={14} />}
+                >
+                  Clear all
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -79,10 +131,8 @@ export function AtsBatchPage() {
                 accept=".pdf,.doc,.docx"
                 multiple
                 maxSizeBytes={2 * 1024 * 1024}
-                onChange={(newFiles) => {
-                  setFiles(newFiles);
-                  setResults([]);
-                }}
+                value={files}
+                onChange={handleFilesChange}
                 onError={(msg) => showToast(msg, 'error')}
                 helperText="Upload PDF, DOC, or DOCX files (max 2MB each)"
               />

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Briefcase,
   CheckCircle,
@@ -15,12 +16,13 @@ import { Badge } from '@/components/ui/Badge';
 import { jobService } from '@/services/job.service';
 import {
   canonicalJobType,
-  deadlineUrgency,
   deadlineColor,
   deadlineLabel,
   DEADLINE_SOON_DAYS,
 } from '@/utils/job.utils';
-import { isJobExpired } from '@/hooks/useJobListing';
+import { isJobExpired, isJobClosingSoon, type JobStatusFilter } from '@/hooks/useJobListing';
+import { writePersistentValue } from '@/hooks/usePersistentState';
+import { ROUTES } from '@/config/routes';
 import { formatDate } from '@/utils/format.utils';
 import type { JobPostDTO } from '@/types/job.types';
 
@@ -28,6 +30,7 @@ import type { JobPostDTO } from '@/types/job.types';
 const RECENT_JOBS_LIMIT = 8;
 
 export function AdminDashboardPage() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<JobPostDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,6 +48,17 @@ export function AdminDashboardPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /**
+   * Opens Job Events already filtered to what the card counted. Search and type are cleared too, otherwise a filter
+   * left over from earlier would make the list disagree with the number on the card.
+   */
+  function openJobs(status: JobStatusFilter) {
+    writePersistentValue('adminJobs:status', status);
+    writePersistentValue('adminJobs:searchQuery', '');
+    writePersistentValue('adminJobs:filterType', '');
+    navigate(ROUTES.ADMIN.JOBS);
   }
 
   const openingsOf = (list: JobPostDTO[]) =>
@@ -74,6 +88,7 @@ export function AdminDashboardPage() {
       caption: `${openingsOf(jobs)} positions in total`,
       icon: <Briefcase size={24} />,
       variant: 'primary' as const,
+      onClick: () => openJobs('all'),
     },
     {
       label: 'Active Jobs',
@@ -81,6 +96,7 @@ export function AdminDashboardPage() {
       caption: `${openingsOf(activeJobs)} open positions`,
       icon: <CheckCircle size={24} />,
       variant: 'success' as const,
+      onClick: () => openJobs('active'),
     },
     {
       label: 'Expired Jobs',
@@ -88,13 +104,15 @@ export function AdminDashboardPage() {
       caption: `${openingsOf(expiredJobs)} positions closed`,
       icon: <CalendarX size={24} />,
       variant: 'error' as const,
+      onClick: () => openJobs('expired'),
     },
     {
       label: 'Closing Soon',
-      value: activeJobs.filter((j) => deadlineUrgency(j.applicationDeadline) === 'soon').length,
+      value: jobs.filter(isJobClosingSoon).length,
       caption: `Deadline within ${DEADLINE_SOON_DAYS} days`,
       icon: <Clock size={24} />,
       variant: 'warning' as const,
+      onClick: () => openJobs('closingSoon'),
     },
     {
       label: 'Pending Assessments',
@@ -140,6 +158,18 @@ export function AdminDashboardPage() {
             caption={stat.caption}
             icon={stat.icon}
             variant={stat.variant}
+            {...(stat.onClick && {
+              onClick: stat.onClick,
+              role: 'link',
+              tabIndex: 0,
+              className: 'cursor-pointer',
+              onKeyDown: (e: React.KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  stat.onClick();
+                }
+              },
+            })}
           />
         ))}
       </div>

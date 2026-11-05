@@ -71,6 +71,8 @@ export const ENDPOINTS = {
     // Screening run: whole job, or only the emails passed in.
     SCREEN: "/api/job-applications/screen",
     SCORE_CHECK: "/api/job-applications/score-check",
+    /** Admin: why one application scores what it does. */
+    SCORE_BREAKDOWN: (applicationId: number) => `/api/job-applications/${applicationId}/score-breakdown`,
     SEND_ACK_MAIL: "/api/job-applications/send-ack-mail",
     SEND_REJECTION_MAIL: "/api/job-applications/send-rejection-mail",
     SEND_RECONFIRMATION_MAIL: "/api/job-applications/send-reconfirmation-mail",
