@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePersistentState } from '@/hooks/usePersistentState';
 import { Loader2, BarChart3, FileStack } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -15,9 +16,12 @@ export function AtsBatchPage() {
   const { showToast } = useToast();
 
   const [files, setFiles] = useState<File[]>([]);
-  const [jobDescription, setJobDescription] = useState('');
+  // The job description and the ranked results are kept for the tab (sessionStorage), so a refresh does not throw
+  // away a scan. The resume files themselves cannot be: a browser does not let a page keep a chosen file across a
+  // reload, so the scanned files are listed from the results instead and are uploaded again only to scan again.
+  const [jobDescription, setJobDescription] = usePersistentState('atsBatch:jobDescription', '');
+  const [results, setResults] = usePersistentState<BatchScreenResult[]>('atsBatch:results', []);
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<BatchScreenResult[]>([]);
 
   async function handleSubmit() {
     if (files.length === 0) {
@@ -135,9 +139,20 @@ export function AtsBatchPage() {
       {!loading && results.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Ranked Results ({results.length})</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>Ranked Results ({results.length})</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setResults([])}>
+                Clear results
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
+            {files.length === 0 && (
+              <p className="mb-4 text-sm text-[var(--textSecondary)]">
+                These are the results of your last scan, kept for this tab. The resume files are not kept when the
+                page is refreshed: upload them again to scan again.
+              </p>
+            )}
             {/* Mobile: one card per result. Filenames and emails are long free
                 text, so on a phone the table scrolled sideways and pushed the
                 score — the reason to read this screen — out of view. */}
