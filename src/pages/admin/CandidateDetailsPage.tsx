@@ -248,6 +248,20 @@ const STAGE_ACTIONS: Record<string, BulkAction[]> = {
 };
 
 /**
+ * The one step that moves a candidate on from each stage: the button that is filled green, with the rest outlined.
+ * Stages not listed have no next step for the admin to take (waiting on the candidate, or finished). The interview
+ * buttons lead on their own where the next round is theirs: Exam Completed gives L2, L2 Done gives L3.
+ */
+const NEXT_STEP: Record<string, BulkAction | 'assessment'> = {
+  SHORTLISTED: 'ack',
+  ACKNOWLEDGED: 'assessment',
+  ACKNOWLEDGED_BACK: 'reconfirmation',
+  RECONFIRMED: 'assessment',
+  INTERVIEW_COMPLETED: 'success',
+  L3_DONE: 'success',
+};
+
+/**
  * What the assign button says, which differs by where in the pipeline it is:
  *
  * - Applied / Shortlisted skip the ack round-trip, and "Send Exam Directly" is
@@ -554,7 +568,7 @@ export function CandidateDetailsPage() {
         // Rejection carries the red fill on every stage, so the one
         // action that takes a candidate out of the running never
         // reads like the outline buttons that move them along.
-        variant={key === 'rejection' ? 'danger' : 'outline'}
+        variant={key === 'rejection' ? 'danger' : NEXT_STEP[activeStage] === key ? 'primary' : 'outline'}
         size="sm"
         leftIcon={config.icon}
         onClick={() => openActionModal(key)}
@@ -1141,7 +1155,7 @@ export function CandidateDetailsPage() {
               {leadActions.map(renderBulkAction)}
               {ASSIGN_STAGES.includes(activeStage) && (
                 <Button
-                  variant="primary"
+                  variant={NEXT_STEP[activeStage] === 'assessment' ? 'primary' : 'outline'}
                   size="sm"
                   leftIcon={<ClipboardList size={16} />}
                   onClick={handleAssignAssessment}
@@ -1356,6 +1370,7 @@ export function CandidateDetailsPage() {
           startDateTime={modalAction === 'interview' ? modalStartDateTime : undefined}
           onStartDateTimeChange={modalAction === 'interview' ? setModalStartDateTime : undefined}
           minDateTime={nowDateTimeLocal()}
+          isExamSchedule={modalAction === 'ack' || modalAction === 'reconfirmation'}
           content={modalContent}
           onContentChange={setModalContent}
           onClose={() => setModalAction(null)}
