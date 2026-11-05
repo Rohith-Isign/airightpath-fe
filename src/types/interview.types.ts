@@ -395,6 +395,12 @@ export interface VoiceEvaluationResult {
   needsHumanReview?: boolean;
   /** Why it was flagged. Empty when it was not. */
   reviewReasons?: string[];
+  /** Share of the scoring areas (by weight) that the questions asked about, 0 to 1. The overall counts only those. */
+  coverage?: number;
+  /** The mean over the assessed areas only. The overall is lower whenever some areas were never reached. */
+  assessedScore?: number | null;
+  /** How much the score rests on. INSUFFICIENT means too little was asked or answered to give a verdict. */
+  evidenceLevel?: 'SUFFICIENT' | 'PARTIAL' | 'INSUFFICIENT';
 }
 
 export interface VoiceCategoryScore {
@@ -407,6 +413,8 @@ export interface VoiceCategoryScore {
    * graded before this was recorded; empty when the area was never asked about.
    */
   questionNumbers?: number[] | null;
+  /** False when no question tested this area: it is shown as not assessed and adds nothing to the overall. */
+  assessed?: boolean;
 }
 
 export interface SpeechAnalysis {

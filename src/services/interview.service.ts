@@ -133,6 +133,14 @@ export const interviewService = {
     });
   },
 
+  /** Has the AI grade the interview again from its transcript and replaces the stored evaluation and score. */
+  reEvaluate(id: number) {
+    return api.post<InterviewSchedule>(ENDPOINTS.INTERVIEWS.RE_EVALUATE(id), undefined, {
+      // Grading is a long model call.
+      timeout: 180_000,
+    } as never);
+  },
+
   /** Puts a removed result back on the list. */
   restoreResult(id: number) {
     return api.post<InterviewSchedule>(ENDPOINTS.INTERVIEWS.RESTORE_RESULT(id));

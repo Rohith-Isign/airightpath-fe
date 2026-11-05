@@ -140,6 +140,8 @@ export const ENDPOINTS = {
     /** Soft-remove a result from the list, with a reason, and put it back. */
     DELETE_RESULT: (id: number) => `/api/interview/results/${id}`,
     RESTORE_RESULT: (id: number) => `/api/interview/results/${id}/restore`,
+    /** Grade the interview again and replace the stored evaluation. */
+    RE_EVALUATE: (id: number) => `/api/interview/results/${id}/re-evaluate`,
     /** A reviewer's notes and override on one interview. */
     REVIEW: (id: number) => `/api/interview/${id}/review`,
     // A signed, playable link to a stored recording. The schedule holds an

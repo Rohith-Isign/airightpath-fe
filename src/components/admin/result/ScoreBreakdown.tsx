@@ -64,9 +64,11 @@ export function ScoreBreakdown({
   const areas = evaluation.categoryScores ?? [];
   // Weights are stored as shares of one for new evaluations and as the model echoed them for older ones, so both
   // are read as proportions of their own total.
+  // The share is of the whole syllabus: an area no question tested is not assessed and adds nothing to the overall.
+  const assessedAreas = areas.filter((a) => a.assessed !== false);
   const totalWeight = areas.reduce((sum, a) => sum + (a.weight || 0), 0);
   const share = (weight: number) => (totalWeight > 0 ? weight / totalWeight : 0);
-  const weakest = [...areas]
+  const weakest = [...assessedAreas]
     .filter((a) => (a.score ?? 0) < WEAK_BELOW)
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0));
 
@@ -115,6 +117,21 @@ export function ScoreBreakdown({
               </thead>
               <tbody>
                 {areas.map((area) => {
+                  if (area.assessed === false) {
+                    return (
+                      <tr key={area.category} className="border-t border-[var(--border)] text-[var(--textTertiary)]">
+                        <td className="px-3 py-2 font-medium">{area.category}</td>
+                        <td className="px-3 py-2">{Math.round(share(area.weight || 0) * 100)}%</td>
+                        <td className="px-3 py-2">--</td>
+                        <td className="px-3 py-2">
+                          <Badge variant="default" size="sm">
+                            {STRINGS.scoreBreakdown.notAssessed}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right">0.00</td>
+                      </tr>
+                    );
+                  }
                   const level = performanceLevel(area.score);
                   const points = (area.score ?? 0) * share(area.weight || 0);
                   return (
@@ -148,6 +165,11 @@ export function ScoreBreakdown({
               </tbody>
             </table>
           </div>
+          {evaluation.assessedScore != null && assessedAreas.length < areas.length && (
+            <p className="mt-1.5 text-xs font-medium text-[var(--textSecondary)]">
+              {STRINGS.scoreBreakdown.assessedOnly(evaluation.assessedScore.toFixed(1))}
+            </p>
+          )}
           <p className="mt-1.5 text-xs text-[var(--textTertiary)]">
             {STRINGS.scoreBreakdown.formulaNote}
           </p>

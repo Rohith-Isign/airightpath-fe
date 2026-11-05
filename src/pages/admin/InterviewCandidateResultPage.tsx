@@ -2,11 +2,14 @@ import { STRINGS } from '@/constants/strings';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   ArrowLeft,
   BarChart3,
   ChevronDown,
   Clock,
+  Info,
   Loader2,
+  RefreshCw,
   MessageSquare,
   Shield,
   ShieldAlert,
@@ -638,15 +641,19 @@ function RoundSummaryCard({
             <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--textTertiary)]">
               {STRINGS.candidateResult.scoresByArea}
             </p>
-            {resolved.categoryScores.map((category) => (
-              <SkillBar
-                key={category.category}
-                label={category.category}
-                // Category scores are 0-10; SkillBar draws a percentage.
-                percentage={Math.round((category.score ?? 0) * 10)}
-                detail={`${category.score}/10`}
-              />
-            ))}
+            {resolved.categoryScores.map((category) =>
+              category.assessed === false ? (
+                <NotAssessedRow key={category.category} label={category.category} />
+              ) : (
+                <SkillBar
+                  key={category.category}
+                  label={category.category}
+                  // Category scores are 0-10; SkillBar draws a percentage.
+                  percentage={Math.round((category.score ?? 0) * 10)}
+                  detail={`${category.score}/10`}
+                />
+              ),
+            )}
           </div>
         ) : null}
 
@@ -700,6 +707,46 @@ function transcriptCounts(transcript: VoiceConversationEntryDTO[]) {
   };
 }
 
+// ── Evidence ──────────────────────────────────────────────────────────
+
+/** An area no question tested: named, but with no score to read. */
+function NotAssessedRow({ label }: Readonly<{ label: string }>) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-dashed border-[var(--border)] px-3 py-2">
+      <span className="text-sm font-medium text-[var(--textSecondary)]">{label}</span>
+      <Badge variant="default" size="sm">
+        {STRINGS.scoreBreakdown.notAssessed}
+      </Badge>
+    </div>
+  );
+}
+
+/** Says how much the score rests on, when it is not everything: too little asked, or some areas never reached. */
+function EvidenceNotice({ evaluation }: Readonly<{ evaluation: { evidenceLevel?: string; coverage?: number; assessedScore?: number | null } }>) {
+  if (evaluation.evidenceLevel === 'INSUFFICIENT') {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+        <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+        <p>{STRINGS.scoreBreakdown.evidenceInsufficient}</p>
+      </div>
+    );
+  }
+  if (evaluation.evidenceLevel === 'PARTIAL' && evaluation.coverage != null) {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-3 text-sm text-[var(--textSecondary)]">
+        <Info size={16} className="mt-0.5 flex-shrink-0 text-[var(--primary)]" />
+        <p>
+          {STRINGS.scoreBreakdown.evidencePartial(
+            Math.round(evaluation.coverage * 100),
+            evaluation.assessedScore != null ? evaluation.assessedScore.toFixed(1) : null,
+          )}
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
 // ── One attempt in full ───────────────────────────────────────────────
 
 /**
@@ -719,7 +766,24 @@ function AttemptSection({
   const [open, setOpen] = useState(defaultOpen);
   const [exporting, setExporting] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
+  const [reEvaluating, setReEvaluating] = useState(false);
   const { schedule, attemptNumber, attemptCount } = attempt;
+
+  /** Has the AI grade this interview again and shows the new result. */
+  async function reEvaluate() {
+    if (reEvaluating || !window.confirm(STRINGS.scoreBreakdown.reEvaluateConfirm)) return;
+    setReEvaluating(true);
+    try {
+      await interviewService.reEvaluate(schedule.id);
+      showToast(STRINGS.scoreBreakdown.reEvaluated, 'success');
+      // The same full reload as after a removal: the whole page is read again from the server.
+      onRemoved();
+    } catch {
+      // Error toast auto-handled by the interceptor
+    } finally {
+      setReEvaluating(false);
+    }
+  }
   const date = attemptDateLabel(schedule);
 
   /**
@@ -819,6 +883,18 @@ function AttemptSection({
               alongside it. The exam side has had a per-candidate download for
               a while; an interview reviewer had to go back to the list and
               export the whole cohort to get anything. */}
+          {schedule.attemptStatus === 'COMPLETED' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={reEvaluate}
+              disabled={reEvaluating}
+              leftIcon={reEvaluating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              title={STRINGS.scoreBreakdown.reEvaluateConfirm}
+            >
+              {reEvaluating ? STRINGS.scoreBreakdown.reEvaluating : STRINGS.scoreBreakdown.reEvaluate}
+            </Button>
+          )}
           <div className="relative">
             <Button
               variant="ghost"
@@ -992,6 +1068,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
             <div className="space-y-4">
               {/* The verdict first, in words, with the grader's reasoning: which candidate is strongest and why
                   should not need a reviewer to interpret a number. */}
+              <EvidenceNotice evaluation={resolved} />
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
                 <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.overallAssessment}</h4>
                 <PerformanceRating
@@ -1010,13 +1087,19 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
               </h4>
               {resolved.categoryScores.map((category) => (
                 <div key={category.category} className="space-y-1.5">
-                  <SkillBar
-                    label={category.category}
-                    // Category scores are 0-10; SkillBar draws a percentage.
-                    percentage={Math.round((category.score ?? 0) * 10)}
-                    detail={`${category.score}/10`}
-                  />
-                  <PerformanceRating score={category.score} reason={category.feedback} showMeaning />
+                  {category.assessed === false ? (
+                    <NotAssessedRow label={category.category} />
+                  ) : (
+                    <>
+                      <SkillBar
+                        label={category.category}
+                        // Category scores are 0-10; SkillBar draws a percentage.
+                        percentage={Math.round((category.score ?? 0) * 10)}
+                        detail={`${category.score}/10`}
+                      />
+                      <PerformanceRating score={category.score} reason={category.feedback} showMeaning />
+                    </>
+                  )}
                   <AreaQuestions numbers={category.questionNumbers} rows={questions} />
                 </div>
               ))}

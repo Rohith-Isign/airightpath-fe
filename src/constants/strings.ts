@@ -478,7 +478,7 @@ export const STRINGS = {
     },
     overall: 'Overall',
     formulaNote:
-      "Overall = the sum of each area's score × its share of the total weight. Weights are the ones set for this round on the Manage AI Prompts page, taken as shares of their total.",
+      "Overall = the sum of each area's score × its share of the total weight. Weights are the ones set for this round on the Manage AI Prompts page, taken as shares of their total. An area that was not assessed adds nothing, so a candidate who was asked about only part of the syllabus scores lower overall.",
     fellShort: 'Where the candidate fell short',
     noDetail: 'No detail was recorded for this area.',
     showAnswers: (count: number) => `Show answer-by-answer scores (${count})`,
@@ -489,7 +489,18 @@ export const STRINGS = {
     areaBasedOn: (count: number) => `Based on ${count} question${count === 1 ? '' : 's'}`,
     areaAnswered: (count: number) => `${count} answered`,
     areaSkipped: (count: number) => `${count} skipped`,
-    areaNoQuestions: 'No questions covered this area, so its score has little evidence behind it.',
+    areaNoQuestions: 'No question tested this area, so it is not assessed and does not count towards the overall score.',
+    notAssessed: 'Not assessed',
+    evidenceInsufficient:
+      'Too little was asked or answered to give a hire or no-hire verdict. The scores below are for the areas that were assessed; no recommendation has been given.',
+    evidencePartial: (coverage: number, assessed: string | null) =>
+      `Only ${coverage}% of the scoring areas were asked about. Areas that were not reached add nothing, so the overall score is lower than the marks on what was tested${assessed ? ` (${assessed}/10 on the assessed areas)` : ''}.`,
+    assessedOnly: (score: string) => `On the assessed areas only: ${score} / 10`,
+    reEvaluate: 'Re-evaluate with AI',
+    reEvaluating: 'Re-evaluating…',
+    reEvaluateConfirm:
+      'The AI will grade this interview again from its transcript and replace the current score and recommendation. A reviewer override is kept. Continue?',
+    reEvaluated: 'Evaluation updated.',
     showQuestions: 'Show questions',
     hideQuestions: 'Hide questions',
   },
