@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { getAppEmail } from '@/utils/application.utils';
 import { ReferralTag } from './ReferralTag';
+import { STRINGS } from '@/constants/strings';
 import { AssessmentStanding } from './AssessmentStanding';
 import { InterviewStanding } from './InterviewStanding';
 import type { JobApplicationDTO } from '@/types/job.types';
@@ -109,7 +110,7 @@ export function CandidateTable({
             onChange={onToggleAll}
             className={CHECKBOX_CLASS}
           />
-          Select all ({candidates.length})
+          {STRINGS.candidateTable.selectAll(candidates.length)}
         </label>
 
         {candidates.map((candidate) => {
@@ -130,7 +131,7 @@ export function CandidateTable({
                   type="checkbox"
                   checked={selected}
                   onChange={() => onToggleEmail(email)}
-                  aria-label={`Select ${email}`}
+                  aria-label={STRINGS.candidateTable.selectOne(email)}
                   className={`${CHECKBOX_CLASS} mt-1`}
                 />
                 <div className="min-w-0 flex-1">
@@ -148,21 +149,21 @@ export function CandidateTable({
                   a role like "Backend Developer" on four lines. */}
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2 text-sm">
                 <div className="min-w-0">
-                  <dt className="text-xs text-[var(--textTertiary)]">Mobile</dt>
+                  <dt className="text-xs text-[var(--textTertiary)]">{STRINGS.candidateTable.mobile}</dt>
                   <dd className="text-[var(--text)] break-words">
                     {candidate.mobileNumber || '-'}
                   </dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-xs text-[var(--textTertiary)]">Experience</dt>
+                  <dt className="text-xs text-[var(--textTertiary)]">{STRINGS.candidateTable.experience}</dt>
                   <dd className="text-[var(--text)] break-words">{candidate.experience || '-'}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-xs text-[var(--textTertiary)]">Role</dt>
+                  <dt className="text-xs text-[var(--textTertiary)]">{STRINGS.candidateTable.role}</dt>
                   <dd className="text-[var(--text)] break-words">{candidate.jobRole || '-'}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-xs text-[var(--textTertiary)]">Source</dt>
+                  <dt className="text-xs text-[var(--textTertiary)]">{STRINGS.candidateTable.source}</dt>
                   <dd className="mt-0.5">
                     <ReferralTag candidate={candidate} />
                   </dd>
@@ -171,7 +172,7 @@ export function CandidateTable({
 
               {standings && (
                 <div className="min-w-0">
-                  <p className="text-xs text-[var(--textTertiary)] mb-1">Assessment</p>
+                  <p className="text-xs text-[var(--textTertiary)] mb-1">{STRINGS.candidateTable.assessment}</p>
                   <AssessmentStanding
                     standing={standings.get(email.toLowerCase())}
                     loading={standingsLoading}
@@ -181,7 +182,7 @@ export function CandidateTable({
 
               {interviewStandings && (
                 <div className="min-w-0">
-                  <p className="text-xs text-[var(--textTertiary)] mb-1">Interview</p>
+                  <p className="text-xs text-[var(--textTertiary)] mb-1">{STRINGS.candidateTable.interview}</p>
                   <InterviewStanding
                     standing={interviewStandings.get(email.toLowerCase())}
                     loading={interviewStandingsLoading}
@@ -197,7 +198,7 @@ export function CandidateTable({
                   onClick={() => onView(candidate)}
                   leftIcon={<Eye size={14} />}
                 >
-                  View
+                  {STRINGS.candidateTable.view}
                 </Button>
                 {onViewResult && (
                   <Button
@@ -206,7 +207,7 @@ export function CandidateTable({
                     onClick={() => onViewResult(candidate)}
                     leftIcon={<BarChart3 size={14} />}
                   >
-                    Exam Result
+                    {STRINGS.candidateTable.examResult}
                   </Button>
                 )}
                 {onViewInterviewResult && hasInterviewResult(email) && (
@@ -216,7 +217,7 @@ export function CandidateTable({
                     onClick={() => onViewInterviewResult(candidate)}
                     leftIcon={<Video size={14} />}
                   >
-                    Interview Result
+                    {STRINGS.candidateTable.interviewResult}
                   </Button>
                 )}
               </div>
@@ -238,7 +239,7 @@ export function CandidateTable({
                   type="checkbox"
                   checked={allSelected}
                   onChange={onToggleAll}
-                  aria-label="Select all candidates"
+                  aria-label={STRINGS.candidateTable.selectAllLabel}
                   className={CHECKBOX_CLASS}
                 />
               </TableHead>
@@ -246,18 +247,18 @@ export function CandidateTable({
                   always grouped them — they are all "who is this person", and
                   as separate columns they were three of the ten that pushed the
                   table past the viewport. */}
-              <TableHead className="px-3 min-w-[210px]">Candidate</TableHead>
+              <TableHead className="px-3 min-w-[210px]">{STRINGS.candidateTable.candidate}</TableHead>
               {/* Role and experience together: "Experience" is one unbreakable
                   word, and in a column narrow enough to fit it overflowed into
                   the next heading — which is the "EXPERIENCFOLE" collision. */}
-              <TableHead className="px-3 min-w-[130px]">Role</TableHead>
-              <TableHead className="px-3 min-w-[95px]">Source</TableHead>
-              {standings && <TableHead className="px-3 min-w-[180px]">Assessment</TableHead>}
+              <TableHead className="px-3 min-w-[130px]">{STRINGS.candidateTable.role}</TableHead>
+              <TableHead className="px-3 min-w-[95px]">{STRINGS.candidateTable.source}</TableHead>
+              {standings && <TableHead className="px-3 min-w-[180px]">{STRINGS.candidateTable.assessment}</TableHead>}
               {interviewStandings && (
-                <TableHead className="px-3 min-w-[175px]">Interview</TableHead>
+                <TableHead className="px-3 min-w-[175px]">{STRINGS.candidateTable.interview}</TableHead>
               )}
-              <TableHead className="px-3 min-w-[100px]">Status</TableHead>
-              <TableHead className="px-3 min-w-[120px]">Actions</TableHead>
+              <TableHead className="px-3 min-w-[100px]">{STRINGS.candidateTable.status}</TableHead>
+              <TableHead className="px-3 min-w-[120px]">{STRINGS.candidateTable.actions}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -270,7 +271,7 @@ export function CandidateTable({
                       type="checkbox"
                       checked={selectedEmails.has(email)}
                       onChange={() => onToggleEmail(email)}
-                      aria-label={`Select ${email}`}
+                      aria-label={STRINGS.candidateTable.selectOne(email)}
                       className={CHECKBOX_CLASS}
                     />
                   </TableCell>
@@ -293,7 +294,7 @@ export function CandidateTable({
                     <p className="text-[var(--text)]">{candidate.jobRole || '-'}</p>
                     {candidate.experience && (
                       <p className="text-xs text-[var(--textSecondary)]">
-                        {candidate.experience} yrs exp.
+                        {STRINGS.candidateTable.yearsExp(candidate.experience)}
                       </p>
                     )}
                   </TableCell>
@@ -335,18 +336,18 @@ export function CandidateTable({
                         onClick={() => onView(candidate)}
                         leftIcon={<Eye size={14} />}
                       >
-                        View
+                        {STRINGS.candidateTable.view}
                       </Button>
                       {onViewResult && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="px-2"
-                          title="Open this candidate's assessment scorecard"
+                          title={STRINGS.candidateTable.openExamScorecard}
                           onClick={() => onViewResult(candidate)}
                           leftIcon={<BarChart3 size={14} />}
                         >
-                          Exam
+                          {STRINGS.candidateTable.exam}
                         </Button>
                       )}
                       {onViewInterviewResult && hasInterviewResult(email) && (
@@ -354,11 +355,11 @@ export function CandidateTable({
                           variant="ghost"
                           size="sm"
                           className="px-2"
-                          title="Open this candidate's interview scorecard"
+                          title={STRINGS.candidateTable.openInterviewScorecard}
                           onClick={() => onViewInterviewResult(candidate)}
                           leftIcon={<Video size={14} />}
                         >
-                          Interview
+                          {STRINGS.candidateTable.interview}
                         </Button>
                       )}
                     </div>

@@ -38,7 +38,11 @@ const STATE_DISPLAY: Record<
 };
 
 /** What the round's own action button says. */
-const ACTION_LABEL = { assign: 'Assign', edit: 'Edit', reassign: 'Reassign' } as const;
+const ACTION_LABEL = {
+  assign: STRINGS.candidateTable.assign,
+  edit: STRINGS.candidateTable.edit,
+  reassign: STRINGS.candidateTable.reassign,
+} as const;
 
 /** One round of the candidate's journey: where it stands, and the one thing that can be done next. */
 function RoundTrack({
@@ -63,7 +67,7 @@ function RoundTrack({
         {standing && standing.attempts > 1 && (
           <span
             className="text-[10px] font-semibold text-[var(--warning)]"
-            title={`Booked ${standing.attempts} times`}
+            title={STRINGS.candidateTable.bookedTimes(standing.attempts)}
           >
             ×{standing.attempts}
           </span>
@@ -77,7 +81,7 @@ function RoundTrack({
             </span>
           </Badge>
         ) : (
-          <span className="text-[11px] text-[var(--textTertiary)]">Not assigned</span>
+          <span className="text-[11px] text-[var(--textTertiary)]">{STRINGS.candidateTable.notAssigned}</span>
         )}
 
         {standing?.state === 'completed' && standing.score !== null && (
@@ -98,7 +102,8 @@ function RoundTrack({
       {standing && standing.state !== 'completed' && standing.deadlineTime && (
         <p className="flex items-center gap-1 text-[10px] text-[var(--textTertiary)]">
           <Clock size={10} className="flex-shrink-0" />
-          {standing.state === 'expired' ? 'Was due' : 'Due'} {formatDateTime(standing.deadlineTime)}
+          {standing.state === 'expired' ? STRINGS.candidateTable.wasDue : STRINGS.candidateTable.due}{' '}
+          {formatDateTime(standing.deadlineTime)}
         </p>
       )}
 
@@ -139,7 +144,7 @@ export function InterviewStanding({
     return (
       <span className="flex items-center gap-1.5 text-xs text-[var(--textTertiary)]">
         <Loader2 size={12} className="animate-spin" />
-        Loading
+        {STRINGS.candidateTable.loading}
       </span>
     );
   }

@@ -33,11 +33,15 @@ export function useResumeViewer() {
   }, [resume]);
 
   const open = useCallback(
-    async (email?: string, preferredName?: string) => {
+    async (email?: string, preferredName?: string, jobPrefix?: string) => {
       if (!email || loading) return;
       setLoading(true);
       try {
-        const res = await resumeService.view(email, { _skipErrorToast: true });
+        // With a job, the resume sent with that application rather than the candidate's latest.
+        const res = await resumeService.view(email, {
+          _skipErrorToast: true,
+          ...(jobPrefix ? { params: { jobPrefix } } : {}),
+        });
         const blob = res.data;
         // An empty body is the shape "no resume on file" arrives in.
         if (!blob || blob.size === 0) {

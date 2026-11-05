@@ -44,6 +44,37 @@ export const STRINGS = {
     viewSummary: 'View Summary',
   },
 
+  /** The candidate table and cards on the admin Candidates screen, and the interview column in them. */
+  candidateTable: {
+    selectAll: (count: number) => `Select all (${count})`,
+    selectAllLabel: 'Select all candidates',
+    selectOne: (email: string) => `Select ${email}`,
+    mobile: 'Mobile',
+    experience: 'Experience',
+    role: 'Role',
+    source: 'Source',
+    assessment: 'Assessment',
+    interview: 'Interview',
+    candidate: 'Candidate',
+    status: 'Status',
+    actions: 'Actions',
+    yearsExp: (experience: string) => `${experience} yrs exp.`,
+    view: 'View',
+    examResult: 'Exam Result',
+    interviewResult: 'Interview Result',
+    exam: 'Exam',
+    openExamScorecard: "Open this candidate's assessment scorecard",
+    openInterviewScorecard: "Open this candidate's interview scorecard",
+    notAssigned: 'Not assigned',
+    loading: 'Loading',
+    wasDue: 'Was due',
+    due: 'Due',
+    bookedTimes: (count: number) => `Booked ${count} times`,
+    assign: 'Assign',
+    edit: 'Edit',
+    reassign: 'Reassign',
+  },
+
   /** The admin Candidates pipeline screen. */
   candidatesAdmin: {
     title: 'Candidate Details',

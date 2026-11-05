@@ -30,6 +30,8 @@ import { formatDate } from '@/utils/format.utils';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { hasReferral } from '@/utils/referral.utils';
 import { ReferralFields } from '@/components/application/ReferralFields';
+import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
+import { useResumeViewer } from '@/hooks/useResumeViewer';
 import type { JobApplicationDTO } from '@/types/job.types';
 
 const STATUS_CONFIG: Record<
@@ -63,6 +65,8 @@ export function MyApplicationsPage() {
   const [searchQuery, setSearchQuery] = usePersistentState('myApplications:searchQuery', '');
   const [filterStatus, setFilterStatus] = usePersistentState('myApplications:filterStatus', '');
   const [selectedApp, setSelectedApp] = useState<JobApplicationDTO | null>(null);
+  // The resume sent with an application, opened from its details.
+  const resumeViewer = useResumeViewer();
 
   useEffect(() => {
     async function fetchApplications() {
@@ -246,6 +250,11 @@ export function MyApplicationsPage() {
         </div>
       )}
 
+      {/* The resume sent with the application, on top of its details */}
+      {resumeViewer.resume && (
+        <ResumeViewerModal resume={resumeViewer.resume} onClose={resumeViewer.close} />
+      )}
+
       {/* Application Details Modal */}
       {selectedApp && (
         <Modal
@@ -390,6 +399,21 @@ export function MyApplicationsPage() {
                   <p className="text-sm font-medium text-[var(--text)]">{STRINGS.myApplications.resumeHeading}</p>
                   <p className="text-xs text-[var(--textSecondary)] truncate">{selectedApp.resumeFileName}</p>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  isLoading={resumeViewer.loading}
+                  leftIcon={<ExternalLink size={15} />}
+                  onClick={() =>
+                    resumeViewer.open(
+                      selectedApp.email || selectedApp.userEmail,
+                      selectedApp.resumeFileName,
+                      selectedApp.jobPrefix,
+                    )
+                  }
+                >
+                  {STRINGS.myApplications.view}
+                </Button>
               </div>
             )}
 
