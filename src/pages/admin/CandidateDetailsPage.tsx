@@ -1,5 +1,7 @@
 import { INTERVIEW_ASSIGN_STAGES } from '@/utils/interview-assign-stages';
 import { STRINGS } from '@/constants/strings';
+import { Input } from '@/components/ui/Input';
+import { Pagination } from '@/components/ui/Pagination';
 import { INTERVIEW_PHASES, stageOf } from '@/utils/interview-phase';
 import { ResumeViewerModal } from '@/components/admin/ResumeViewerModal';
 import { resumeExtensionForType } from '@/utils/file.utils';
@@ -19,6 +21,7 @@ import {
   BarChart3,
   Video,
   RotateCcw,
+  Search,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -375,21 +378,60 @@ export function CandidateDetailsPage() {
   const stageFor = (c: JobApplicationDTO) =>
     stageOf(c.status, interviewStandings.get(getAppEmail(c).toLowerCase()));
 
+  // Find one person among many: name, email, phone or role, case-insensitive, every word must match. The tab counts
+  // follow the search, so the tab the person is in is the one that still shows a number.
+  const [candidateSearch, setCandidateSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const searchTerms = candidateSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matchesSearch = (c: JobApplicationDTO) => {
+    if (searchTerms.length === 0) return true;
+    const haystack = [c.firstName, c.lastName, getAppEmail(c), c.mobileNumber, c.jobRole]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return searchTerms.every((term) => haystack.includes(term));
+  };
+
   const filteredCandidates = candidates.filter((c) => {
     const status = c.status ?? '';
-    if (activeStage === ('REJECTED' as JobApplicationStatus)) {
-      return status === 'REJECTED';
-    }
-    return stageFor(c) === activeStage;
+    const inStage =
+      activeStage === ('REJECTED' as JobApplicationStatus) ? status === 'REJECTED' : stageFor(c) === activeStage;
+    return inStage && matchesSearch(c);
   });
 
   const stageCounts = STAGES.reduce<Record<string, number>>((acc, stage) => {
-    acc[stage] = candidates.filter((c) => stageFor(c) === stage).length;
+    acc[stage] = candidates.filter((c) => stageFor(c) === stage && matchesSearch(c)).length;
     return acc;
   }, {});
 
+  /** Other stages that hold someone matching the search, for when this stage holds nobody. */
+  const otherStageMatches = ([...STAGES, 'REJECTED' as JobApplicationStatus])
+    .filter((stage) => stage !== activeStage)
+    .map((stage) => ({
+      stage,
+      count:
+        stage === ('REJECTED' as JobApplicationStatus)
+          ? candidates.filter((c) => c.status === 'REJECTED' && matchesSearch(c)).length
+          : stageCounts[stage] || 0,
+    }))
+    .filter((entry) => entry.count > 0);
+
+  const PAGE_SIZE = 25;
+  const totalPages = Math.max(1, Math.ceil(filteredCandidates.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCandidates = filteredCandidates.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Back to the first page whenever what is listed changes under the reader.
+  useEffect(() => {
+    setPage(1);
+  }, [candidateSearch, activeStage, selectedPrefix]);
+  // A new job starts with no search carried over from the last one.
+  useEffect(() => {
+    setCandidateSearch('');
+  }, [selectedPrefix]);
+
   // Count rejected candidates separately
-  const rejectedCount = candidates.filter((c) => c.status === 'REJECTED').length;
+  const rejectedCount = candidates.filter((c) => c.status === 'REJECTED' && matchesSearch(c)).length;
 
   // Applications left at the retired Ack Back stage; drives its stand-in tab.
   const legacyCount = candidates.filter((c) => c.status === LEGACY_STAGE).length;
@@ -1173,15 +1215,26 @@ export function CandidateDetailsPage() {
           {/* Candidate Table */}
           <Card>
             <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                 <CardTitle>
                   {STAGE_LABELS[activeStage]} ({filteredCandidates.length})
                 </CardTitle>
-                {filteredCandidates.length > 0 && (
-                  <span className="text-sm text-[var(--textSecondary)]">
-                    {STRINGS.candidatesAdmin.selectedCount(selectedEmails.size)}
-                  </span>
-                )}
+                <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+                  <div className="w-full sm:w-80">
+                    <Input
+                      aria-label={STRINGS.candidatesAdmin.searchLabel}
+                      placeholder={STRINGS.candidatesAdmin.searchPlaceholder}
+                      leftIcon={<Search size={16} />}
+                      value={candidateSearch}
+                      onChange={(e) => setCandidateSearch(e.target.value)}
+                    />
+                  </div>
+                  {filteredCandidates.length > 0 && (
+                    <span className="text-sm text-[var(--textSecondary)]">
+                      {STRINGS.candidatesAdmin.selectedCount(selectedEmails.size)}
+                    </span>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -1190,14 +1243,43 @@ export function CandidateDetailsPage() {
                   <Loader2 size={24} className="animate-spin text-[var(--primary)]" />
                 </div>
               ) : filteredCandidates.length === 0 ? (
-                <EmptyState
-                  icon={<Users size={48} />}
-                  title={STRINGS.candidatesAdmin.noCandidatesTitle}
-                  description={STRINGS.candidatesAdmin.noCandidatesBody(STAGE_LABELS[activeStage])}
-                />
+                searchTerms.length > 0 ? (
+                  <div className="py-8 text-center space-y-3">
+                    <EmptyState
+                      icon={<Search size={48} />}
+                      title={STRINGS.candidatesAdmin.noMatchTitle}
+                      description={STRINGS.candidatesAdmin.noMatchHere(STAGE_LABELS[activeStage])}
+                    />
+                    {/* The person may be in another stage: say where, and take you there. */}
+                    {otherStageMatches.length > 0 && (
+                      <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+                        <span className="text-[var(--textSecondary)]">{STRINGS.candidatesAdmin.foundInOtherStages}</span>
+                        {otherStageMatches.map((entry) => (
+                          <button
+                            key={entry.stage}
+                            type="button"
+                            onClick={() => {
+                              setActiveStage(entry.stage);
+                              setSelectedEmails(new Set());
+                            }}
+                            className="rounded-full border border-[var(--border)] px-3 py-1 font-medium text-[var(--primary)] hover:bg-[var(--surface1)]"
+                          >
+                            {STAGE_LABELS[entry.stage]} ({entry.count})
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<Users size={48} />}
+                    title={STRINGS.candidatesAdmin.noCandidatesTitle}
+                    description={STRINGS.candidatesAdmin.noCandidatesBody(STAGE_LABELS[activeStage])}
+                  />
+                )
               ) : (
                 <CandidateTable
-                  candidates={filteredCandidates}
+                  candidates={pagedCandidates}
                   selectedEmails={selectedEmails}
                   onToggleEmail={toggleEmail}
                   onToggleAll={toggleAll}
@@ -1221,6 +1303,23 @@ export function CandidateDetailsPage() {
                       : undefined
                   }
                 />
+              )}
+              {filteredCandidates.length > PAGE_SIZE && (
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <p className="text-xs text-[var(--textSecondary)]">
+                    {STRINGS.candidatesAdmin.pageSummary(
+                      (currentPage - 1) * PAGE_SIZE + 1,
+                      Math.min(currentPage * PAGE_SIZE, filteredCandidates.length),
+                      filteredCandidates.length,
+                    )}
+                  </p>
+                  <Pagination
+                    variant="minimal"
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setPage}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
