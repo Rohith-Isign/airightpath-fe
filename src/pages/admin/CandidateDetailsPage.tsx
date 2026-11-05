@@ -497,6 +497,29 @@ export function CandidateDetailsPage() {
 
   // Available actions for the current stage
   const availableActions = STAGE_ACTIONS[activeStage] ?? [];
+  /** Mails that open the next step of the pipeline: they come before the buttons that assign work. */
+  const leadActions = availableActions.filter((key) => key === 'ack' || key === 'reconfirmation');
+  /** Outcome mails (success, failure), after the assign and result buttons. Rejection is placed last on its own. */
+  const trailingActions = availableActions.filter((key) => !leadActions.includes(key) && key !== 'rejection');
+
+  function renderBulkAction(key: BulkAction) {
+    const config = BULK_ACTION_CONFIG[key];
+    return (
+      <Button
+        key={key}
+        // Rejection carries the red fill on every stage, so the one
+        // action that takes a candidate out of the running never
+        // reads like the outline buttons that move them along.
+        variant={key === 'rejection' ? 'danger' : 'outline'}
+        size="sm"
+        leftIcon={config.icon}
+        onClick={() => openActionModal(key)}
+      >
+        {config.label}
+        {selectedEmails.size > 0 ? ` (${selectedEmails.size})` : ''}
+      </Button>
+    );
+  }
 
   const toggleEmail = (email: string) => {
     setSelectedEmails((prev) => {
@@ -1067,6 +1090,10 @@ export function CandidateDetailsPage() {
                   </Button>
                 </>
               )}
+              {/* In the order a recruiter moves a candidate on: the mails that open the next step (ack,
+                  reconfirmation), then the assessment, then the interviews, then results and the outcome mails, and
+                  rejection last, apart from the rest. */}
+              {leadActions.map(renderBulkAction)}
               {ASSIGN_STAGES.includes(activeStage) && (
                 <Button
                   variant="primary"
@@ -1138,24 +1165,8 @@ export function CandidateDetailsPage() {
                   {STRINGS.candidatesAdmin.viewAssessmentResults}
                 </Button>
               )}
-              {availableActions.map((key) => {
-                const config = BULK_ACTION_CONFIG[key];
-                return (
-                  <Button
-                    key={key}
-                    // Rejection carries the red fill on every stage, so the one
-                    // action that takes a candidate out of the running never
-                    // reads like the outline buttons that move them along.
-                    variant={key === 'rejection' ? 'danger' : 'outline'}
-                    size="sm"
-                    leftIcon={config.icon}
-                    onClick={() => openActionModal(key)}
-                  >
-                    {config.label}
-                    {selectedEmails.size > 0 ? ` (${selectedEmails.size})` : ''}
-                  </Button>
-                );
-              })}
+              {trailingActions.map(renderBulkAction)}
+              {availableActions.includes('rejection') && renderBulkAction('rejection')}
             </div>
           )}
 
