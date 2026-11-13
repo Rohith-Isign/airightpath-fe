@@ -119,7 +119,7 @@ export function useVoiceInterview() {
   // Coding question state
   const [isCodingQuestion, setIsCodingQuestion] = useState(false);
   const [codeContent, setCodeContent] = useState("");
-  const [codeLanguage, setCodeLanguage] = useState("java");
+  const [codeLanguage, setCodeLanguage] = useState("text");
   /**
    * What the candidate's code printed the last time they ran it.
    *
@@ -237,7 +237,7 @@ export function useVoiceInterview() {
             setCodeOutput("");
 
             if (!isCoding) {
-              setCodeLanguage("java"); // optional reset
+              setCodeLanguage("text");
             }
 
             // Item 14: Store last question for repeat

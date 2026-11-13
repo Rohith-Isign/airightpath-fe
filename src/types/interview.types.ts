@@ -415,7 +415,16 @@ export interface VoiceCategoryScore {
   questionNumbers?: number[] | null;
   /** False when no question tested this area: it is shown as not assessed and adds nothing to the overall. */
   assessed?: boolean;
+  /**
+   * Highest level of this area the candidate demonstrated (L2 only). Absent on a behavioural round and on a result
+   * graded before levels were recorded: show nothing then, not NONE.
+   */
+  highestLevel?: TechnicalLevel | null;
+  /** Whether the resume, projects or introduction showed this area. A claim, not proof of skill. Absent when not stated. */
+  mapped?: boolean | null;
 }
+
+export type TechnicalLevel = 'NONE' | 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT';
 
 export interface SpeechAnalysis {
   averageWordsPerMinute: number;

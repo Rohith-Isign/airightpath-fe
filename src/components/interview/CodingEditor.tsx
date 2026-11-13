@@ -1,35 +1,19 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
-import Editor from '@monaco-editor/react';
-import { APP_CONFIG } from '@/config/app.config';
-import { Code2, ChevronsUpDown, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronsUpDown, FileText, Maximize2, Minimize2 } from 'lucide-react';
 
 interface CodingEditorProps {
   code: string;
-  language: string;
   onCodeChange: (code: string) => void;
-  onLanguageChange: (language: string) => void;
   disabled?: boolean;
 }
-
-const MONACO_LANGUAGE_MAP: Record<string, string> = {
-  java: 'java',
-  python: 'python',
-  c: 'c',
-  cpp: 'cpp',
-  javascript: 'javascript',
-};
 
 const MIN_HEIGHT = 140;
 const MAX_HEIGHT = 900;
 
 /**
- * Preferred heights as a share of the viewport, not fixed pixels.
- *
- * A flat 300px is a comfortable editor on a laptop and almost the whole
- * window on a phone held in landscape, where it pushed the answer controls
- * off-screen; the 620px "Expand" was worse. Deriving from the viewport keeps
- * the same proportions on every screen, and re-deriving on resize means
- * rotating the phone cannot leave a 620px editor in a 360px-tall window.
+ * Preferred heights as a share of the viewport, not fixed pixels, so the same
+ * proportions hold on a laptop and on a phone held in landscape, and a rotate
+ * cannot leave a tall editor in a short window.
  */
 const DEFAULT_RATIO = 0.3;
 const TALL_RATIO = 0.55;
@@ -41,25 +25,23 @@ const measure = () => {
   return { base: at(DEFAULT_RATIO), tall: at(TALL_RATIO), max: at(CAP_RATIO) };
 };
 
-export function CodingEditor({ code, language, onCodeChange, onLanguageChange, disabled }: CodingEditorProps) {
-  const [isMobile, setIsMobile] = useState(false);
+/**
+ * A plain notepad for the L2 coding question: no compiler, no run, no language
+ * picker, no syntax colouring. The candidate writes code in any language, or
+ * pseudocode, or just the logic, and sends it; the interviewer reads it.
+ * Monaco is deliberately not used: its language modes, autocomplete and
+ * bracket-closing make it behave like an IDE, which this is not.
+ */
+export function CodingEditor({ code, onCodeChange, disabled }: CodingEditorProps) {
   const [limits, setLimits] = useState(measure);
-  /**
-   * The editor is resizable because one height is wrong for everyone: on a
-   * laptop the default crowded out the transcript, and on a long answer it
-   * left the candidate scrolling a ten-line window. They drag it to what
-   * their answer needs; double-clicking the grip puts it back.
-   */
   const [height, setHeight] = useState(() => measure().base);
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
   useEffect(() => {
     const check = () => {
-      setIsMobile(window.innerWidth < 768);
       const next = measure();
       setLimits(next);
-      // Re-clamp rather than reset: a candidate who dragged the editor to a
-      // size that still fits keeps it across a rotate.
+      // Re-clamp rather than reset, so a size the candidate dragged to survives a rotate.
       setHeight((h) => Math.min(next.max, Math.max(MIN_HEIGHT, h)));
     };
     check();
@@ -71,20 +53,12 @@ export function CodingEditor({ code, language, onCodeChange, onLanguageChange, d
     };
   }, []);
 
-  const handleEditorChange = useCallback(
-    (value: string | undefined) => {
-      onCodeChange(value ?? '');
-    },
-    [onCodeChange]
-  );
-
   const clamp = useCallback(
     (value: number) => Math.min(limits.max, Math.max(MIN_HEIGHT, value)),
     [limits.max]
   );
 
-  // Pointer events rather than mouse, so a drag works on a touchscreen too,
-  // and setPointerCapture keeps the drag alive when the cursor leaves the grip.
+  // Pointer events rather than mouse, so a drag works on a touchscreen too.
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     dragRef.current = { startY: e.clientY, startHeight: height };
@@ -104,94 +78,62 @@ export function CodingEditor({ code, language, onCodeChange, onLanguageChange, d
 
   const isTall = height >= limits.tall;
 
+  // Tab inserts spaces instead of moving focus: a candidate indenting code
+  // would otherwise tab out of the box and lose their place.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const { selectionStart, selectionEnd } = el;
+    const next = code.slice(0, selectionStart) + '    ' + code.slice(selectionEnd);
+    onCodeChange(next);
+    requestAnimationFrame(() => {
+      el.selectionStart = el.selectionEnd = selectionStart + 4;
+    });
+  };
+
   return (
     <div className="w-full min-w-0 max-w-full border border-[var(--border)] rounded-xl overflow-hidden bg-[#1e1e1e] shadow-sm">
-      {/* Header with language selector */}
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 py-2 sm:px-3 bg-[#252526] border-b border-[#3c3c3c]">
         <div className="flex min-w-0 items-center gap-1.5">
-          <Code2 size={14} className="shrink-0 text-blue-400" />
-          <span className="truncate text-xs font-medium text-gray-300">Code Editor</span>
+          <FileText size={14} className="shrink-0 text-blue-400" />
+          <span className="truncate text-xs font-medium text-gray-300">
+            Notepad — write your code or logic in any language
+          </span>
         </div>
-        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-          <button
-            type="button"
-            onClick={() => setHeight(isTall ? limits.base : limits.tall)}
-            className="flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11px] text-gray-400 hover:bg-[#3c3c3c] hover:text-gray-200 transition-colors sm:px-2"
-            title={isTall ? 'Shrink editor' : 'Expand editor'}
-            aria-label={isTall ? 'Shrink editor' : 'Expand editor'}
-          >
-            {isTall ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-            <span className="hidden sm:inline">{isTall ? 'Shrink' : 'Expand'}</span>
-          </button>
-          <select
-            value={language}
-            onChange={(e) => onLanguageChange(e.target.value)}
-            disabled={disabled}
-            aria-label="Programming language"
-            className="min-w-0 max-w-[9rem] truncate text-xs bg-[#3c3c3c] text-gray-200 border border-[#555] rounded px-1.5 py-1 outline-none focus:border-blue-500 disabled:opacity-50 sm:px-2"
-          >
-            {APP_CONFIG.COMPILER_LANGUAGES.map((lang) => (
-              <option key={lang.value} value={lang.value}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <button
+          type="button"
+          onClick={() => setHeight(isTall ? limits.base : limits.tall)}
+          className="flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11px] text-gray-400 hover:bg-[#3c3c3c] hover:text-gray-200 transition-colors sm:px-2"
+          title={isTall ? 'Shrink notepad' : 'Expand notepad'}
+          aria-label={isTall ? 'Shrink notepad' : 'Expand notepad'}
+        >
+          {isTall ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+          <span className="hidden sm:inline">{isTall ? 'Shrink' : 'Expand'}</span>
+        </button>
       </div>
 
-      {/* Editor */}
-      {isMobile ? (
-        <textarea
-          value={code}
-          onChange={(e) => onCodeChange(e.target.value)}
-          disabled={disabled}
-          placeholder="Write your code here..."
-          style={{ height }}
-          // text-base, not text-sm: iOS Safari zooms the whole page in on any
-          // input under 16px, and the candidate then has to pinch back out to
-          // reach the answer controls.
-          className="block w-full max-w-full p-3 bg-[#1e1e1e] text-gray-200 font-mono text-base leading-relaxed resize-none outline-none disabled:opacity-50"
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoComplete="off"
-        />
-      ) : (
-        <Editor
-          height={height}
-          width="100%"
-          language={MONACO_LANGUAGE_MAP[language] || 'plaintext'}
-          value={code}
-          onChange={handleEditorChange}
-          theme="vs-dark"
-          options={{
-            minimap: { enabled: false },
-            fontSize: 13,
-            lineNumbers: 'on',
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            readOnly: disabled,
-            wordWrap: 'on',
-            tabSize: 4,
-            padding: { top: 8 },
-            // Monaco reserves a gutter wide enough for folding arrows and
-            // decorations it never draws here; on a narrow split that is
-            // several characters of code lost on every line.
-            folding: false,
-            glyphMargin: false,
-            lineDecorationsWidth: 4,
-            lineNumbersMinChars: 3,
-            overviewRulerLanes: 0,
-            scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-          }}
-        />
-      )}
+      <textarea
+        value={code}
+        onChange={(e) => onCodeChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        disabled={disabled}
+        placeholder="Write your code, pseudocode or logic here, in any language. It is not compiled or run; the interviewer reads it."
+        style={{ height }}
+        // text-base, not text-sm: iOS Safari zooms the whole page in on any
+        // input under 16px, and the candidate then has to pinch back out.
+        className="block w-full max-w-full p-3 bg-[#1e1e1e] text-gray-200 font-mono text-base leading-relaxed resize-none outline-none disabled:opacity-50"
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        aria-label="Code or logic answer"
+      />
 
-      {/* Resize grip */}
       <div
         role="separator"
         aria-orientation="horizontal"
-        aria-label="Resize code editor"
+        aria-label="Resize notepad"
         tabIndex={0}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

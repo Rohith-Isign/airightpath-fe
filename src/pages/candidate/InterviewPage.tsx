@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   Clock, Mic, User, Bot, Loader2, Video, AlertTriangle, Maximize, Shield,
   Wifi, WifiOff, Square, LogOut, CheckCircle2, Volume2,
-  EyeOff, Users, Timer, Monitor, MonitorUp, Play, Send, Smartphone, BookOpen,
+  EyeOff, Users, Timer, Monitor, MonitorUp, Send, Smartphone, BookOpen,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
@@ -19,7 +19,6 @@ import { useFaceDetection } from '@/hooks/useFaceDetection';
 import { useDevToolsDetection } from '@/hooks/useDevToolsDetection';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
-import { aiService } from '@/services/ai.service';
 import { extractApiError } from '@/services/api.service';
 import { interviewWsService } from '@/services/interview-ws.service';
 import { interviewService } from '@/services/interview.service';
@@ -62,10 +61,6 @@ export function InterviewPage() {
 
   // Voice interview hook
   const voiceInterview = useVoiceInterview();
-
-  // Compilation state
-  const [compileOutput, setCompileOutput] = useState<string>('');
-  const [compiling, setCompiling] = useState(false);
 
   // Mobile companion state
   /**
@@ -689,42 +684,6 @@ export function InterviewPage() {
     showToast(MESSAGES.interview.maxWarnings, 'warning');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalWarnings, voiceInterview.state]);
-
-  // Compile handler
-  const handleCompile = async () => {
-    if (!voiceInterview.codeContent.trim()) {
-      showToast(MESSAGES.interview.writeCodeFirst, 'warning');
-      return;
-    }
-    setCompiling(true);
-    try {
-      const res = await aiService.compileCode({
-        code: voiceInterview.codeContent,
-        language: voiceInterview.codeLanguage,
-      });
-      // Both: a program that printed something and then crashed has output and an error, and the error is what
-      // explains where the output stops.
-      const output = [res.data.output, res.data.error].filter(Boolean).join('\n');
-      setCompileOutput(output);
-      // Also held on the interview state, so it is submitted with the answer
-      // rather than staying on this screen.
-      voiceInterview.setCodeOutput(output);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      const failure = 'Compilation failed: ' + (err.response?.data?.message || err.message);
-      setCompileOutput(failure);
-      // A failed compile is evidence too — the interviewer should see that the
-      // submitted code does not build.
-      voiceInterview.setCodeOutput(failure);
-    } finally {
-      setCompiling(false);
-    }
-  };
-
-  // Clear compile output when new question arrives
-  useEffect(() => {
-    setCompileOutput('');
-  }, [voiceInterview.conversation.length, voiceInterview.isCodingQuestion]);
 
   // The three previews (camera, shared screen, phone) sit in the sidebar, which is only on the page once the
   // interview has left the instructions. Their streams arrive earlier than that: the screen is shared and the
@@ -1629,16 +1588,11 @@ export function InterviewPage() {
                   nothing and pushed the controls off-screen. */}
               {voiceInterview.isCodingQuestion && voiceInterview.state !== 'completed' && !postCompletionStep && (
                 <div ref={codingSectionRef} className="min-w-0 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-2 sm:p-3">
-                  <CodingEditor code={voiceInterview.codeContent} language={voiceInterview.codeLanguage} onCodeChange={voiceInterview.setCodeContent} onLanguageChange={voiceInterview.setCodeLanguage} disabled={voiceInterview.state === 'processing'} />
+                  <CodingEditor code={voiceInterview.codeContent} onCodeChange={voiceInterview.setCodeContent} disabled={voiceInterview.state === 'processing'} />
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button size="sm" variant="outline" onClick={handleCompile} disabled={compiling || !voiceInterview.codeContent.trim()}>
-                      {compiling ? <Loader2 size={14} className="animate-spin mr-2" /> : <Play size={14} className="mr-2" />}
-                      {STRINGS.candidateInterview.chat.compileAndRun}
-                    </Button>
-                    {/* There was no way to submit code at all. The only route was
-                        to speak and stop the mic, so a candidate who had written a
-                        working solution and had nothing to say about it was stuck.
-                        Any spoken explanation already recorded goes with it. */}
+                    {/* Send only: nothing is compiled or run, the interviewer reads
+                        what was written. Any spoken explanation already recorded
+                        goes with it. */}
                     <Button
                       size="sm"
                       onClick={() => voiceInterview.submitAnswer()}
@@ -1652,15 +1606,6 @@ export function InterviewPage() {
                       {STRINGS.candidateInterview.chat.submitAnswer}
                     </Button>
                   </div>
-                  {compileOutput && (
-                    <div className="mt-2 min-w-0 p-3 rounded-lg bg-[#1e1e1e] text-gray-200 font-mono text-xs sm:text-sm overflow-auto max-h-32 sm:max-h-48">
-                      {/* break-words as well as wrap: a stack trace or a long
-                          compiler path has no spaces to wrap at, and without it
-                          the panel stretches the whole column wider than the
-                          phone and the page scrolls sideways. */}
-                      <pre className="whitespace-pre-wrap break-words">{compileOutput}</pre>
-                    </div>
-                  )}
                 </div>
               )}
           </div>

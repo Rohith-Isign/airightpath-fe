@@ -34,6 +34,7 @@ import { PerformanceRating } from '@/components/admin/result/PerformanceRating';
 import { AreaQuestions } from '@/components/admin/result/AreaQuestions';
 import { questionRows } from '@/utils/interview-questions.utils';
 import { ScoreBreakdown } from '@/components/admin/result/ScoreBreakdown';
+import { TechnicalDomainReport } from '@/components/admin/result/TechnicalDomainReport';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
 import { CodeBlock } from '@/components/interview/CodeBlock';
@@ -1031,6 +1032,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
   const { schedule, evaluation, transcript, proctoring } = round;
   const resolved = evaluation;
   const questions = useMemo(() => questionRows(transcript), [transcript]);
+  const isTechnicalRound = roundKeyOf(schedule) === 'L2_TECHNICAL';
 
   return (
     <div className="space-y-6">
@@ -1044,69 +1046,43 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
         </CardContent>
       </Card>
 
-      {/* ── Who sat it, and where ───────────────────────────────────── */}
-      <ProctoringCaptures
-        interviewScheduleId={schedule.id}
-        candidateEmail={schedule.email}
-        jobPrefix={schedule.jobPrefix}
-        moduleLabel={roundLabelOf(schedule)}
-        contextNoun="interview"
-      />
-
-      {/* The paired phone's stills: the room as approved, and frames from during
-          the interview. Draws nothing when there are none. */}
-      <MobileCaptures scheduleId={schedule.id} />
-
-      {/* ── Proctoring ──────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Shield size={18} className="text-[var(--warning,orange)]" />
-            <CardTitle>{STRINGS.candidateResult.proctoringEvents(proctoring.length)}</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {proctoring.length === 0 ? (
-            <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
-              {STRINGS.candidateResult.nothingFlagged}
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {proctoring.map((event, index) => (
-                <li
-                  key={index}
-                  className="flex items-start justify-between gap-3 rounded-lg bg-[var(--surface1)] p-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-[var(--text)]">
-                      {event.eventType?.replace(/_/g, ' ') ?? STRINGS.candidateResult.event}
-                    </p>
-                    {event.details && (
-                      <p className="text-xs text-[var(--textSecondary)]">{event.details}</p>
-                    )}
-                  </div>
-                  {event.timestamp && (
-                    <span className="flex-shrink-0 text-xs text-[var(--textTertiary)]">
-                      {parseServerInstant(event.timestamp).toLocaleTimeString()}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
       {/* ── Scores by area ──────────────────────────────────────────── */}
+      {/* First, because the verdict is what a reviewer came for; the evidence (proctoring, transcript) supports it
+          below. L2 gets the domain report; the behavioural round keeps its own area list. */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <BarChart3 size={18} className="text-[var(--primary)]" />
-            <CardTitle>{STRINGS.candidateResult.scoresByArea}</CardTitle>
+            <CardTitle>{isTechnicalRound ? STRINGS.technicalReport.title : STRINGS.candidateResult.scoresByArea}</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
-          {resolved?.categoryScores?.length ? (
+          {resolved?.categoryScores?.length && isTechnicalRound ? (
+            <div className="space-y-5">
+              <EvidenceNotice evaluation={resolved} />
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
+                <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.overallAssessment}</h4>
+                <PerformanceRating score={resolved.overallScore} reason={resolved.summary} size="md" showMeaning />
+              </div>
+              <TechnicalDomainReport evaluation={resolved} rows={questions} />
+              <div className="grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2">
+                <BulletList title={STRINGS.candidateResult.strengths} items={resolved.strengths} tone="success" />
+                <BulletList
+                  title={STRINGS.candidateResult.areasToImprove}
+                  items={resolved.areasForImprovement}
+                  tone="warning"
+                />
+              </div>
+              <details className="rounded-xl border border-[var(--border)] p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-[var(--text)]">
+                  {STRINGS.technicalReport.howBuilt}
+                </summary>
+                <div className="mt-3">
+                  <ScoreBreakdown evaluation={resolved} transcript={transcript} />
+                </div>
+              </details>
+            </div>
+          ) : resolved?.categoryScores?.length ? (
             <div className="space-y-4">
               {/* The verdict first, in words, with the grader's reasoning: which candidate is strongest and why
                   should not need a reviewer to interpret a number. */}
@@ -1158,6 +1134,60 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
             <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
               {STRINGS.candidateResult.notScored}
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+
+      {/* ── Who sat it, and where ───────────────────────────────────── */}
+      <ProctoringCaptures
+        interviewScheduleId={schedule.id}
+        candidateEmail={schedule.email}
+        jobPrefix={schedule.jobPrefix}
+        moduleLabel={roundLabelOf(schedule)}
+        contextNoun="interview"
+      />
+
+      {/* The paired phone's stills: the room as approved, and frames from during
+          the interview. Draws nothing when there are none. */}
+      <MobileCaptures scheduleId={schedule.id} />
+
+      {/* ── Proctoring ──────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Shield size={18} className="text-[var(--warning,orange)]" />
+            <CardTitle>{STRINGS.candidateResult.proctoringEvents(proctoring.length)}</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {proctoring.length === 0 ? (
+            <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
+              {STRINGS.candidateResult.nothingFlagged}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {proctoring.map((event, index) => (
+                <li
+                  key={index}
+                  className="flex items-start justify-between gap-3 rounded-lg bg-[var(--surface1)] p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[var(--text)]">
+                      {event.eventType?.replace(/_/g, ' ') ?? STRINGS.candidateResult.event}
+                    </p>
+                    {event.details && (
+                      <p className="text-xs text-[var(--textSecondary)]">{event.details}</p>
+                    )}
+                  </div>
+                  {event.timestamp && (
+                    <span className="flex-shrink-0 text-xs text-[var(--textTertiary)]">
+                      {parseServerInstant(event.timestamp).toLocaleTimeString()}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>
