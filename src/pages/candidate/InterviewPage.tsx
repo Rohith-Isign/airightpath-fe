@@ -1570,6 +1570,18 @@ export function InterviewPage() {
                 )}
                 <div className={`max-w-[85%] sm:max-w-[70%] min-w-0 break-words p-3 sm:p-4 rounded-lg ${entry.role === 'interviewer' ? 'bg-[var(--surface1)] text-[var(--text)]' : entry.role === 'candidate' ? 'bg-[var(--primary)] text-white' : entry.role === 'system' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm border border-amber-200 dark:border-amber-800' : 'bg-transparent text-[var(--textTertiary)] italic text-sm p-2'} ${entry.isStreaming ? 'border border-blue-300 dark:border-blue-700' : ''}`}>
                   <p className="text-base leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                  {/* What the candidate sent from the notepad, kept on screen after Send so they can see what was
+                      submitted. Read-only and plain: nothing was run, so there is no output to show. */}
+                  {entry.role === 'candidate' && entry.codeContent?.trim() && (
+                    <div className="mt-2 overflow-hidden rounded-lg border border-white/20 bg-[#1e1e1e]">
+                      <div className="border-b border-[#3c3c3c] bg-[#252526] px-3 py-1 text-xs font-medium text-gray-300">
+                        Submitted from notepad
+                      </div>
+                      <pre className="max-h-64 overflow-auto p-3 font-mono text-sm leading-relaxed text-gray-200 whitespace-pre-wrap break-words">
+                        {entry.codeContent}
+                      </pre>
+                    </div>
+                  )}
                   {entry.role !== 'filler' && entry.role !== 'system' && <p className={`text-xs mt-2 ${entry.role === 'interviewer' ? 'text-[var(--textTertiary)]' : 'text-white/70'}`}>{new Date(entry.timestamp).toLocaleTimeString()}</p>}
                 </div>
               </div>
