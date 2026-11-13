@@ -250,11 +250,6 @@ export function MyApplicationsPage() {
         </div>
       )}
 
-      {/* The resume sent with the application, on top of its details */}
-      {resumeViewer.resume && (
-        <ResumeViewerModal resume={resumeViewer.resume} onClose={resumeViewer.close} />
-      )}
-
       {/* Application Details Modal */}
       {selectedApp && (
         <Modal
@@ -428,6 +423,13 @@ export function MyApplicationsPage() {
             )}
           </div>
         </Modal>
+      )}
+
+      {/* The resume sent with the application. Last in the page on purpose: this modal and the details modal share
+          one stacking level, so the later of the two is the one on top. Placed before the details it opened
+          behind them, where the candidate could not see it. */}
+      {resumeViewer.resume && (
+        <ResumeViewerModal resume={resumeViewer.resume} onClose={resumeViewer.close} />
       )}
     </div>
   );
