@@ -1397,6 +1397,13 @@ function BulletList({
 }
 
 /** How a probe turn is labelled. A new question needs no label — it is the norm. */
+const LEVEL_VARIANT = {
+  BASIC: 'default',
+  INTERMEDIATE: 'info',
+  ADVANCED: 'primary',
+  EXPERT: 'success',
+} as const;
+
 const TURN_KIND_LABELS: Partial<Record<NonNullable<VoiceConversationEntryDTO['turnKind']>, string>> =
   {
     FOLLOW_UP: STRINGS.candidateResult.turn.followUp,
@@ -1406,6 +1413,10 @@ const TURN_KIND_LABELS: Partial<Record<NonNullable<VoiceConversationEntryDTO['tu
 function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }>) {
   const isCandidate = entry.role === 'CANDIDATE';
   const probeLabel = entry.turnKind ? TURN_KIND_LABELS[entry.turnKind] : undefined;
+  // The server keeps a leading [CODING] on a coding question because the candidate's screen reads it to open the
+  // notepad. A reviewer does not need the raw tag in the text; it is shown as a badge instead.
+  const isCodingQuestion = !isCandidate && /^\s*\[CODING\]/i.test(entry.content ?? '');
+  const shownText = isCodingQuestion ? (entry.content ?? '').replace(/^\s*\[CODING\]\s*/i, '') : entry.content;
   return (
     <div className={`flex ${isCandidate ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -1418,16 +1429,27 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
         {/* Why the interview doubled back, and onto what. Without these a
             reviewer reads three questions on hash maps and cannot tell a
             deliberate probe from the model losing the thread. */}
-        {!isCandidate && (probeLabel || entry.topic) && (
+        {!isCandidate && (probeLabel || entry.topic || entry.level || isCodingQuestion) && (
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+            {entry.level && (
+              <Badge variant={LEVEL_VARIANT[entry.level]} size="sm">
+                {STRINGS.technicalReport.levelNames[entry.level]}
+              </Badge>
+            )}
+            {isCodingQuestion && (
+              <Badge variant="info" size="sm">
+                {STRINGS.technicalReport.codingQuestion}
+              </Badge>
+            )}
             {probeLabel && (
               <span className="rounded-full bg-[var(--surface2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--textSecondary)]">
                 {probeLabel}
               </span>
             )}
+            {/* The evaluation category the interviewer filed this under: a domain, not the kind of question. */}
             {entry.topic && (
               <span className="text-[10px] uppercase tracking-wider text-[var(--textTertiary)]">
-                {entry.topic}
+                {STRINGS.technicalReport.domainLabel}: {entry.topic}
               </span>
             )}
           </div>
@@ -1445,7 +1467,7 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
           </div>
         )}
 
-        <p className="whitespace-pre-wrap text-sm">{entry.content}</p>
+        <p className="whitespace-pre-wrap text-sm">{shownText}</p>
 
         {isCandidate && entry.codeContent && (
           <CodeBlock code={entry.codeContent} language={entry.codeLanguage} />

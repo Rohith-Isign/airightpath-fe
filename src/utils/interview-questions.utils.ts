@@ -12,6 +12,8 @@ export interface QuestionRow {
   score: number | null;
   skipped: boolean;
   answered: boolean;
+  /** How deep the question went, when the interviewer said (technical round, newer interviews). */
+  level: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT' | null;
 }
 
 /**
@@ -32,6 +34,7 @@ export function questionRows(transcript: VoiceConversationEntryDTO[]): QuestionR
         score: null,
         skipped: false,
         answered: false,
+        level: entry.level ?? null,
       });
       return;
     }

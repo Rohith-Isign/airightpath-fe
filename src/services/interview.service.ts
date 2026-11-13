@@ -50,6 +50,8 @@ export interface VoiceConversationEntryDTO {
   answerScore?: number;
   /** The evaluation category an interviewer turn was asking about. */
   topic?: string;
+  /** How deep an interviewer question goes (technical round only). Absent on older interviews. */
+  level?: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT' | null;
   /** Whether an interviewer turn opened new ground, pressed, or re-asked. */
   turnKind?: 'NEW_QUESTION' | 'FOLLOW_UP' | 'REPHRASE';
   /**
