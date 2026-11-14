@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type DefaultValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -49,7 +49,9 @@ function localDateToday(): string {
 // Keystrokes that would produce a non-integer opening count.
 const BLOCKED_NUMBER_KEYS = new Set([".", ",", "e", "E", "+", "-"]);
 
-const EMPTY_FORM: JobPostFormData = {
+// DefaultValues, not the full form type, so a field can start empty: the admin must type the number of openings
+// rather than inherit a pre-filled 1 they may not notice. Left empty, the schema says "Number of openings is required".
+const EMPTY_FORM: DefaultValues<JobPostFormData> = {
   jobPrefix: "",
   jobTitle: "",
   companyName: "",
@@ -63,7 +65,7 @@ const EMPTY_FORM: JobPostFormData = {
   industry: "",
   department: "",
   role: "",
-  numberOfOpenings: 1,
+  numberOfOpenings: undefined,
   applicationDeadline: "",
 };
 
