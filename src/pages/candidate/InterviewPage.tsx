@@ -88,6 +88,13 @@ export function InterviewPage() {
   const [isSetupActive, setIsSetupActive] = useState(false);
   // Question timer
   const questionTimerRef = useRef<{ incrementSkipCounter: () => void } | null>(null);
+  /** "Time is up" on a coding question: send the notepad, or take a little more time. */
+  const [codingTimeUpOpen, setCodingTimeUpOpen] = useState(false);
+  const [codingTimeUpSeconds, setCodingTimeUpSeconds] = useState<number>(
+    APP_CONFIG.INTERVIEW_CODING_TIME_UP_PROMPT_SECONDS,
+  );
+  /** Extra time already given on the question now open; reset when the next question arrives. */
+  const extensionsUsedRef = useRef(0);
   const questionTimer = useQuestionTimer({
     state: voiceInterview.state,
     isPlaying: voiceInterview.isPlaying,
@@ -103,6 +110,14 @@ export function InterviewPage() {
         // The 60-second prompt is only a nudge: the question's time ran out with it still open, so it closes and
         // the question is skipped and counted below, like any other unanswered one.
         setStillThereOpen(false);
+      }
+      // A coding question is asked about, not taken away. Someone who has written most of a solution in the
+      // notepad lost it mid-line to an automatic submit; now they are asked whether to send it or take a little
+      // longer, and only if nobody answers is the notepad sent (or the question skipped when it is empty).
+      if (voiceInterview.isCodingQuestion) {
+        setCodingTimeUpSeconds(APP_CONFIG.INTERVIEW_CODING_TIME_UP_PROMPT_SECONDS);
+        setCodingTimeUpOpen(true);
+        return;
       }
       if (voiceInterview.codeContent.trim()) {
         showToast(MESSAGES.interview.answerTimeLimit, 'warning');
@@ -590,6 +605,41 @@ export function InterviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearInactivityTimers, showToast]);
 
+  // The "time is up" countdown on a coding question. Unanswered, the notepad is sent as the answer; an empty one is
+  // a skipped question, counted like any other.
+  useEffect(() => {
+    if (!codingTimeUpOpen) return;
+    const id = window.setInterval(() => {
+      setCodingTimeUpSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [codingTimeUpOpen]);
+
+  const submitAfterTimeUp = useCallback(() => {
+    setCodingTimeUpOpen(false);
+    if (voiceInterview.codeContent.trim()) {
+      void voiceInterview.submitAnswer();
+      return;
+    }
+    showToast(MESSAGES.interview.questionTimedOut, 'info');
+    questionTimerRef.current?.incrementSkipCounter();
+    voiceInterview.skipQuestion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceInterview.codeContent, voiceInterview.submitAnswer, voiceInterview.skipQuestion, showToast]);
+
+  useEffect(() => {
+    if (codingTimeUpOpen && codingTimeUpSeconds === 0) submitAfterTimeUp();
+  }, [codingTimeUpOpen, codingTimeUpSeconds, submitAfterTimeUp]);
+
+  // A new question, or the candidate answering by voice, ends the prompt and resets the extra time.
+  useEffect(() => {
+    extensionsUsedRef.current = 0;
+    setCodingTimeUpOpen(false);
+  }, [voiceInterview.conversation.length]);
+  useEffect(() => {
+    if (voiceInterview.state !== 'active') setCodingTimeUpOpen(false);
+  }, [voiceInterview.state]);
+
   // The "still there?" countdown. Unanswered, the interview is closed and submitted with what was said so far.
   useEffect(() => {
     if (!stillThereOpen || stillThereCauseRef.current === 'idle') return;
@@ -782,7 +832,9 @@ export function InterviewPage() {
       }
     }, 150);
     return () => window.clearTimeout(id);
-  }, [voiceInterview.isCodingQuestion]);
+    // The conversation length too: a coding question that follows another one (or asks for a fix) keeps the flag
+    // on, so keyed on the flag alone the notepad was left below the fold and the candidate asked where it was.
+  }, [voiceInterview.isCodingQuestion, voiceInterview.conversation.length]);
 
   // Natural completion detection
   // The closing reply is the last thing the candidate hears, so the submit screen waits for it: a short pause for
@@ -1318,6 +1370,44 @@ export function InterviewPage() {
           <Loader2 size={14} className="animate-spin" />
         </div>
       )}
+
+      {/* "Time is up" on a coding question: send the notepad now, or take a little longer. Not dismissable, so the
+          choice is made by the candidate or, failing that, by the countdown. */}
+      <Modal
+        isOpen={codingTimeUpOpen}
+        onClose={() => undefined}
+        title={STRINGS.codingTimeUp.title}
+        size="sm"
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            {extensionsUsedRef.current < APP_CONFIG.INTERVIEW_CODING_MAX_EXTENSIONS && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  extensionsUsedRef.current += 1;
+                  setCodingTimeUpOpen(false);
+                  questionTimer.extend(APP_CONFIG.INTERVIEW_CODING_EXTENSION_SECONDS);
+                  startInactivityTimers();
+                }}
+              >
+                {STRINGS.codingTimeUp.more(Math.round(APP_CONFIG.INTERVIEW_CODING_EXTENSION_SECONDS / 60))}
+              </Button>
+            )}
+            <Button onClick={submitAfterTimeUp} disabled={!voiceInterview.codeContent.trim()}>
+              {STRINGS.codingTimeUp.submit}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-[var(--textSecondary)]">
+          {voiceInterview.codeContent.trim()
+            ? STRINGS.codingTimeUp.body(codingTimeUpSeconds)
+            : STRINGS.codingTimeUp.emptyBody(codingTimeUpSeconds)}
+        </p>
+        {extensionsUsedRef.current >= APP_CONFIG.INTERVIEW_CODING_MAX_EXTENSIONS && (
+          <p className="mt-2 text-xs text-[var(--textTertiary)]">{STRINGS.codingTimeUp.noMore}</p>
+        )}
+      </Modal>
 
       {/* "Still there?" — shown after a long silence or a run of skipped questions. Confirming carries on;
           if it goes unanswered the interview is closed when the countdown reaches zero. It cannot be dismissed

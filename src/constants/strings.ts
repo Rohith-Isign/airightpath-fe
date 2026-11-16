@@ -457,6 +457,16 @@ export const STRINGS = {
   },
 
   /** The "Are you still there?" prompt. */
+  codingTimeUp: {
+    title: 'Time is up for this question',
+    body: (seconds: number) =>
+      `Submit what you have in the notepad, or take a little more time to finish. If there is no reply, your notepad is sent in ${seconds}s.`,
+    emptyBody: (seconds: number) =>
+      `Your notepad is empty. Take a little more time, or the question is skipped in ${seconds}s.`,
+    submit: 'Submit my answer',
+    more: (minutes: number) => `I need ${minutes} more minutes`,
+    noMore: 'No more extra time is available for this question.',
+  },
   stillThere: {
     title: 'Are you still there?',
     confirm: "Yes, I'm still here",

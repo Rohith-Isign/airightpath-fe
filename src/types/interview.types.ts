@@ -372,6 +372,8 @@ export interface ResponseCompleteMessage {
   terminated: boolean;
   /** Why the interview ended: ai_closed, question_limit, or the server's own reason for forcing it. */
   reason?: string;
+  /** Whether this turn is a new question, a follow-up on the last answer, or the same question re-asked. */
+  turnKind?: 'NEW_QUESTION' | 'FOLLOW_UP' | 'REPHRASE';
 }
 
 // Voice evaluation types

@@ -128,6 +128,8 @@ export function useVoiceInterview() {
    * sent the source and never learned whether it worked.
    */
   const [codeOutput, setCodeOutput] = useState("");
+  /** The code last sent from the notepad, put back when the interviewer asks for it to be fixed. */
+  const lastSubmittedCodeRef = useRef("");
 
   // Audio hooks
   // Takes the id only; the email was being passed and silently discarded.
@@ -394,11 +396,21 @@ export function useVoiceInterview() {
             const { cleanText, isCoding } = detectAndCleanCodingTag(responseText);
 
             setIsCodingQuestion(isCoding);
-            // Cleared for every question, coding or not. Left in place after a
+            // Cleared for every new question, coding or not. Left in place after a
             // non-coding one, the last problem's code and output were attached
             // to each later spoken answer. The output goes with the editor, or
             // it would be submitted as evidence for the next problem.
-            setCodeContent("");
+            //
+            // The exception is the interviewer asking for the same code to be
+            // fixed (a follow-up or a re-ask with the notepad): the candidate's
+            // last attempt goes back in, as it would on a whiteboard, rather than
+            // making them type it all again.
+            const fixingLastCode =
+              isCoding &&
+              (msg.turnKind === "FOLLOW_UP" || msg.turnKind === "REPHRASE") &&
+              !!lastSubmittedCodeRef.current;
+            setCodeContent(fixingLastCode ? lastSubmittedCodeRef.current : "");
+            if (!isCoding || msg.turnKind === "NEW_QUESTION") lastSubmittedCodeRef.current = "";
             setCodeOutput("");
             setLastQuestionText(cleanText);
             // The previous question's audio must not outlive it: a turn that is
@@ -786,6 +798,7 @@ export function useVoiceInterview() {
       // Only a coding question takes code: on any other, the editor is not on screen, so whatever is
       // left in it is not part of the answer.
       const submittedCode = isCodingQuestion ? codeContent : "";
+      if (submittedCode.trim()) lastSubmittedCodeRef.current = submittedCode;
       const submittedLanguage = codeLanguage;
       const submittedOutput = isCodingQuestion ? codeOutput : "";
 

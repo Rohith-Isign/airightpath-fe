@@ -107,4 +107,9 @@ export const APP_CONFIG = {
   INTERVIEW_IDLE_PROMPT_SECONDS: 60,
   /** How long the "Are you still there?" prompt waits for a reply before the interview is closed. */
   INTERVIEW_STILL_THERE_SECONDS: 60,
+  /** When a coding question's time is up: how long the "time's up" prompt waits before sending the notepad. */
+  INTERVIEW_CODING_TIME_UP_PROMPT_SECONDS: 60,
+  /** Extra time one "I need more time" adds to a coding question, and how many times it may be asked for. */
+  INTERVIEW_CODING_EXTENSION_SECONDS: 120,
+  INTERVIEW_CODING_MAX_EXTENSIONS: 2,
 } as const;
