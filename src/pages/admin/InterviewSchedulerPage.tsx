@@ -18,7 +18,7 @@ import { INTERVIEW_ASSIGN_STAGES } from '@/utils/interview-assign-stages';
 import type { JobPostDTO, JobApplicationDTO } from '@/types/job.types';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewRound, InterviewSchedule } from '@/types/interview.types';
-import { formatServerDateTime } from '@/utils/format.utils';
+import { formatScheduledDateTime } from '@/utils/format.utils';
 
 const ROUND_OPTIONS = (Object.keys(INTERVIEW_ROUND_LABELS) as InterviewRound[]).map((value) => ({
   value,
@@ -136,10 +136,10 @@ export function InterviewSchedulerPage() {
     if (!mine) return '';
     const short = round === 'L2_TECHNICAL' ? 'L2' : 'L3';
     if (mine.attemptStatus === 'COMPLETED') return `${short} finished`;
-    if (mine.deadlineTime && isPast(mine.deadlineTime)) return `${short} missed (was due ${formatServerDateTime(mine.deadlineTime)})`;
+    if (mine.deadlineTime && isPast(mine.deadlineTime)) return `${short} missed (was due ${formatScheduledDateTime(mine.deadlineTime)})`;
     return mine.attemptStatus === 'IN_PROGRESS'
       ? `${short} in progress`
-      : `${short} assigned: ${formatServerDateTime(mine.assignedAt)} → ${mine.deadlineTime ? formatServerDateTime(mine.deadlineTime) : 'no end time set'}`;
+      : `${short} assigned: ${formatScheduledDateTime(mine.assignedAt)} → ${mine.deadlineTime ? formatScheduledDateTime(mine.deadlineTime) : 'no end time set'}`;
   }
 
   /** Not started yet, so their window can still be moved. */
@@ -422,8 +422,8 @@ export function InterviewSchedulerPage() {
                 </p>
                 {movable.slice(0, 5).map((sch) => (
                   <p key={sch.id} className="text-xs text-[var(--textSecondary)]">
-                    {sch.email}: {formatServerDateTime(sch.assignedAt)} →{' '}
-                    {sch.deadlineTime ? formatServerDateTime(sch.deadlineTime) : 'no end time set, add one below'}
+                    {sch.email}: {formatScheduledDateTime(sch.assignedAt)} →{' '}
+                    {sch.deadlineTime ? formatScheduledDateTime(sch.deadlineTime) : 'no end time set, add one below'}
                   </p>
                 ))}
                 <p className="text-xs text-[var(--textSecondary)]">

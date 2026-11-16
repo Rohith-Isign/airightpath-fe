@@ -41,6 +41,17 @@ export function parseServerInstant(dateStr: string): Date {
  * stored as typed, so they must be shown back exactly as typed —
  * {@link formatDateTime} does that.
  */
+/**
+ * A scheduled time (an interview's start or deadline) shown exactly as the recruiter picked it.
+ *
+ * Those are wall-clock times in the business timezone, not UTC stamps, so they must not go through
+ * {@link formatServerDateTime}: that reads them as UTC and shows an IST reader every slot 5h30 late.
+ */
+export function formatScheduledDateTime(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  return formatDateTime(dateStr);
+}
+
 export function formatServerDateTime(dateStr?: string | null): string {
   if (!dateStr) return '';
   const date = parseServerInstant(dateStr);

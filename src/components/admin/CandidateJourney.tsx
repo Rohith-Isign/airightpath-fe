@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { interviewService } from '@/services/interview.service';
-import { formatElapsedSeconds, formatServerDateTime } from '@/utils/format.utils';
+import { formatElapsedSeconds, formatScheduledDateTime, formatServerDateTime } from '@/utils/format.utils';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewSchedule } from '@/types/interview.types';
 import type { JobApplicationDTO } from '@/types/job.types';
@@ -234,7 +234,7 @@ export function CandidateJourney({ candidate, jobPrefix, onViewInterviewResult }
         const score = row.evaluation?.overallScore;
         const seconds = secondsBetween(row.startedAt, row.endedAt);
         const lines = [
-          `Scheduled ${formatServerDateTime(row.assignedAt)}, due ${formatServerDateTime(row.deadlineTime)}`,
+          `Scheduled ${formatScheduledDateTime(row.assignedAt)}, due ${formatScheduledDateTime(row.deadlineTime)}`,
           row.startedAt ? `Started ${formatServerDateTime(row.startedAt)}${seconds != null ? ` · ${formatElapsedSeconds(seconds)}` : ''}` : 'Not started',
           score != null ? `Score ${score}/10` : '',
           row.overriddenResult ? `Result overridden by ${row.overriddenBy ?? 'a reviewer'}` : '',
@@ -255,7 +255,10 @@ export function CandidateJourney({ candidate, jobPrefix, onViewInterviewResult }
           icon: <Mic size={14} />,
           title: `${label}${(interviews ?? []).filter((r) => (r.round ?? 'L2_TECHNICAL') === round).length > 1 ? ` · attempt ${nth}` : ''}`,
           tone: row.deletedAt ? 'pending' : finished ? (result === 'FAILED' ? 'bad' : 'done') : 'pending',
-          when: formatServerDateTime(row.endedAt ?? row.startedAt ?? row.assignedAt),
+          // Started/ended are UTC stamps; the scheduled start is a wall-clock time and is shown as picked.
+          when: row.endedAt || row.startedAt
+            ? formatServerDateTime(row.endedAt ?? row.startedAt)
+            : formatScheduledDateTime(row.assignedAt),
           lines,
           badge: finished
             ? { text: result === 'PASSED' ? 'Passed' : result === 'FAILED' ? 'Failed' : 'Completed', variant: result === 'PASSED' ? 'success' : result === 'FAILED' ? 'error' : 'info' }

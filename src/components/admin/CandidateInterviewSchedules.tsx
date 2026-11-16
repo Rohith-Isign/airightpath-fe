@@ -3,7 +3,7 @@ import { Loader2, Video, CalendarClock } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { interviewService } from '@/services/interview.service';
-import { formatServerDateTime } from '@/utils/format.utils';
+import { formatScheduledDateTime } from '@/utils/format.utils';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewSchedule } from '@/types/interview.types';
 import { RescheduleInterviewModal } from './RescheduleInterviewModal';
@@ -70,7 +70,7 @@ export function CandidateInterviewSchedules({
                 </Badge>
               </p>
               <p className="text-xs text-[var(--textSecondary)]">
-                {formatServerDateTime(i.assignedAt)} → {formatServerDateTime(i.deadlineTime)}
+                {formatScheduledDateTime(i.assignedAt)} → {formatScheduledDateTime(i.deadlineTime)}
               </p>
             </div>
             {notStarted && (
