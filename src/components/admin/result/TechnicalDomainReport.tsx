@@ -42,6 +42,9 @@ interface LevelStat {
   /** Questions asked at this level. */
   count: number;
   answered: number;
+  /** Answers the server judged correct, out of those it judged at all. */
+  correct: number;
+  judged: number;
   /** Average rating of the answers, as a percentage, or null when none was rated. */
   percent: number | null;
 }
@@ -55,6 +58,8 @@ function levelStats(rows: QuestionRow[]): Record<Level, LevelStat> {
     stats[level] = {
       count: atLevel.length,
       answered: atLevel.filter((row) => row.answered).length,
+      correct: atLevel.filter((row) => row.correct === true).length,
+      judged: atLevel.filter((row) => row.correct != null).length,
       percent: scored.length ? Math.round((scored.reduce((sum, s) => sum + s, 0) / scored.length) * 10) : null,
     };
   });
@@ -127,6 +132,11 @@ function LevelAchievement({ stats, hasLevels }: Readonly<{ stats: Record<Level, 
                 <p className="text-[11px] text-[var(--textTertiary)]">
                   {stat.count ? T.questionsAtLevel(stat.count) : T.noneAsked}
                 </p>
+                {stat.judged > 0 && (
+                  <p className="text-[11px] font-medium text-[var(--textSecondary)]">
+                    {T.correctOf(stat.correct, stat.judged)}
+                  </p>
+                )}
               </div>
             );
           })}
@@ -320,6 +330,11 @@ function DomainDetail({
                             ? T.reached
                             : T.notReached}
                       </p>
+                      {hasRowLevels && stat.judged > 0 && (
+                        <p className="text-[11px] font-medium text-[var(--textSecondary)]">
+                          {T.correctOf(stat.correct, stat.judged)}
+                        </p>
+                      )}
                       <p className="mt-1 text-[11px] leading-snug text-[var(--textSecondary)]">
                         {T.levelDescriptions[level]}
                       </p>

@@ -1505,6 +1505,16 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
           {isCandidate && entry.answerScore != null && (
             <span className="text-xs font-medium text-white/80">{entry.answerScore}/10</span>
           )}
+          {/* Correct or not, as the server judged it against the pass mark when the answer was rated. */}
+          {isCandidate && entry.answerCorrect != null && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                entry.answerCorrect ? 'bg-white/90 text-[var(--success)]' : 'bg-black/30 text-white'
+              }`}
+            >
+              {entry.answerCorrect ? `✓ ${STRINGS.technicalReport.correct}` : `✗ ${STRINGS.technicalReport.notCorrect}`}
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -14,6 +14,8 @@ export interface QuestionRow {
   answered: boolean;
   /** How deep the question went, when the interviewer said (technical round, newer interviews). */
   level: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT' | null;
+  /** Whether the answer met the pass mark, as the server judged it; null when it was not rated. */
+  correct: boolean | null;
 }
 
 /**
@@ -35,6 +37,7 @@ export function questionRows(transcript: VoiceConversationEntryDTO[]): QuestionR
         skipped: false,
         answered: false,
         level: entry.level ?? null,
+        correct: null,
       });
       return;
     }
@@ -50,6 +53,7 @@ export function questionRows(transcript: VoiceConversationEntryDTO[]): QuestionR
     row.skipped = false;
     row.answer = row.answer ? `${row.answer} ${text}` : text;
     if (entry.answerScore != null) row.score = entry.answerScore;
+    if (entry.answerCorrect != null) row.correct = entry.answerCorrect;
   });
   return rows;
 }

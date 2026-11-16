@@ -48,6 +48,8 @@ export interface VoiceConversationEntryDTO {
   codeOutput?: string;
   /** The interviewer's own 0-10 read on a candidate turn, if it rated one. */
   answerScore?: number;
+  /** Whether that score met the pass mark when it was given (6/10 by default). Absent when not rated. */
+  answerCorrect?: boolean | null;
   /** The evaluation category an interviewer turn was asking about. */
   topic?: string;
   /** How deep an interviewer question goes (technical round only). Absent on older interviews. */
