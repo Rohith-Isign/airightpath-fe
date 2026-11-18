@@ -394,6 +394,24 @@ export function useVoiceInterview() {
         },
       );
 
+      // The answer just sent was spoken in another language. It is not scored, and the candidate is told so at once
+      // rather than finding out from the result.
+      interviewWsService.subscribe(
+        `/topic/interview/${id}/language-warning`,
+        (msg: { language?: string }) => {
+          setConversation((prev) => [
+            ...prev,
+            {
+              role: "system",
+              content: `Your last answer was not in English${
+                msg.language ? ` (it sounded like ${msg.language})` : ""
+              }, so it could not be scored. Please answer in English.`,
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+        },
+      );
+
       // In useVoiceInterview.ts - response-complete subscription
       interviewWsService.subscribe(
         `/topic/interview/${id}/response-complete`,
