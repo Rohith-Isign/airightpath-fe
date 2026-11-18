@@ -36,6 +36,7 @@ import { questionRows } from '@/utils/interview-questions.utils';
 import { ScoreBreakdown } from '@/components/admin/result/ScoreBreakdown';
 import { TechnicalDomainReport } from '@/components/admin/result/TechnicalDomainReport';
 import { AreaBreakdown } from '@/components/admin/result/AreaBreakdown';
+import { HiringVerdict } from '@/components/admin/result/HiringVerdict';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
 import { CodeBlock } from '@/components/interview/CodeBlock';
@@ -1084,6 +1085,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
           {resolved?.categoryScores?.length && isTechnicalRound ? (
             <div className="space-y-5">
               <EvidenceNotice evaluation={resolved} />
+              <HiringVerdict evaluation={resolved} />
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
                 <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.overallAssessment}</h4>
                 <PerformanceRating score={resolved.overallScore} reason={resolved.summary} size="md" showMeaning />
@@ -1114,6 +1116,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
               {/* The verdict first, in words, with the grader's reasoning: which candidate is strongest and why
                   should not need a reviewer to interpret a number. */}
               <EvidenceNotice evaluation={resolved} />
+              <HiringVerdict evaluation={resolved} />
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
                 <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.overallAssessment}</h4>
                 <PerformanceRating

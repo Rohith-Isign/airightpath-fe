@@ -104,6 +104,17 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
       { gap: 2 },
     );
   }
+  // The verdict a person would give, before the numbers behind it.
+  if (evaluation?.observedSeniority) write(`Level shown: ${evaluation.observedSeniority}`, { gap: 2 });
+  if (evaluation?.verdict) write(evaluation.verdict, { size: 9.5, gap: 2 });
+  if (evaluation?.notCovered?.length) {
+    write('Not covered in this interview:', { size: 9, style: 'bold', gap: 1 });
+    evaluation.notCovered.forEach((item) => write(`- ${item}`, { size: 9, indent: 10, gap: 1 }));
+  }
+  if (evaluation?.depthGaps?.length) {
+    write('Right, but not deep enough:', { size: 9, style: 'bold', gap: 1 });
+    evaluation.depthGaps.forEach((item) => write(`- ${item}`, { size: 9, indent: 10, gap: 1 }));
+  }
   if (evaluation?.recommendation) {
     write(`Recommendation: ${evaluation.recommendation.replace(/_/g, ' ')}`, { gap: 2 });
   }

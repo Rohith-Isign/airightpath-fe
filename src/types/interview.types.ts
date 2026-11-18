@@ -421,6 +421,14 @@ export interface VoiceEvaluationResult {
   questionAreas?: { questionNumber: number; area: string }[];
   /** Score against that full list, 0-100: 1 per concept answered well, a half partly, nothing wrong or not asked. */
   scopeScore?: number | null;
+  /** The verdict a senior interviewer would give the hiring manager, in a few sentences. */
+  verdict?: string | null;
+  /** The level the answers showed, with the level the job asks for. */
+  observedSeniority?: string | null;
+  /** What the job needs that this interview never tested. */
+  notCovered?: string[] | null;
+  /** Where answers were right but not deep enough for the role. */
+  depthGaps?: string[] | null;
 }
 
 export interface VoiceCategoryScore {
