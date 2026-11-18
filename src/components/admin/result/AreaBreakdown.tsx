@@ -1,20 +1,10 @@
 import { useMemo } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import type { QuestionRow } from '@/utils/interview-questions.utils';
+import { areaLabel } from '@/utils/interview-areas.utils';
 import type { VoiceEvaluationResult } from '@/types/interview.types';
 
-const AREA_LABELS: Record<string, string> = {
-  COMMUNICATION: 'Communication',
-  FRONTEND: 'Frontend',
-  BACKEND: 'Backend',
-  DATABASE: 'Database',
-  PROGRAMMING: 'Programming',
-  DEVOPS_CLOUD: 'DevOps & Cloud',
-  SYSTEM_DESIGN: 'System design',
-  TESTING: 'Testing',
-  BEHAVIOURAL: 'Behavioural',
-  OTHER: 'Other',
-};
+
 
 const STATUS: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'secondary' }> = {
   CORRECT: { label: 'Correct', variant: 'success' },
@@ -23,7 +13,6 @@ const STATUS: Record<string, { label: string; variant: 'success' | 'warning' | '
   NOT_ASKED: { label: 'Not asked', variant: 'secondary' },
 };
 
-const areaLabel = (area: string) => AREA_LABELS[area] ?? area;
 
 interface AreaRow {
   area: string;

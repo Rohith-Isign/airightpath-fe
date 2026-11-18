@@ -862,6 +862,7 @@ function AttemptSection({
           evaluation: attempt.evaluation,
           transcript: attempt.transcript,
           reviewReasons: attempt.evaluation?.reviewReasons,
+          proctoring: attempt.proctoring,
           generatedAt: new Date(),
         });
         downloadBlob(blob, interviewReportFileName(schedule));
