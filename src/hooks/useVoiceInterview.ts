@@ -393,6 +393,19 @@ export function useVoiceInterview() {
             // old fixed-question protocol and became true of every reply once
             // questions were generated — so the interview "completed" the
             // moment the candidate answered the first question.
+            // The code just sent answered a different question. Said on screen as well as by the interviewer, so
+            // the candidate does not leave believing it counted.
+            if (msg.codeMismatch) {
+              setConversation((prev) => [
+                ...prev,
+                {
+                  role: "system",
+                  content:
+                    "The code you submitted solves a different problem from the question asked, so it did not earn marks for this question.",
+                  timestamp: new Date().toISOString(),
+                },
+              ]);
+            }
             const { cleanText, isCoding } = detectAndCleanCodingTag(responseText);
 
             setIsCodingQuestion(isCoding);
@@ -832,6 +845,14 @@ export function useVoiceInterview() {
         }
       }
       sendToInterview("submit-answer", payload);
+
+      // What was said belongs to this answer only. The transcript used to be cleared only when the mic was next
+      // pressed, so a code answer sent from the notepad without speaking carried the previous spoken answer along
+      // with it, and the interviewer read the same old words attached to every new submission.
+      transcriptRef.current = "";
+      wordTimestampsRef.current = [];
+      chunkTextsRef.current = new Map();
+      setCurrentTranscript("");
 
       audioArrivedRef.current = false;
       clearAwaitingAudio();

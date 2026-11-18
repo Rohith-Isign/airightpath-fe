@@ -50,6 +50,8 @@ export interface VoiceConversationEntryDTO {
   answerScore?: number;
   /** Whether that score met the pass mark when it was given (6/10 by default). Absent when not rated. */
   answerCorrect?: boolean | null;
+  /** The submitted code solved a different problem than the one asked, so it was scored 0. */
+  codeMismatch?: boolean | null;
   /** The evaluation category an interviewer turn was asking about. */
   topic?: string;
   /** How deep an interviewer question goes (technical round only). Absent on older interviews. */

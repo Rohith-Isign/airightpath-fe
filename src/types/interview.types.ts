@@ -374,6 +374,8 @@ export interface ResponseCompleteMessage {
   reason?: string;
   /** Whether this turn is a new question, a follow-up on the last answer, or the same question re-asked. */
   turnKind?: 'NEW_QUESTION' | 'FOLLOW_UP' | 'REPHRASE';
+  /** True when the code just submitted solved a different problem than the one asked: it earned no marks. */
+  codeMismatch?: boolean;
 }
 
 // Voice evaluation types

@@ -533,6 +533,7 @@ export const STRINGS = {
       EXPERT: 'Architecture, trade-offs & scalability',
     },
     correct: 'Correct',
+    codeMismatch: 'Code solves a different problem than asked: no marks for this question',
     notCorrect: 'Not correct',
     correctOf: (correct: number, rated: number) => `${correct} of ${rated} correct`,
     byLevel: 'Questions by level',

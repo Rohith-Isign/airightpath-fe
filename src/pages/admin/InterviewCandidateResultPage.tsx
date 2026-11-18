@@ -1467,6 +1467,14 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
           </div>
         )}
 
+        {/* Flagged by the interviewer and scored 0: the code here answers a different question. */}
+        {isCandidate && entry.codeMismatch && (
+          <div className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-black/30 px-2 py-1">
+            <AlertTriangle size={13} className="flex-shrink-0 text-amber-300" />
+            <span className="text-[11px] font-semibold text-white">{STRINGS.technicalReport.codeMismatch}</span>
+          </div>
+        )}
+
         <p className="whitespace-pre-wrap text-sm">{shownText}</p>
 
         {isCandidate && entry.codeContent && (
