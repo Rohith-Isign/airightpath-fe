@@ -96,6 +96,14 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
       : 'Overall score: not scored',
     { size: 11, style: 'bold', gap: 2 }
   );
+  if (evaluation?.scopeScore != null && evaluation.expectedConcepts?.length) {
+    const reached = evaluation.expectedConcepts.filter((c) => c.status !== 'NOT_ASKED').length;
+    write(
+      `Score against the full scope: ${Math.round(evaluation.scopeScore)} / 100 ` +
+        `(${reached} of ${evaluation.expectedConcepts.length} expected concepts reached)`,
+      { gap: 2 },
+    );
+  }
   if (evaluation?.recommendation) {
     write(`Recommendation: ${evaluation.recommendation.replace(/_/g, ' ')}`, { gap: 2 });
   }
@@ -157,7 +165,10 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
         entry.turnKind && entry.turnKind !== 'NEW_QUESTION'
           ? entry.turnKind.replace('_', ' ').toLowerCase()
           : null,
+        entry.level ? entry.level.toLowerCase() : null,
         entry.answerScore != null ? `${entry.answerScore}/10` : null,
+        entry.answerCorrect == null ? null : entry.answerCorrect ? 'correct' : 'not correct',
+        entry.codeMismatch ? 'code solves a different problem' : null,
       ]
         .filter(Boolean)
         .join(' · ');

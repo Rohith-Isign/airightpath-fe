@@ -219,7 +219,12 @@ export const aiService = {
   },
 
   endVoiceInterview(scheduleId: number) {
-    return api.post<void>(ENDPOINTS.AI.VOICE_END(scheduleId));
+    // Says which window is ending it, so a window another one has replaced cannot end the interview there.
+    return api.post<void>(
+      ENDPOINTS.AI.VOICE_END(scheduleId),
+      undefined,
+      voiceSessionId ? { params: { sessionId: voiceSessionId } } : undefined,
+    );
   },
 
   getVoiceStatus(scheduleId: number) {

@@ -171,7 +171,11 @@ export function ScoreBreakdown({
             </p>
           )}
           <p className="mt-1.5 text-xs text-[var(--textTertiary)]">
-            {STRINGS.scoreBreakdown.formulaNote}
+            {/* The overall is the scope score when the grader listed the expected concepts, and the weighted
+                area score otherwise; the note has to describe the one actually used. */}
+            {evaluation.scopeScore != null
+              ? STRINGS.technicalReport.scopeFormulaNote
+              : STRINGS.scoreBreakdown.formulaNote}
           </p>
         </div>
       )}

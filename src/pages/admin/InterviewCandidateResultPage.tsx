@@ -1446,7 +1446,14 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
   // The server keeps a leading [CODING] on a coding question because the candidate's screen reads it to open the
   // notepad. A reviewer does not need the raw tag in the text; it is shown as a badge instead.
   const isCodingQuestion = !isCandidate && /^\s*\[CODING\]/i.test(entry.content ?? '');
-  const shownText = isCodingQuestion ? (entry.content ?? '').replace(/^\s*\[CODING\]\s*/i, '') : entry.content;
+  // A code answer is stored with the code and a note for the grader ("[CODE (text)] … [RUN OUTPUT] …") after the
+  // spoken words. The code is shown in its own block below, so only the words are shown here, not the same code
+  // twice and an internal note the reviewer does not need.
+  const shownText = isCodingQuestion
+    ? (entry.content ?? '').replace(/^\s*\[CODING\]\s*/i, '')
+    : isCandidate && entry.codeContent
+      ? (entry.content ?? '').split(/\n*\[CODE \(/)[0].trim() || STRINGS.technicalReport.codeOnly
+      : entry.content;
   return (
     <div className={`flex ${isCandidate ? 'justify-end' : 'justify-start'}`}>
       <div

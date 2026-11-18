@@ -539,6 +539,9 @@ export const STRINGS = {
       EXPERT: 'Architecture, trade-offs & scalability',
     },
     correct: 'Correct',
+    codeOnly: '(Answered in the notepad, without speaking)',
+    scopeFormulaNote:
+      'Overall = the share of everything this interview should have covered that the candidate earned: each expected concept counts 1 when answered well, a half when partly right, and nothing when wrong or never asked. The table above shows the scoring areas; the score itself is measured against the full list of concepts under Coverage by area.',
     codeMismatch: 'Code solves a different problem than asked: no marks for this question',
     notCorrect: 'Not correct',
     correctOf: (correct: number, rated: number) => `${correct} of ${rated} correct`,

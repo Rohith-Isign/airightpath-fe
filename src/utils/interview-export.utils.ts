@@ -171,6 +171,9 @@ const TRANSCRIPT_COLUMNS = [
   { header: 'What was said', width: 90 },
   { header: 'Code', width: 60 },
   { header: 'Time', width: 18 },
+  { header: 'Level', width: 14 },
+  { header: 'Correct', width: 10 },
+  { header: 'Code mismatch', width: 14 },
 ];
 
 /** The conversation, one turn per row, for a single-candidate export. */
@@ -189,6 +192,9 @@ function addTranscriptSheet(workbook: Workbook, transcript: VoiceConversationEnt
       entry.content,
       entry.codeContent ?? '',
       toDate(entry.timestamp),
+      entry.level ?? '',
+      entry.answerCorrect == null ? '' : entry.answerCorrect ? 'Yes' : 'No',
+      entry.codeMismatch ? 'Yes' : '',
     ]);
     // Wrapped rather than truncated: an answer is the thing being read here,
     // and a spreadsheet that clips it at the cell edge defeats the export.
