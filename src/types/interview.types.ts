@@ -289,6 +289,8 @@ export type VoiceInterviewState =
 // Voice interview REST types
 export interface VoiceStartResponse {
   scheduleId: number;
+  /** This window's id for the interview, sent with every message. Opening it in another window replaces it. */
+  sessionId?: string;
   /**
    * When this interview runs out, as a server timestamp.
    *

@@ -1371,6 +1371,20 @@ export function InterviewPage() {
         </div>
       )}
 
+      {/* Another window took this interview over. Nothing here works any more, and nothing dismisses this but
+          leaving, which also stops the camera and screen recording this window started. */}
+      <Modal
+        isOpen={voiceInterview.sessionReplaced}
+        onClose={() => undefined}
+        title={STRINGS.sessionReplaced.title}
+        size="sm"
+        footer={
+          <Button onClick={() => navigate(ROUTES.CANDIDATE.INTERVIEWS)}>{STRINGS.sessionReplaced.action}</Button>
+        }
+      >
+        <p className="text-sm text-[var(--textSecondary)]">{STRINGS.sessionReplaced.body}</p>
+      </Modal>
+
       {/* "Time is up" on a coding question: send the notepad now, or take a little longer. Not dismissable, so the
           choice is made by the candidate or, failing that, by the countdown. */}
       <Modal

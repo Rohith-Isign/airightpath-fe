@@ -130,6 +130,10 @@ export function useVoiceInterview() {
   const [codeOutput, setCodeOutput] = useState("");
   /** The code last sent from the notepad, put back when the interviewer asks for it to be fixed. */
   const lastSubmittedCodeRef = useRef("");
+  /** This window's id for the interview; see VoiceStartResponse.sessionId. */
+  const sessionIdRef = useRef<string | null>(null);
+  /** Another window opened this interview, so this one has been closed. */
+  const [sessionReplaced, setSessionReplaced] = useState(false);
 
   // Audio hooks
   // Takes the id only; the email was being passed and silently discarded.
@@ -186,7 +190,11 @@ export function useVoiceInterview() {
         console.warn(`Ignoring "${action}" — the interview has not started yet.`);
         return;
       }
-      interviewWsService.send(`/app/interview/${id}/${action}`, body);
+      // Every message says which window sent it, so the server can refuse one from a window that another has
+      // replaced.
+      interviewWsService.send(`/app/interview/${id}/${action}`, sessionIdRef.current
+        ? { ...body, sessionId: sessionIdRef.current }
+        : body);
     },
     [],
   );
@@ -349,6 +357,24 @@ export function useVoiceInterview() {
       //     }
       //   },
       // );
+
+      // The interview was opened in another window. This one stops at once: the mic, the voice and any answer
+      // in flight, and the page shows why. The newer window carries on with the same interview.
+      interviewWsService.subscribe(
+        `/topic/interview/${id}/session-replaced`,
+        (msg: { sessionId?: string }) => {
+          if (!msg.sessionId || !sessionIdRef.current || msg.sessionId === sessionIdRef.current) return;
+          sessionIdRef.current = null;
+          aiService.setVoiceSessionId(null);
+          if (processingTimeoutRef.current) {
+            clearTimeout(processingTimeoutRef.current);
+            processingTimeoutRef.current = null;
+          }
+          void audioStreaming.stopRecording();
+          audioPlayback.stopPlayback();
+          setSessionReplaced(true);
+        },
+      );
 
       // In useVoiceInterview.ts - response-complete subscription
       interviewWsService.subscribe(
@@ -523,6 +549,8 @@ export function useVoiceInterview() {
         const { data: response } = await aiService.startVoiceInterview(request);
         setScheduleId(response.scheduleId);
         scheduleIdRef.current = response.scheduleId;
+        sessionIdRef.current = response.sessionId ?? null;
+        aiService.setVoiceSessionId(response.sessionId ?? null);
         setInterviewerName(response.interviewerName);
 
         // Detect and strip question type tags from first question
@@ -1074,6 +1102,7 @@ export function useVoiceInterview() {
   }, []);
 
   return {
+    sessionReplaced,
     // State
     state,
     endReason,

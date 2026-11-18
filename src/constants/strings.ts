@@ -457,6 +457,12 @@ export const STRINGS = {
   },
 
   /** The "Are you still there?" prompt. */
+  sessionReplaced: {
+    title: 'Interview opened in another window',
+    body:
+      'This interview was opened in another browser or tab, so it has been closed here. It continues in the other window, from where you left off. This has been noted on your interview record.',
+    action: 'Go to my interviews',
+  },
   codingTimeUp: {
     title: 'Time is up for this question',
     body: (seconds: number) =>
