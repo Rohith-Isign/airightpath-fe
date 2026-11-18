@@ -219,6 +219,21 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
                 : 'This round is running on the platform defaults.'}
             </p>
 
+            {/* Paused on the server for analysis: the interviewer decides how many questions to ask and the level
+                progression decides depth. The saved values stay as they are and return when the pause is lifted. */}
+            {template?.paused && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                <p className="font-semibold">Question limits and difficulty are paused for this round</p>
+                <p className="mt-1">
+                  The interviewer decides how many questions to ask, covering every skill as far up the levels as the
+                  candidate can go, and the Basic → Expert progression sets the depth. Interviews stop at{' '}
+                  {template.safetyCap ?? 60} turns as a safety limit. The values below are kept and come back into
+                  force when the pause is lifted.
+                </p>
+              </div>
+            )}
+
+            <fieldset disabled={!!template?.paused} className={`space-y-6 ${template?.paused ? 'opacity-60' : ''}`}>
             {/* ── Question budget ─────────────────────────────────── */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
@@ -269,6 +284,7 @@ export function InterviewRoundSettingsPanel({ jobPrefix }: Readonly<{ jobPrefix:
                 </span>
               </label>
             </div>
+            </fieldset>
 
             {/* ── Scoring categories ──────────────────────────────── */}
             <div className="space-y-3 border-t border-[var(--border)] pt-5">

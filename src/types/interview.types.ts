@@ -126,6 +126,13 @@ export interface EffectiveInterviewTemplate {
   adaptiveDifficulty: boolean;
   /** False when none of this was set by the job and it is all platform defaults. */
   configured: boolean;
+  /**
+   * True while the question limits and difficulty are switched off for this round (a server setting, for analysis).
+   * The values above are still the saved ones; they come back into force when the pause is lifted.
+   */
+  paused?: boolean;
+  /** While paused, the turn an interview is stopped at regardless. */
+  safetyCap?: number;
 }
 
 export interface InterviewTemplateRequest {
