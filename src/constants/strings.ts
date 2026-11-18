@@ -490,7 +490,7 @@ export const STRINGS = {
     title: 'Technical assessment',
     overall: 'Overall score',
     overallL2: 'Overall L2 score',
-    overallL2Hint: 'Weighted score over every scoring area. An area no question reached adds nothing, so a candidate tested on part of the role scores lower here.',
+    overallL2Hint: 'Score against everything the role needed: every concept a complete interview should have tested. A concept never asked earns nothing, so a candidate who covered half the job scores about half, however well they answered.',
     technicalScore: 'Technical score',
     technicalScoreHint: 'How well the candidate did on the areas that were actually tested. Equal to the overall score when every area was tested.',
     belowBands: 'Below Good',

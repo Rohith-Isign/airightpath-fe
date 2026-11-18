@@ -414,6 +414,12 @@ export interface VoiceEvaluationResult {
   assessedScore?: number | null;
   /** How much the score rests on. INSUFFICIENT means too little was asked or answered to give a verdict. */
   evidenceLevel?: 'SUFFICIENT' | 'PARTIAL' | 'INSUFFICIENT';
+  /** Everything a complete interview for this role should have tested, each with how the candidate did on it. */
+  expectedConcepts?: { concept: string; area: string; status: 'CORRECT' | 'PARTIAL' | 'INCORRECT' | 'NOT_ASKED'; questionNumbers?: number[] | null }[];
+  /** The area each interviewer question was about (FRONTEND, BACKEND, DATABASE, COMMUNICATION and so on). */
+  questionAreas?: { questionNumber: number; area: string }[];
+  /** Score against that full list, 0-100: 1 per concept answered well, a half partly, nothing wrong or not asked. */
+  scopeScore?: number | null;
 }
 
 export interface VoiceCategoryScore {

@@ -35,6 +35,7 @@ import { AreaQuestions } from '@/components/admin/result/AreaQuestions';
 import { questionRows } from '@/utils/interview-questions.utils';
 import { ScoreBreakdown } from '@/components/admin/result/ScoreBreakdown';
 import { TechnicalDomainReport } from '@/components/admin/result/TechnicalDomainReport';
+import { AreaBreakdown } from '@/components/admin/result/AreaBreakdown';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
 import { CodeBlock } from '@/components/interview/CodeBlock';
@@ -1088,6 +1089,9 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                 <PerformanceRating score={resolved.overallScore} reason={resolved.summary} size="md" showMeaning />
               </div>
               <TechnicalDomainReport evaluation={resolved} rows={questions} />
+              <div className="border-t border-[var(--border)] pt-4">
+                <AreaBreakdown evaluation={resolved} rows={questions} />
+              </div>
               <div className="grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2">
                 <BulletList title={STRINGS.candidateResult.strengths} items={resolved.strengths} tone="success" />
                 <BulletList
@@ -1118,6 +1122,9 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                   size="md"
                   showMeaning
                 />
+              </div>
+              <div className="border-t border-[var(--border)] pt-4">
+                <AreaBreakdown evaluation={resolved} rows={questions} />
               </div>
               <div className="border-t border-[var(--border)] pt-4">
                 <h4 className="mb-3 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.howScoreReached}</h4>
