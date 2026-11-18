@@ -457,6 +457,16 @@ export const STRINGS = {
   },
 
   /** The "Are you still there?" prompt. */
+  answerReview: {
+    title: 'Check your answer',
+    sendingIn: (seconds: number) => `Sending in ${seconds}s`,
+    editingFor: (seconds: number) => `Sends in ${seconds}s`,
+    hint: 'This is what we heard. If a word is wrong, choose Edit to correct it.',
+    editHint: 'Correct any words that were heard wrongly. This is for fixing mistakes, not for writing a new answer; edits are recorded.',
+    edit: 'Edit',
+    sendNow: 'Send now',
+    send: 'Send',
+  },
   sessionReplaced: {
     title: 'Interview opened in another window',
     body:

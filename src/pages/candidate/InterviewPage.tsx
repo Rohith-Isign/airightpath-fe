@@ -1845,6 +1845,61 @@ export function InterviewPage() {
                   </div>
                 )}
 
+                {/* The answer as heard, for a moment before it is sent: long enough to spot a wrong word, short
+                    enough not to stretch the interview. Editing gives longer, and still sends on its own. */}
+                {voiceInterview.state === 'reviewing' && voiceInterview.review && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-white">{STRINGS.answerReview.title}</span>
+                      <span className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 font-mono text-sm font-semibold text-white">
+                        <Timer size={14} />
+                        {voiceInterview.review.editing
+                          ? STRINGS.answerReview.editingFor(voiceInterview.review.secondsLeft)
+                          : STRINGS.answerReview.sendingIn(voiceInterview.review.secondsLeft)}
+                      </span>
+                    </div>
+                    {voiceInterview.review.editing ? (
+                      <textarea
+                        autoFocus
+                        value={voiceInterview.review.text}
+                        onChange={(e) => voiceInterview.setReviewText(e.target.value)}
+                        // Corrections are typed, not pasted in from somewhere else.
+                        onPaste={(e) => e.preventDefault()}
+                        onDrop={(e) => e.preventDefault()}
+                        rows={4}
+                        aria-label={STRINGS.answerReview.title}
+                        className="block w-full resize-y rounded-xl border border-white/20 bg-white/10 p-3 text-base leading-relaxed text-white outline-none focus:border-white/50"
+                      />
+                    ) : (
+                      <p className="max-h-32 overflow-y-auto rounded-xl bg-white/10 p-3 text-sm leading-relaxed text-white">
+                        {voiceInterview.review.text}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-300">
+                      {voiceInterview.review.editing ? STRINGS.answerReview.editHint : STRINGS.answerReview.hint}
+                    </p>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {!voiceInterview.review.editing && (
+                        <button
+                          type="button"
+                          onClick={voiceInterview.editReview}
+                          className="rounded-xl border border-white/25 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                        >
+                          {STRINGS.answerReview.edit}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={voiceInterview.sendReviewNow}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
+                      >
+                        <Send size={14} />
+                        {voiceInterview.review.editing ? STRINGS.answerReview.send : STRINGS.answerReview.sendNow}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {voiceInterview.state === 'processing' && (
                   <div className="flex items-center justify-center gap-2 py-3 text-slate-300">
                     <Loader2 className="h-5 w-5 animate-spin" />

@@ -112,4 +112,8 @@ export const APP_CONFIG = {
   /** Extra time one "I need more time" adds to a coding question, and how many times it may be asked for. */
   INTERVIEW_CODING_EXTENSION_SECONDS: 120,
   INTERVIEW_CODING_MAX_EXTENSIONS: 2,
+  /** After an answer is recorded: how long its text is shown before it is sent, to catch a mis-transcription. */
+  INTERVIEW_REVIEW_SECONDS: 5,
+  /** Once the candidate chooses to edit the text: how long they have before it is sent as it stands. */
+  INTERVIEW_REVIEW_EDIT_SECONDS: 60,
 } as const;

@@ -135,6 +135,20 @@ export function useVoiceInterview() {
   /** Another window opened this interview, so this one has been closed. */
   const [sessionReplaced, setSessionReplaced] = useState(false);
 
+  /**
+   * The answer's text, shown briefly before it is sent so a speech-to-text mistake can be put right. Sent on its
+   * own after a few seconds, or after a longer limit once the candidate chooses to edit, so it never sits idle.
+   */
+  const [review, setReview] = useState<{
+    original: string;
+    text: string;
+    editing: boolean;
+    secondsLeft: number;
+  } | null>(null);
+  const reviewRef = useRef(review);
+  reviewRef.current = review;
+  const reviewResolveRef = useRef<((text: string | null) => void) | null>(null);
+
   // Audio hooks
   // Takes the id only; the email was being passed and silently discarded.
   // Chunks of an answer that have been dealt with (text came back, or the send failed). Submit waits for them.
@@ -372,6 +386,10 @@ export function useVoiceInterview() {
           }
           void audioStreaming.stopRecording();
           audioPlayback.stopPlayback();
+          // An answer waiting to be sent from this window is dropped: the interview carries on elsewhere.
+          reviewResolveRef.current?.(null);
+          reviewResolveRef.current = null;
+          setReview(null);
           setSessionReplaced(true);
         },
       );
@@ -753,6 +771,67 @@ export function useVoiceInterview() {
   const submittingRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  /** Shows the answer's text for review, and resolves with the text to send, or null if it was abandoned. */
+  const reviewAnswer = useCallback((text: string) => {
+    return new Promise<string | null>((resolve) => {
+      reviewResolveRef.current = resolve;
+      setReview({ original: text, text, editing: false, secondsLeft: APP_CONFIG.INTERVIEW_REVIEW_SECONDS });
+      setState("reviewing");
+    });
+  }, []);
+
+  /** Ends the review and sends. An emptied text falls back to what was heard: an answer is never sent blank. */
+  const finishReview = useCallback(() => {
+    const current = reviewRef.current;
+    const resolve = reviewResolveRef.current;
+    if (!current || !resolve) return;
+    reviewResolveRef.current = null;
+    setReview(null);
+    resolve(current.text.trim() ? current.text : current.original);
+  }, []);
+
+  /** Opens the text for editing: the short countdown stops and the editing limit starts. */
+  const editReview = useCallback(() => {
+    setReview((prev) =>
+      prev && !prev.editing
+        ? { ...prev, editing: true, secondsLeft: APP_CONFIG.INTERVIEW_REVIEW_EDIT_SECONDS }
+        : prev,
+    );
+  }, []);
+
+  /**
+   * Changes the text. Capped a little above the length of what was heard: room to fix words, not to type a new
+   * answer in place of the spoken one.
+   */
+  const setReviewText = useCallback((text: string) => {
+    setReview((prev) => {
+      if (!prev) return prev;
+      const max = Math.max(Math.ceil(prev.original.length * 1.25), prev.original.length + 40);
+      return { ...prev, text: text.slice(0, max) };
+    });
+  }, []);
+
+  // The countdown, for both the short look and the editing limit. It always ends in a send.
+  const reviewActive = review !== null;
+  useEffect(() => {
+    if (!reviewActive) return;
+    const id = window.setInterval(() => {
+      setReview((prev) => (prev ? { ...prev, secondsLeft: Math.max(0, prev.secondsLeft - 1) } : prev));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [reviewActive]);
+  useEffect(() => {
+    if (review && review.secondsLeft === 0) finishReview();
+  }, [review, finishReview]);
+
+  // Leaving the page with an answer under review abandons it rather than leaving a promise waiting.
+  useEffect(() => {
+    return () => {
+      reviewResolveRef.current?.(null);
+      reviewResolveRef.current = null;
+    };
+  }, []);
+
   // Submit answer — stops recording, waits for final transcription, then sends
   const performSubmit = useCallback(
     async (manualTranscript?: string) => {
@@ -776,7 +855,7 @@ export function useVoiceInterview() {
         });
       }
 
-      const transcript = manualTranscript || transcriptRef.current;
+      let transcript = manualTranscript || transcriptRef.current;
 
       // Code counts as an answer on its own. A coding question can be answered
       // entirely in the editor, and requiring speech as well left a candidate
@@ -815,6 +894,24 @@ export function useVoiceInterview() {
         setError("Your answer was not recorded. Please try again.");
         setState("active");
         return;
+      }
+
+      // Shown before it is sent, so a mis-heard word can be corrected. Only a spoken answer: a code-only one has
+      // nothing transcribed to check.
+      if (transcript.trim() && !manualTranscript) {
+        const reviewed = await reviewAnswer(transcript);
+        if (reviewed === null) return; // this window was replaced, or the page closed, while it was showing
+        if (reviewed.trim() !== transcript.trim()) {
+          // A correction is fine; typing a different answer is not. Recorded so a reviewer can compare them.
+          sendToInterview("proctoring-event", {
+            type: "transcript_edited",
+            details: `Answer text edited before sending. Heard: "${transcript.trim().slice(0, 400)}" Sent: "${reviewed
+              .trim()
+              .slice(0, 400)}"`,
+          });
+        }
+        transcript = reviewed;
+        setState("processing");
       }
 
       // The answer is only sent if the connection is up. A send on a dead socket is dropped without a word, the
@@ -894,7 +991,7 @@ export function useVoiceInterview() {
         void recoverLostReply();
       }, APP_CONFIG.INTERVIEW_PROCESSING_TIMEOUT_MS);
     },
-    [audioStreaming, codeContent, codeLanguage, codeOutput, isCodingQuestion, sendToInterview, waitForConnection, recoverLostReply],
+    [audioStreaming, codeContent, codeLanguage, codeOutput, isCodingQuestion, sendToInterview, waitForConnection, recoverLostReply, reviewAnswer],
   );
 
   const submitAnswer = useCallback(
@@ -1102,6 +1199,10 @@ export function useVoiceInterview() {
   }, []);
 
   return {
+    review,
+    editReview,
+    setReviewText,
+    sendReviewNow: finishReview,
     sessionReplaced,
     // State
     state,

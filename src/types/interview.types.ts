@@ -289,6 +289,7 @@ export type VoiceInterviewState =
   | "starting"
   | "active"
   | "answering"
+  | "reviewing"
   | "processing"
   | "completed"
   | "error";
