@@ -1,6 +1,6 @@
 import { STRINGS } from '@/constants/strings';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -789,6 +789,25 @@ function AttemptSection({
   const [open, setOpen] = useState(defaultOpen);
   const [exporting, setExporting] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
+  const formatMenuRef = useRef<HTMLDivElement>(null);
+
+  // The format menu closes on a click anywhere else or on Escape, like any other menu; it used to stay open until a
+  // format was picked.
+  useEffect(() => {
+    if (!formatOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!formatMenuRef.current?.contains(event.target as Node)) setFormatOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFormatOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [formatOpen]);
   const [reEvaluating, setReEvaluating] = useState(false);
   const [confirmReEvaluate, setConfirmReEvaluate] = useState(false);
   const { schedule, attemptNumber, attemptCount } = attempt;
@@ -864,7 +883,9 @@ function AttemptSection({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface1)]">
+    // No overflow-hidden: it clipped the Download menu, which opens below the header row and outside the box when
+    // the section is folded, leaving only a sliver of it on screen.
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface1)]">
       {confirmReEvaluate && (
         <ConfirmDialog
           isOpen
@@ -938,10 +959,12 @@ function AttemptSection({
               {reEvaluating ? STRINGS.scoreBreakdown.reEvaluating : STRINGS.scoreBreakdown.reEvaluate}
             </Button>
           )}
-          <div className="relative">
+          <div className="relative" ref={formatMenuRef}>
             <Button
               variant="ghost"
               size="sm"
+              aria-haspopup="menu"
+              aria-expanded={formatOpen}
               leftIcon={
                 exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />
               }
