@@ -25,6 +25,20 @@ export interface QuestionRow {
  * for an area points at the same question here. Follow-ups and rephrasings count as questions of their own, as they
  * do for the grader.</p>
  */
+/**
+ * The question number each candidate turn answers, by entry id: the count of interviewer turns before it, the same
+ * numbering the grader used. Lets a per-question note be shown under the answer it is about.
+ */
+export function answerQuestionNumbers(transcript: VoiceConversationEntryDTO[]): Map<number, number> {
+  const numbers = new Map<number, number>();
+  let asked = 0;
+  transcript.forEach((entry) => {
+    if (entry.role === 'INTERVIEWER') asked += 1;
+    else if (entry.role === 'CANDIDATE' && asked > 0) numbers.set(entry.id, asked);
+  });
+  return numbers;
+}
+
 export function questionRows(transcript: VoiceConversationEntryDTO[]): QuestionRow[] {
   const rows: QuestionRow[] = [];
   transcript.forEach((entry) => {

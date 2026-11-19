@@ -417,10 +417,23 @@ export interface VoiceEvaluationResult {
   evidenceLevel?: 'SUFFICIENT' | 'PARTIAL' | 'INSUFFICIENT';
   /** Everything a complete interview for this role should have tested, each with how the candidate did on it. */
   expectedConcepts?: { concept: string; area: string; status: 'CORRECT' | 'PARTIAL' | 'INCORRECT' | 'NOT_ASKED'; questionNumbers?: number[] | null }[];
+  /** For each answered question: what the answer got right, and what cost it the missing marks. */
+  answerNotes?: { questionNumber: number; gotRight: string; missed: string }[] | null;
   /** The area each interviewer question was about (FRONTEND, BACKEND, DATABASE, COMMUNICATION and so on). */
   questionAreas?: { questionNumber: number; area: string }[];
   /** Score against that full list, 0-100: 1 per concept answered well, a half partly, nothing wrong or not asked. */
   scopeScore?: number | null;
+  /** One row per skill the job requires (technical round): score, level reached and the category it counts towards. */
+  skillScores?: {
+    skill: string;
+    category?: string | null;
+    mapped?: boolean | null;
+    score: number;
+    highestLevel?: TechnicalLevel | null;
+    questionNumbers?: number[] | null;
+    feedback?: string | null;
+    assessed?: boolean;
+  }[] | null;
   /** The verdict a senior interviewer would give the hiring manager, in a few sentences. */
   verdict?: string | null;
   /** The level the answers showed, with the level the job asks for. */
@@ -443,6 +456,8 @@ export interface VoiceCategoryScore {
   questionNumbers?: number[] | null;
   /** False when no question tested this area: it is shown as not assessed and adds nothing to the overall. */
   assessed?: boolean;
+  /** Set when this row is a skill rather than a scoring category: the category it counts towards. */
+  group?: string;
   /**
    * Highest level of this area the candidate demonstrated (L2 only). Absent on a behavioural round and on a result
    * graded before levels were recorded: show nothing then, not NONE.

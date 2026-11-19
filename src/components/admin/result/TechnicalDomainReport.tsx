@@ -207,7 +207,7 @@ function DomainRow({
       )}
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[var(--textSecondary)]">
         <span>
-          {T.weight} {weightLabel(category.weight)}
+          {category.group ?? `${T.weight} ${weightLabel(category.weight)}`}
         </span>
         {category.mapped != null && (
           <Badge variant={category.mapped ? 'primary' : 'secondary'} size="sm">
@@ -246,7 +246,7 @@ function DomainDetail({
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="text-lg font-semibold text-[var(--text)]">{category.category}</h4>
           <Badge variant="default" size="sm">
-            {T.weight} {weightLabel(category.weight)}
+            {category.group ?? `${T.weight} ${weightLabel(category.weight)}`}
           </Badge>
           {category.mapped != null && (
             <span title={category.mapped ? T.mappedHint : T.unmappedHint}>
@@ -377,7 +377,25 @@ export function TechnicalDomainReport({
   evaluation,
   rows,
 }: Readonly<{ evaluation: VoiceEvaluationResult; rows: QuestionRow[] }>) {
-  const categories = evaluation.categoryScores;
+  // Skill by skill (Java, Spring Boot, SQL…) when the grader scored skills, each showing the category it counts
+  // towards; otherwise the scoring categories, as results graded before skills were scored have only those.
+  const categories: VoiceCategoryScore[] = useMemo(
+    () =>
+      evaluation.skillScores?.length
+        ? evaluation.skillScores.map((s) => ({
+            category: s.skill,
+            score: s.score,
+            weight: Number.NaN,
+            feedback: s.feedback ?? '',
+            questionNumbers: s.questionNumbers,
+            assessed: s.assessed,
+            highestLevel: s.highestLevel,
+            mapped: s.mapped,
+            group: s.category ?? undefined,
+          }))
+        : evaluation.categoryScores,
+    [evaluation.skillScores, evaluation.categoryScores],
+  );
   const [tab, setTab] = useState<Tab>('overall');
 
   // Assessed first, in the order the grader gave; areas never reached sink to the bottom of the list.

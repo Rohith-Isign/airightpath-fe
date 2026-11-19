@@ -32,7 +32,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { RadialScore, SummaryStat, SkillBar } from '@/components/admin/result/ResultPrimitives';
 import { PerformanceRating } from '@/components/admin/result/PerformanceRating';
 import { AreaQuestions } from '@/components/admin/result/AreaQuestions';
-import { questionRows } from '@/utils/interview-questions.utils';
+import { answerQuestionNumbers, questionRows } from '@/utils/interview-questions.utils';
 import { ScoreBreakdown } from '@/components/admin/result/ScoreBreakdown';
 import { TechnicalDomainReport } from '@/components/admin/result/TechnicalDomainReport';
 import { AreaBreakdown } from '@/components/admin/result/AreaBreakdown';
@@ -1058,6 +1058,12 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
   const { schedule, evaluation, transcript, proctoring } = round;
   const resolved = evaluation;
   const questions = useMemo(() => questionRows(transcript), [transcript]);
+  // Which question each answer belongs to, so the grader's note on it can sit under the answer.
+  const answerNumbers = useMemo(() => answerQuestionNumbers(transcript), [transcript]);
+  const notesByQuestion = useMemo(
+    () => new Map((evaluation?.answerNotes ?? []).map((n) => [n.questionNumber, n])),
+    [evaluation?.answerNotes],
+  );
   const isTechnicalRound = roundKeyOf(schedule) === 'L2_TECHNICAL';
 
   return (
@@ -1242,7 +1248,13 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
           ) : (
             <div className="space-y-3">
               {transcript.map((entry) => (
-                <TranscriptTurn key={entry.id} entry={entry} />
+                <TranscriptTurn
+                  key={entry.id}
+                  entry={entry}
+                  note={
+                    entry.role === 'CANDIDATE' ? notesByQuestion.get(answerNumbers.get(entry.id) ?? -1) : undefined
+                  }
+                />
               ))}
             </div>
           )}
@@ -1444,7 +1456,10 @@ const TURN_KIND_LABELS: Partial<Record<NonNullable<VoiceConversationEntryDTO['tu
     REPHRASE: STRINGS.candidateResult.turn.rephrased,
   };
 
-function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }>) {
+function TranscriptTurn({
+  entry,
+  note,
+}: Readonly<{ entry: VoiceConversationEntryDTO; note?: { gotRight: string; missed: string } }>) {
   const isCandidate = entry.role === 'CANDIDATE';
   const probeLabel = entry.turnKind ? TURN_KIND_LABELS[entry.turnKind] : undefined;
   // The server keeps a leading [CODING] on a coding question because the candidate's screen reads it to open the
@@ -1490,6 +1505,7 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
             {/* The evaluation category the interviewer filed this under: a domain, not the kind of question. */}
             {entry.topic && (
               <span className="text-[10px] uppercase tracking-wider text-[var(--textTertiary)]">
+                {entry.skill ? `Skill: ${entry.skill} · ` : ''}
                 {STRINGS.technicalReport.domainLabel}: {entry.topic}
               </span>
             )}
@@ -1523,6 +1539,28 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
         )}
         {/* The model was shown this when scoring, so a reviewer without it is
             reading a different transcript than the one that produced the score. */}
+        {/* Why the answer scored what it did: what was right, and what the missing marks were for. */}
+        {isCandidate && note && (note.gotRight || note.missed) && (
+          <div className="mt-2 space-y-1 rounded-lg bg-white/90 p-2.5 text-xs text-[var(--text)]">
+            {entry.answerScore != null && (
+              <p className="font-semibold">Why {entry.answerScore}/10</p>
+            )}
+            {note.gotRight && (
+              <p>
+                <span className="font-semibold text-[var(--success)]">✓ Right: </span>
+                {note.gotRight}
+              </p>
+            )}
+            {note.missed && (
+              <p>
+                <span className="font-semibold text-[var(--error)]">
+                  ✗ Missed{entry.answerScore != null && entry.answerScore < 10 ? ` (−${10 - entry.answerScore})` : ''}:{' '}
+                </span>
+                {note.missed}
+              </p>
+            )}
+          </div>
+        )}
         {isCandidate && entry.codeOutput?.trim() && (
           <div className="mt-2 rounded-lg bg-black/20 p-2">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">

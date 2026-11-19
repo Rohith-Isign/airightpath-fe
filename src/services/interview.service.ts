@@ -54,6 +54,8 @@ export interface VoiceConversationEntryDTO {
   codeMismatch?: boolean | null;
   /** The evaluation category an interviewer turn was asking about. */
   topic?: string;
+  /** The specific skill an interviewer turn tested, such as "Spring Boot" (technical round, newer interviews). */
+  skill?: string | null;
   /** How deep an interviewer question goes (technical round only). Absent on older interviews. */
   level?: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT' | null;
   /** Whether an interviewer turn opened new ground, pressed, or re-asked. */

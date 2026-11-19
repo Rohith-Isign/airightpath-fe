@@ -261,9 +261,32 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
     );
   }
 
+  // ── Scores by skill (technical round) ───────────────────────────
+  const skills = evaluation?.skillScores ?? [];
+  if (skills.length) {
+    heading('Scores by skill');
+    table(
+      ['Skill', 'Category', 'Score', 'Level reached', 'On resume', 'Questions'],
+      skills.map((s) => [
+        s.skill,
+        s.category ?? '—',
+        s.assessed === false ? 'Not assessed' : `${s.score}/10`,
+        s.highestLevel ? LEVEL_NAMES[s.highestLevel] ?? s.highestLevel : '—',
+        s.mapped == null ? '—' : s.mapped ? 'Yes' : 'No',
+        s.questionNumbers?.length ? `Q${s.questionNumbers.join(', Q')}` : '—',
+      ]),
+      [1.8, 1.6, 1, 1.2, 0.9, 1.4],
+    );
+    skills.forEach((s) => {
+      if (!s.feedback) return;
+      write(s.skill, { size: 9.5, style: 'bold', gap: 1 });
+      write(s.feedback, { size: 9, indent: 10, gap: 4 });
+    });
+  }
+
   // ── Scores by area ───────────────────────────────────────────────
   if (categories.length) {
-    heading(isTechnical ? 'Scores by skill' : 'Scores by area');
+    heading(skills.length ? 'Scores by category' : isTechnical ? 'Scores by skill' : 'Scores by area');
     const hasLevels = categories.some((c) => c.highestLevel != null);
     const hasMapped = categories.some((c) => c.mapped != null);
     const headers = ['Area', 'Weight', 'Score'];
@@ -361,7 +384,10 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
   // ── What was actually said ───────────────────────────────────────
   if (transcript.length) {
     heading(`Transcript (${transcript.length} turns)`);
+    const notes = new Map((evaluation?.answerNotes ?? []).map((n) => [n.questionNumber, n]));
+    let asked = 0;
     transcript.forEach((entry) => {
+      if (entry.role === 'INTERVIEWER') asked += 1;
       const isCandidate = entry.role === 'CANDIDATE';
       const who = isCandidate ? 'Candidate' : 'Interviewer';
       const raw = entry.content ?? '';
@@ -376,6 +402,7 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
       const tags = [
         entry.level ? LEVEL_NAMES[entry.level] ?? entry.level : null,
         isCodingQuestion ? 'coding' : null,
+        entry.skill ? `skill: ${entry.skill}` : null,
         entry.topic ? `domain: ${entry.topic}` : null,
         entry.turnKind && entry.turnKind !== 'NEW_QUESTION'
           ? entry.turnKind.replace('_', ' ').toLowerCase()
@@ -392,6 +419,15 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
       if (isCandidate && entry.codeContent) {
         muted('Code submitted:', 8);
         write(entry.codeContent, { size: 8, indent: 10, gap: 2 });
+      }
+      // Why it scored what it did: what was right, and what the missing marks were for.
+      const note = isCandidate ? notes.get(asked) : undefined;
+      if (note && (note.gotRight || note.missed)) {
+        if (note.gotRight) write(`Right: ${note.gotRight}`, { size: 8.5, indent: 10, gap: 1 });
+        if (note.missed) {
+          const lost = entry.answerScore != null && entry.answerScore < 10 ? ` (-${10 - entry.answerScore})` : '';
+          write(`Missed${lost}: ${note.missed}`, { size: 8.5, indent: 10, gap: 2 });
+        }
       }
       // An attempt to work the interviewer belongs in the record a hiring
       // decision is made from, not only on a screen somebody might scroll past.
