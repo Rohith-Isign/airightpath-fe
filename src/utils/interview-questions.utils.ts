@@ -18,6 +18,8 @@ export interface QuestionRow {
   correct: boolean | null;
   /** The skill the question tested, such as "Python" (technical round, newer interviews). */
   skill: string | null;
+  /** What within the skill the question tested, such as "list comprehensions". */
+  competency: string | null;
   /** A coding question. */
   coding: boolean;
   /** A coding question re-asked or followed up: a correction attempt, not a new task. */
@@ -62,6 +64,7 @@ export function questionRows(transcript: VoiceConversationEntryDTO[]): QuestionR
         level: entry.level ?? null,
         correct: null,
         skill: entry.skill ?? null,
+        competency: entry.competency ?? null,
         coding: /^\s*\[CODING\]/i.test(entry.content ?? ''),
         recovery:
           /^\s*\[CODING\]/i.test(entry.content ?? '') && !!entry.turnKind && entry.turnKind !== 'NEW_QUESTION',

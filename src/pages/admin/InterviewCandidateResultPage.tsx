@@ -1628,6 +1628,7 @@ function TranscriptTurn({
             {entry.topic && (
               <span className="text-[10px] uppercase tracking-wider text-[var(--textTertiary)]">
                 {entry.skill ? `Skill: ${entry.skill} · ` : ''}
+                {entry.competency ? `Tests: ${entry.competency} · ` : ''}
                 {STRINGS.technicalReport.domainLabel}: {entry.topic}
               </span>
             )}

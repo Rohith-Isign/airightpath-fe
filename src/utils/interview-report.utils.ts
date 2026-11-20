@@ -416,6 +416,7 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
         entry.level ? LEVEL_NAMES[entry.level] ?? entry.level : null,
         isCodingQuestion ? 'coding' : null,
         entry.skill ? `skill: ${entry.skill}` : null,
+        entry.competency ? `tests: ${entry.competency}` : null,
         entry.topic ? `domain: ${entry.topic}` : null,
         entry.turnKind && entry.turnKind !== 'NEW_QUESTION'
           ? entry.turnKind.replace('_', ' ').toLowerCase()

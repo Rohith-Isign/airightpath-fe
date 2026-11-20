@@ -54,7 +54,7 @@ export function SkillLevelMatrix({
     <div className="space-y-2">
       <h4 className="text-sm font-semibold text-[var(--text)]">Skill × level coverage</h4>
       <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-        <table className="w-full min-w-[40rem] text-left text-sm">
+        <table className="w-full min-w-[52rem] text-left text-sm">
           <thead className="bg-[var(--surface1)] text-xs uppercase tracking-wide text-[var(--textSecondary)]">
             <tr>
               <th className="px-3 py-2 font-semibold">Skill</th>
@@ -64,6 +64,7 @@ export function SkillLevelMatrix({
                 </th>
               ))}
               <th className="px-3 py-2 font-semibold">Coding tasks</th>
+              <th className="px-3 py-2 font-semibold">Competencies tested</th>
             </tr>
           </thead>
           <tbody>
@@ -71,6 +72,15 @@ export function SkillLevelMatrix({
               const mine = rows.filter((r) => r.skill && key(r.skill) === key(skill));
               const codingTasks = mine.filter((r) => r.coding && !r.recovery);
               const recoveries = mine.filter((r) => r.coding && r.recovery).length;
+              // Each competency once, in the order it was first tested.
+              const competencies = [
+                ...new Map(
+                  mine
+                    .map((r) => r.competency)
+                    .filter((c): c is string => !!c)
+                    .map((c) => [c.toLowerCase(), c] as const),
+                ).values(),
+              ];
               return (
                 <tr key={skill} className="border-t border-[var(--border)] align-top">
                   <td className="px-3 py-2 font-medium text-[var(--text)]">{skill}</td>
@@ -104,6 +114,9 @@ export function SkillLevelMatrix({
                         )}
                       </span>
                     )}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-[var(--textSecondary)]">
+                    {competencies.length ? competencies.join(', ') : '—'}
                   </td>
                 </tr>
               );

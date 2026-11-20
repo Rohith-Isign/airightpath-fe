@@ -61,6 +61,8 @@ export interface VoiceConversationEntryDTO {
   topic?: string;
   /** The specific skill an interviewer turn tested, such as "Spring Boot" (technical round, newer interviews). */
   skill?: string | null;
+  /** What within the skill an interviewer turn tested, such as "list comprehensions". */
+  competency?: string | null;
   /** How deep an interviewer question goes (technical round only). Absent on older interviews. */
   level?: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT' | null;
   /** Whether an interviewer turn opened new ground, pressed, or re-asked. */
