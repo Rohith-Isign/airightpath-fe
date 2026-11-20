@@ -37,6 +37,7 @@ import { ScoreBreakdown } from '@/components/admin/result/ScoreBreakdown';
 import { TechnicalDomainReport } from '@/components/admin/result/TechnicalDomainReport';
 import { AreaBreakdown } from '@/components/admin/result/AreaBreakdown';
 import { HiringVerdict } from '@/components/admin/result/HiringVerdict';
+import { SkillLevelMatrix } from '@/components/admin/result/SkillLevelMatrix';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
 import { CodeBlock } from '@/components/interview/CodeBlock';
@@ -1055,7 +1056,17 @@ function AttemptSection({
 }
 
 function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
-  const { schedule, evaluation, transcript, proctoring } = round;
+  const { schedule, evaluation, proctoring } = round;
+  // Answers a reviewer has re-scored on this screen, applied over what was loaded so the change shows at once.
+  const [reviewed, setReviewed] = useState<Map<number, VoiceConversationEntryDTO>>(new Map());
+  const transcript = useMemo(
+    () => round.transcript.map((entry) => reviewed.get(entry.id) ?? entry),
+    [round.transcript, reviewed],
+  );
+  const onReviewed = useCallback(
+    (entry: VoiceConversationEntryDTO) => setReviewed((prev) => new Map(prev).set(entry.id, entry)),
+    [],
+  );
   const resolved = evaluation;
   const questions = useMemo(() => questionRows(transcript), [transcript]);
   // Which question each answer belongs to, so the grader's note on it can sit under the answer.
@@ -1098,6 +1109,9 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                 <PerformanceRating score={resolved.overallScore} reason={resolved.summary} size="md" showMeaning />
               </div>
               <TechnicalDomainReport evaluation={resolved} rows={questions} />
+              <div className="border-t border-[var(--border)] pt-4">
+                <SkillLevelMatrix evaluation={resolved} rows={questions} />
+              </div>
               <div className="border-t border-[var(--border)] pt-4">
                 <AreaBreakdown evaluation={resolved} rows={questions} />
               </div>
@@ -1251,6 +1265,8 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                 <TranscriptTurn
                   key={entry.id}
                   entry={entry}
+                  scheduleId={schedule.id}
+                  onReviewed={onReviewed}
                   note={
                     entry.role === 'CANDIDATE' ? notesByQuestion.get(answerNumbers.get(entry.id) ?? -1) : undefined
                   }
@@ -1450,6 +1466,102 @@ const LEVEL_VARIANT = {
   EXPERT: 'success',
 } as const;
 
+/**
+ * Lets a reviewer change one answer's score, with a reason, before the result is finalised. The AI's score stays on
+ * record; the next re-evaluation grades from the reviewer's.
+ */
+function AnswerReviewControl({
+  scheduleId,
+  entry,
+  onReviewed,
+}: Readonly<{ scheduleId: number; entry: VoiceConversationEntryDTO; onReviewed: (e: VoiceConversationEntryDTO) => void }>) {
+  const [open, setOpen] = useState(false);
+  const [score, setScore] = useState<string>(String(entry.reviewedScore ?? entry.answerScore ?? ''));
+  const [note, setNote] = useState(entry.reviewNote ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (clear = false) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const { data } = await interviewService.reviewAnswer(
+        scheduleId,
+        entry.id,
+        clear ? { score: null } : { score: Number(score), note },
+      );
+      onReviewed(data);
+      setOpen(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'The score could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1.5 text-[11px] font-semibold text-white/80 underline-offset-2 hover:underline"
+      >
+        {entry.reviewedScore != null ? 'Change reviewed score' : 'Adjust score'}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-2 rounded-lg bg-white p-2.5 text-xs text-[var(--text)]">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="font-semibold" htmlFor={`review-score-${entry.id}`}>
+          Score
+        </label>
+        <select
+          id={`review-score-${entry.id}`}
+          value={score}
+          onChange={(e) => setScore(e.target.value)}
+          className="rounded border border-[var(--border)] px-1.5 py-1"
+        >
+          {Array.from({ length: 11 }, (_, i) => (
+            <option key={i} value={i}>
+              {i}/10
+            </option>
+          ))}
+        </select>
+        {entry.answerScore != null && <span className="text-[var(--textSecondary)]">AI gave {entry.answerScore}/10</span>}
+      </div>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={2}
+        placeholder="Why the score is being changed (required)"
+        className="block w-full rounded border border-[var(--border)] p-1.5"
+      />
+      {error && <p className="text-[var(--error)]">{error}</p>}
+      <p className="text-[var(--textTertiary)]">The AI’s score is kept on record. Re-evaluate with AI afterwards to update the overall result.</p>
+      <div className="flex flex-wrap justify-end gap-2">
+        {entry.reviewedScore != null && (
+          <button type="button" disabled={saving} onClick={() => save(true)} className="px-2 py-1 font-semibold text-[var(--error)]">
+            Remove review
+          </button>
+        )}
+        <button type="button" disabled={saving} onClick={() => setOpen(false)} className="px-2 py-1 font-semibold">
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={saving || note.trim().length < 3 || score === ''}
+          onClick={() => save()}
+          className="rounded bg-[var(--primary)] px-3 py-1 font-semibold text-white disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const TURN_KIND_LABELS: Partial<Record<NonNullable<VoiceConversationEntryDTO['turnKind']>, string>> =
   {
     FOLLOW_UP: STRINGS.candidateResult.turn.followUp,
@@ -1459,7 +1571,14 @@ const TURN_KIND_LABELS: Partial<Record<NonNullable<VoiceConversationEntryDTO['tu
 function TranscriptTurn({
   entry,
   note,
-}: Readonly<{ entry: VoiceConversationEntryDTO; note?: { gotRight: string; missed: string } }>) {
+  scheduleId,
+  onReviewed,
+}: Readonly<{
+  entry: VoiceConversationEntryDTO;
+  note?: { gotRight: string; missed: string };
+  scheduleId: number;
+  onReviewed: (entry: VoiceConversationEntryDTO) => void;
+}>) {
   const isCandidate = entry.role === 'CANDIDATE';
   const probeLabel = entry.turnKind ? TURN_KIND_LABELS[entry.turnKind] : undefined;
   // The server keeps a leading [CODING] on a coding question because the candidate's screen reads it to open the
@@ -1539,6 +1658,20 @@ function TranscriptTurn({
         )}
         {/* The model was shown this when scoring, so a reviewer without it is
             reading a different transcript than the one that produced the score. */}
+        {/* A reviewer's correction, shown beside the AI's score, never in place of the record of it. */}
+        {isCandidate && entry.reviewedScore != null && (
+          <div className="mt-2 rounded-lg bg-black/25 px-2.5 py-1.5 text-xs text-white">
+            <span className="font-semibold">
+              Reviewer: {entry.reviewedScore}/10
+              {entry.answerScore != null ? ` (AI gave ${entry.answerScore}/10)` : ''}
+            </span>
+            {entry.reviewNote && <span> — {entry.reviewNote}</span>}
+            {entry.reviewedBy && <span className="block text-white/70">by {entry.reviewedBy}</span>}
+          </div>
+        )}
+        {isCandidate && entry.answerScore != null && (
+          <AnswerReviewControl scheduleId={scheduleId} entry={entry} onReviewed={onReviewed} />
+        )}
         {/* Why the answer scored what it did: what was right, and what the missing marks were for. */}
         {isCandidate && note && (note.gotRight || note.missed) && (
           <div className="mt-2 space-y-1 rounded-lg bg-white/90 p-2.5 text-xs text-[var(--text)]">

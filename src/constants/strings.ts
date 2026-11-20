@@ -736,7 +736,8 @@ export const STRINGS = {
     overallAssessment: 'Overall assessment',
     howScoreReached: 'How this score was reached',
     eachAreaWithReasoning: 'Each area, with the reasoning',
-    notScored: 'This round has not been scored yet. Scores appear once the interview completes.',
+    notScored:
+      'This round has no evaluation yet. If the interview has finished, use “Re-evaluate with AI” above to grade it now.',
     transcriptTitle: (count: number) => `Transcript (${count})`,
     noTranscript: 'No transcript recorded for this round.',
     recording: {

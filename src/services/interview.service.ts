@@ -50,6 +50,11 @@ export interface VoiceConversationEntryDTO {
   answerScore?: number;
   /** Whether that score met the pass mark when it was given (6/10 by default). Absent when not rated. */
   answerCorrect?: boolean | null;
+  /** A reviewer's score for the answer when they changed the AI's; the AI's answerScore is kept as it was. */
+  reviewedScore?: number | null;
+  reviewNote?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
   /** The submitted code solved a different problem than the one asked, so it was scored 0. */
   codeMismatch?: boolean | null;
   /** The evaluation category an interviewer turn was asking about. */
@@ -142,6 +147,11 @@ export const interviewService = {
   },
 
   /** Has the AI grade the interview again from its transcript and replaces the stored evaluation and score. */
+  /** A reviewer's score for one answer, with the reason; a null score clears it. The AI's score is kept. */
+  reviewAnswer(scheduleId: number, entryId: number, review: { score: number | null; note?: string }) {
+    return api.put<VoiceConversationEntryDTO>(`/api/interview/results/${scheduleId}/answers/${entryId}/review`, review);
+  },
+
   reEvaluate(id: number) {
     return api.post<InterviewSchedule>(ENDPOINTS.INTERVIEWS.RE_EVALUATE(id), undefined, {
       // Grading is a long model call.

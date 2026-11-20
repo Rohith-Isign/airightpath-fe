@@ -16,7 +16,16 @@ export interface QuestionRow {
   level: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT' | null;
   /** Whether the answer met the pass mark, as the server judged it; null when it was not rated. */
   correct: boolean | null;
+  /** The skill the question tested, such as "Python" (technical round, newer interviews). */
+  skill: string | null;
+  /** A coding question. */
+  coding: boolean;
+  /** A coding question re-asked or followed up: a correction attempt, not a new task. */
+  recovery: boolean;
 }
+
+/** The pass mark the server judges answers by (interview.answer.pass-score); used for a reviewer's changed score. */
+const PASS_SCORE = 6;
 
 /**
  * The interview as numbered questions, each with the answer given to it.
@@ -52,6 +61,10 @@ export function questionRows(transcript: VoiceConversationEntryDTO[]): QuestionR
         answered: false,
         level: entry.level ?? null,
         correct: null,
+        skill: entry.skill ?? null,
+        coding: /^\s*\[CODING\]/i.test(entry.content ?? ''),
+        recovery:
+          /^\s*\[CODING\]/i.test(entry.content ?? '') && !!entry.turnKind && entry.turnKind !== 'NEW_QUESTION',
       });
       return;
     }
@@ -66,6 +79,12 @@ export function questionRows(transcript: VoiceConversationEntryDTO[]): QuestionR
     row.answered = true;
     row.skipped = false;
     row.answer = row.answer ? `${row.answer} ${text}` : text;
+    // A reviewer's score, where one was given, is the one that counts; the AI's stays on the answer itself.
+    if (entry.reviewedScore != null) {
+      row.score = entry.reviewedScore;
+      row.correct = entry.reviewedScore >= PASS_SCORE;
+      return;
+    }
     if (entry.answerScore != null) row.score = entry.answerScore;
     if (entry.answerCorrect != null) row.correct = entry.answerCorrect;
   });

@@ -408,6 +408,9 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
           ? entry.turnKind.replace('_', ' ').toLowerCase()
           : null,
         entry.answerScore != null ? `${entry.answerScore}/10` : null,
+        entry.reviewedScore != null
+          ? `reviewer changed to ${entry.reviewedScore}/10${entry.reviewedBy ? ` by ${entry.reviewedBy}` : ''}`
+          : null,
         entry.answerCorrect == null ? null : entry.answerCorrect ? 'correct' : 'not correct',
         entry.codeMismatch ? 'code solves a different problem: no marks' : null,
       ]
@@ -421,6 +424,9 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
         write(entry.codeContent, { size: 8, indent: 10, gap: 2 });
       }
       // Why it scored what it did: what was right, and what the missing marks were for.
+      if (isCandidate && entry.reviewedScore != null && entry.reviewNote) {
+        write(`Reviewer's reason: ${entry.reviewNote}`, { size: 8.5, indent: 10, gap: 1 });
+      }
       const note = isCandidate ? notes.get(asked) : undefined;
       if (note && (note.gotRight || note.missed)) {
         if (note.gotRight) write(`Right: ${note.gotRight}`, { size: 8.5, indent: 10, gap: 1 });
