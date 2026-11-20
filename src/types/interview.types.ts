@@ -417,6 +417,8 @@ export interface VoiceEvaluationResult {
   evidenceLevel?: 'SUFFICIENT' | 'PARTIAL' | 'INSUFFICIENT';
   /** Everything a complete interview for this role should have tested, each with how the candidate did on it. */
   expectedConcepts?: { concept: string; area: string; status: 'CORRECT' | 'PARTIAL' | 'INCORRECT' | 'NOT_ASKED'; questionNumbers?: number[] | null }[];
+  /** Where to improve: for each weak or untested area, the gap and what to study and practise, most important first. */
+  improvementPlan?: { skill?: string | null; gap?: string | null; action: string; priority?: 'HIGH' | 'MEDIUM' | 'LOW' | null }[] | null;
   /** For each answered question: what the answer got right, and what cost it the missing marks. */
   answerNotes?: { questionNumber: number; gotRight: string; missed: string }[] | null;
   /** The area each interviewer question was about (FRONTEND, BACKEND, DATABASE, COMMUNICATION and so on). */

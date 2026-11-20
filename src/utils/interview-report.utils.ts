@@ -381,6 +381,19 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
   bulletSection('Strengths', evaluation?.strengths);
   bulletSection('Areas to improve', evaluation?.areasForImprovement);
 
+  // ── How to improve ───────────────────────────────────────────────
+  const plan = evaluation?.improvementPlan ?? [];
+  if (plan.length) {
+    heading('How to improve');
+    muted('Concrete next steps from this interview, most important first.', 8.5);
+    plan.forEach((item, index) => {
+      const priority = item.priority ? ` (${item.priority.toLowerCase()} priority)` : '';
+      write(`${index + 1}. ${item.skill || 'General'}${priority}`, { size: 10, style: 'bold', gap: 1 });
+      if (item.gap) write(`Gap: ${item.gap}`, { size: 9.5, indent: 10, gap: 1 });
+      write(`What to do: ${item.action}`, { size: 9.5, indent: 10, gap: 4 });
+    });
+  }
+
   // ── What was actually said ───────────────────────────────────────
   if (transcript.length) {
     heading(`Transcript (${transcript.length} turns)`);

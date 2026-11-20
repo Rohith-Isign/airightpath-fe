@@ -38,6 +38,7 @@ import { TechnicalDomainReport } from '@/components/admin/result/TechnicalDomain
 import { AreaBreakdown } from '@/components/admin/result/AreaBreakdown';
 import { HiringVerdict } from '@/components/admin/result/HiringVerdict';
 import { SkillLevelMatrix } from '@/components/admin/result/SkillLevelMatrix';
+import { ImprovementPlan } from '@/components/admin/result/ImprovementPlan';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
 import { CodeBlock } from '@/components/interview/CodeBlock';
@@ -1123,6 +1124,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                   tone="warning"
                 />
               </div>
+              <ImprovementPlan evaluation={resolved} />
               <details className="rounded-xl border border-[var(--border)] p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-[var(--text)]">
                   {STRINGS.technicalReport.howBuilt}
@@ -1183,6 +1185,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                   tone="warning"
                 />
               </div>
+              <ImprovementPlan evaluation={resolved} />
             </div>
           ) : (
             <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
