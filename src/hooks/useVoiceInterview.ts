@@ -149,6 +149,13 @@ export function useVoiceInterview() {
   reviewRef.current = review;
   const reviewResolveRef = useRef<((text: string | null) => void) | null>(null);
 
+  /**
+   * "Please answer in English", shown prominently: while they are still speaking when the speech check hears
+   * another language, and after an answer the interviewer found was not in English. Cleared when the next
+   * answer starts, or when the candidate closes it.
+   */
+  const [languageAlert, setLanguageAlert] = useState<{ language?: string; live: boolean } | null>(null);
+
   // Audio hooks
   // Takes the id only; the email was being passed and silently discarded.
   // Chunks of an answer that have been dealt with (text came back, or the send failed). Submit waits for them.
@@ -398,14 +405,20 @@ export function useVoiceInterview() {
       // rather than finding out from the result.
       interviewWsService.subscribe(
         `/topic/interview/${id}/language-warning`,
-        (msg: { language?: string }) => {
+        (msg: { language?: string; live?: boolean; source?: string }) => {
+          const language = msg.language
+            ? msg.language.charAt(0).toUpperCase() + msg.language.slice(1)
+            : undefined;
+          setLanguageAlert({ language, live: !!msg.live });
+          // Heard while they are still answering: the banner is enough, and they can switch now.
+          if (msg.live) return;
           setConversation((prev) => [
             ...prev,
             {
               role: "system",
               content: `Your last answer was not in English${
-                msg.language ? ` (it sounded like ${msg.language})` : ""
-              }, so it could not be scored. Please answer in English.`,
+                language ? ` (it sounded like ${language})` : ""
+              }, so it could not be scored. This interview can only be done in English: please answer in English.`,
               timestamp: new Date().toISOString(),
             },
           ]);
@@ -680,6 +693,7 @@ export function useVoiceInterview() {
     // The mic opens only when the interviewer has finished speaking. It used to interrupt the voice instead, which put
     // the candidate's words on top of the interviewer's and cut the question short.
     if (audioPlayback.isPlaying || awaitingInterviewerAudio) return;
+    setLanguageAlert(null);
     transcriptRef.current = "";
     wordTimestampsRef.current = [];
     doneChunksRef.current = new Set();
@@ -1217,6 +1231,8 @@ export function useVoiceInterview() {
   }, []);
 
   return {
+    languageAlert,
+    dismissLanguageAlert: () => setLanguageAlert(null),
     review,
     editReview,
     setReviewText,

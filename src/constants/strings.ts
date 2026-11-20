@@ -457,6 +457,14 @@ export const STRINGS = {
   },
 
   /** The "Are you still there?" prompt. */
+  englishOnly: {
+    title: 'Please answer in English',
+    live: (language?: string) =>
+      `It sounds like you are speaking ${language ?? 'another language'}. This interview can only be done in English, so please continue in English.`,
+    after: (language?: string) =>
+      `Your last answer was ${language ? `in ${language}` : 'not in English'}, so it could not be scored. This interview can only be done in English. Please answer in English.`,
+    dismiss: 'OK',
+  },
   answerReview: {
     title: 'Check your answer',
     sendingIn: (seconds: number) => `Sending in ${seconds}s`,

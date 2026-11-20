@@ -1741,6 +1741,31 @@ export function InterviewPage() {
                   stray words on the screen, which the candidate then took to be part of their answer. The
                   audio is still recorded and converted to text for the interviewer; the candidate sees only
                   that it is being heard, never the text. */}
+              {/* English only. Shown while they are speaking when another language is heard, and after an answer
+                  that was not in English, in words a nervous candidate will not misread. */}
+              {voiceInterview.languageAlert && (
+                <div
+                  role="alert"
+                  className="mb-3 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100"
+                >
+                  <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-300" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{STRINGS.englishOnly.title}</p>
+                    <p className="text-sm">
+                      {voiceInterview.languageAlert.live
+                        ? STRINGS.englishOnly.live(voiceInterview.languageAlert.language)
+                        : STRINGS.englishOnly.after(voiceInterview.languageAlert.language)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={voiceInterview.dismissLanguageAlert}
+                    className="flex-shrink-0 rounded-lg px-2 py-1 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-800/40"
+                  >
+                    {STRINGS.englishOnly.dismiss}
+                  </button>
+                </div>
+              )}
               {voiceInterview.isRecording && (
                 <div className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface1)] p-3">
                   <Mic size={14} className="text-emerald-500" />
