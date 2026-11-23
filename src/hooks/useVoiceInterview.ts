@@ -155,6 +155,8 @@ export function useVoiceInterview() {
    * answer starts, or when the candidate closes it.
    */
   const [languageAlert, setLanguageAlert] = useState<{ language?: string; live: boolean } | null>(null);
+  /** Whether the chat already says the last answer was not in English, so it is said once per answer. */
+  const languageNoteShownRef = useRef(false);
 
   // Audio hooks
   // Takes the id only; the email was being passed and silently discarded.
@@ -412,6 +414,7 @@ export function useVoiceInterview() {
           setLanguageAlert({ language, live: !!msg.live });
           // Heard while they are still answering: the banner is enough, and they can switch now.
           if (msg.live) return;
+          languageNoteShownRef.current = true;
           setConversation((prev) => [
             ...prev,
             {
@@ -480,6 +483,23 @@ export function useVoiceInterview() {
                   timestamp: new Date().toISOString(),
                 },
               ]);
+            }
+            // The answer just given was not in English. Carried on the interviewer's reply itself, so the alert
+            // shows with it every time rather than depending on a separate message arriving.
+            if (msg.notEnglish) {
+              setLanguageAlert((prev) => ({ language: prev?.language, live: false }));
+              if (!languageNoteShownRef.current) {
+                languageNoteShownRef.current = true;
+                setConversation((prev) => [
+                  ...prev,
+                  {
+                    role: "system",
+                    content:
+                      "Your last answer was not in English, so it won't be evaluated. This interview can only be done in English: please answer in English.",
+                    timestamp: new Date().toISOString(),
+                  },
+                ]);
+              }
             }
             const { cleanText, isCoding } = detectAndCleanCodingTag(responseText);
 
@@ -694,6 +714,7 @@ export function useVoiceInterview() {
     // the candidate's words on top of the interviewer's and cut the question short.
     if (audioPlayback.isPlaying || awaitingInterviewerAudio) return;
     setLanguageAlert(null);
+    languageNoteShownRef.current = false;
     transcriptRef.current = "";
     wordTimestampsRef.current = [];
     doneChunksRef.current = new Set();

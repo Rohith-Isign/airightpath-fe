@@ -462,7 +462,7 @@ export const STRINGS = {
     live: (language?: string) =>
       `It sounds like you are speaking ${language ?? 'another language'}. This interview can only be done in English, so please continue in English.`,
     after: (language?: string) =>
-      `Your last answer was ${language ? `in ${language}` : 'not in English'}, so it could not be scored. This interview can only be done in English. Please answer in English.`,
+      `You are speaking in ${language ?? 'another language'}, but this interview can only be done in English, so that answer won't be evaluated. Please answer in English.`,
     dismiss: 'OK',
   },
   answerReview: {

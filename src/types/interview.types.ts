@@ -386,6 +386,8 @@ export interface ResponseCompleteMessage {
   turnKind?: 'NEW_QUESTION' | 'FOLLOW_UP' | 'REPHRASE';
   /** True when the code just submitted solved a different problem than the one asked: it earned no marks. */
   codeMismatch?: boolean;
+  /** True when the answer just given was not in English: it was not scored, and the candidate is told so. */
+  notEnglish?: boolean;
 }
 
 // Voice evaluation types
