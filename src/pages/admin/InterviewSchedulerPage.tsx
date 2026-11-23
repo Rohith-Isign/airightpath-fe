@@ -51,6 +51,14 @@ export function InterviewSchedulerPage() {
   const [minDateTime] = useState(nowDateTimeLocal);
   const deadlineInPast = !!deadlineTime && isPast(deadlineTime);
   const endBeforeStart = !!deadlineTime && !!startTime && deadlineTime <= startTime;
+  /**
+   * Set when the admin picks a start themselves. The default "now" goes stale while the form is filled in, so an
+   * untouched start is moved up to the current minute on submit instead of being refused.
+   */
+  const [startEdited, setStartEdited] = useState(!!handoff.startTime);
+  /** The start an existing booking already has: keeping it is fine even once it has passed. */
+  const [existingStart, setExistingStart] = useState('');
+  const startInPast = startEdited && !!startTime && startTime !== existingStart && startTime < nowDateTimeLocal();
   const [sendEmail, setSendEmail] = useState(handoff.sendEmail ?? true);
   /**
    * Which interview to book. L2 first because it is the round that follows the
@@ -156,6 +164,7 @@ export function InterviewSchedulerPage() {
     if (!first || (timesTouched.current && deadlineTime)) return;
     const picker = (stamp?: string) => /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(stamp ?? '')?.slice(1, 3).join('T') ?? '';
     setStartTime(picker(first.assignedAt) || startTime);
+    setExistingStart(picker(first.assignedAt));
     setDeadlineTime(picker(first.deadlineTime));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstMovableId]);
@@ -222,10 +231,17 @@ export function InterviewSchedulerPage() {
       showToast(MESSAGES.admin.interviewScheduler.deadlineTimeRequired, 'warning');
       return;
     }
+    if (startInPast) {
+      showToast('The start time has already passed. Choose the current time or a later one.', 'warning');
+      return;
+    }
     if (!startTime || endBeforeStart) {
       showToast('The interview must end after it starts.', 'warning');
       return;
     }
+    // An untouched default start that went stale while the form was filled in opens the interview now instead.
+    const now = nowDateTimeLocal();
+    const opensAt = startTime !== existingStart && startTime < now ? now : startTime;
 
     setSubmitting(true);
     try {
@@ -233,7 +249,7 @@ export function InterviewSchedulerPage() {
       // left alone; everyone else is booked now.
       for (const sch of movable) {
         await interviewService.rescheduleInterview(sch.id, {
-          assignedAt: startTime,
+          assignedAt: opensAt,
           deadlineTime,
           notify: sendEmail,
         });
@@ -243,7 +259,7 @@ export function InterviewSchedulerPage() {
         await interviewService.assignInterviewBulk({
           emails: toBook,
           jobPrefix: selectedPrefix,
-          assignedAt: startTime,
+          assignedAt: opensAt,
           deadlineTime,
           sendEmail,
           round,
@@ -443,10 +459,12 @@ export function InterviewSchedulerPage() {
               value={startTime}
               onChange={(value) => {
                 timesTouched.current = true;
+                setStartEdited(true);
                 setStartTime(value);
               }}
               leftIcon={<Calendar size={16} />}
-              helperText="The interview opens for the candidate at this time"
+              helperText={startInPast ? undefined : 'The interview opens for the candidate at this time — now or later'}
+              error={startInPast ? 'The start time has already passed. Choose the current time or a later one.' : undefined}
             />
             <DateTimeInput
               label="End date & time (deadline)"
@@ -500,7 +518,7 @@ export function InterviewSchedulerPage() {
                 onClick={handleSubmit}
                 isLoading={submitting}
                 leftIcon={!submitting ? <Send size={16} /> : undefined}
-                disabled={!selectedPrefix || selectedEmails.size === 0 || !deadlineTime || !startTime || endBeforeStart}
+                disabled={!selectedPrefix || selectedEmails.size === 0 || !deadlineTime || !startTime || endBeforeStart || startInPast}
               >
                 {movable.length > 0 ? 'Update Interview' : 'Schedule Interview'}
                 {selectedEmails.size > 1 ? ` (${selectedEmails.size})` : ''}
