@@ -71,6 +71,7 @@ import type {
   ProctoringEvent,
   VoiceEvaluationResult,
 } from '@/types/interview.types';
+import { scorePercent } from '@/utils/format.utils';
 
 /** Pipeline order. L2 precedes L3 however the rows happen to be dated. */
 const ROUND_ORDER: InterviewRound[] = ['L2_TECHNICAL', 'L3_BEHAVIORAL'];
@@ -445,7 +446,7 @@ export function InterviewCandidateResultPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryStat
           icon={<BarChart3 size={16} />}
-          value={overall != null ? `${overall.toFixed(1)}/10` : '--'}
+          value={overall != null ? scorePercent(overall) : '--'}
           label={STRINGS.candidateResult.overallScore}
           badge={(() => {
             const level = performanceLevel(overall);
@@ -669,7 +670,7 @@ function RoundSummaryCard({
                   label={category.category}
                   // Category scores are 0-10; SkillBar draws a percentage.
                   percentage={Math.round((category.score ?? 0) * 10)}
-                  detail={`${category.score}/10`}
+                  detail={scorePercent(category.score)}
                 />
               ),
             )}
@@ -1169,7 +1170,7 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
                         label={category.category}
                         // Category scores are 0-10; SkillBar draws a percentage.
                         percentage={Math.round((category.score ?? 0) * 10)}
-                        detail={`${category.score}/10`}
+                        detail={scorePercent(category.score)}
                       />
                       <PerformanceRating score={category.score} reason={category.feedback} showMeaning />
                     </>
@@ -1528,11 +1529,11 @@ function AnswerReviewControl({
         >
           {Array.from({ length: 11 }, (_, i) => (
             <option key={i} value={i}>
-              {i}/10
+              {i * 10}%
             </option>
           ))}
         </select>
-        {entry.answerScore != null && <span className="text-[var(--textSecondary)]">AI gave {entry.answerScore}/10</span>}
+        {entry.answerScore != null && <span className="text-[var(--textSecondary)]">AI gave {scorePercent(entry.answerScore)}</span>}
       </div>
       <textarea
         value={note}
@@ -1666,8 +1667,8 @@ function TranscriptTurn({
         {isCandidate && entry.reviewedScore != null && (
           <div className="mt-2 rounded-lg bg-black/25 px-2.5 py-1.5 text-xs text-white">
             <span className="font-semibold">
-              Reviewer: {entry.reviewedScore}/10
-              {entry.answerScore != null ? ` (AI gave ${entry.answerScore}/10)` : ''}
+              Reviewer: {scorePercent(entry.reviewedScore)}
+              {entry.answerScore != null ? ` (AI gave ${scorePercent(entry.answerScore)})` : ''}
             </span>
             {entry.reviewNote && <span> — {entry.reviewNote}</span>}
             {entry.reviewedBy && <span className="block text-white/70">by {entry.reviewedBy}</span>}
@@ -1680,7 +1681,7 @@ function TranscriptTurn({
         {isCandidate && note && (note.gotRight || note.missed) && (
           <div className="mt-2 space-y-1 rounded-lg bg-white/90 p-2.5 text-xs text-[var(--text)]">
             {entry.answerScore != null && (
-              <p className="font-semibold">Why {entry.answerScore}/10</p>
+              <p className="font-semibold">Why {scorePercent(entry.answerScore)}</p>
             )}
             {note.gotRight && (
               <p>
@@ -1691,7 +1692,7 @@ function TranscriptTurn({
             {note.missed && (
               <p>
                 <span className="font-semibold text-[var(--error)]">
-                  ✗ Missed{entry.answerScore != null && entry.answerScore < 10 ? ` (−${10 - entry.answerScore})` : ''}:{' '}
+                  ✗ Missed{entry.answerScore != null && entry.answerScore < 10 ? ` (−${(10 - entry.answerScore) * 10}%)` : ''}:{' '}
                 </span>
                 {note.missed}
               </p>
@@ -1727,7 +1728,7 @@ function TranscriptTurn({
               that is about whether it was right rather than how it sounded.
               It is what the next question's difficulty was set from. */}
           {isCandidate && entry.answerScore != null && (
-            <span className="text-xs font-medium text-white/80">{entry.answerScore}/10</span>
+            <span className="text-xs font-medium text-white/80">{scorePercent(entry.answerScore)}</span>
           )}
           {/* Correct or not, as the server judged it against the pass mark when the answer was rated. */}
           {isCandidate && entry.answerCorrect != null && (

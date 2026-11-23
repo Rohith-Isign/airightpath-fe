@@ -25,6 +25,7 @@ import type {
   InterviewEvaluation,
   VoiceEvaluationResult,
 } from '@/types/interview.types';
+import { scorePercent } from '@/utils/format.utils';
 
 interface SummaryState {
   interview?: InterviewSchedule;
@@ -158,8 +159,7 @@ export function InterviewSummaryPage() {
                 <div>
                   <p className="text-sm text-[var(--textSecondary)]">Overall Score</p>
                   <p className="text-4xl font-bold text-[var(--text)]">
-                    {(voiceEval.overallScore ?? 0).toFixed(1)}
-                    <span className="text-lg text-[var(--textTertiary)]">/10</span>
+                    {scorePercent(voiceEval.overallScore ?? 0)}
                   </p>
                 </div>
                 {voiceEval.recommendation && (
@@ -189,7 +189,7 @@ export function InterviewSummaryPage() {
                   <div key={i}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-medium text-[var(--text)]">{cat.category}</span>
-                      <span className="text-sm font-semibold text-[var(--text)]">{cat.score}/10</span>
+                      <span className="text-sm font-semibold text-[var(--text)]">{scorePercent(cat.score)}</span>
                     </div>
                     <div className="w-full h-2 bg-[var(--surface1)] rounded-full overflow-hidden">
                       <div

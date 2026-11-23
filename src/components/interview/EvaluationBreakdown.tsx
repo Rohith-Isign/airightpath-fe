@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/Badge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import type { InterviewEvaluation } from '@/types/interview.types';
+import { scorePercent } from '@/utils/format.utils';
 
 interface EvaluationBreakdownProps {
   evaluation: InterviewEvaluation;
@@ -36,9 +37,8 @@ export function EvaluationBreakdown({ evaluation }: EvaluationBreakdownProps) {
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-[var(--textSecondary)]">Overall Score:</span>
           <span className="text-2xl font-bold text-[var(--text)]">
-            {(evaluation.overallScore ?? 0).toFixed(1)}
+            {scorePercent(evaluation.overallScore ?? 0)}
           </span>
-          <span className="text-sm text-[var(--textTertiary)]">/ 10</span>
         </div>
         <Badge variant={getRecommendationVariant(evaluation.recommendation ?? '')} size="sm">
           {(evaluation.recommendation ?? '').replace(/_/g, ' ')}
@@ -59,7 +59,7 @@ export function EvaluationBreakdown({ evaluation }: EvaluationBreakdownProps) {
                   </span>
                 </span>
                 <span className="text-sm font-semibold text-[var(--text)] tabular-nums">
-                  {cat.score}/10
+                  {scorePercent(cat.score)}
                 </span>
               </div>
               <ProgressBar

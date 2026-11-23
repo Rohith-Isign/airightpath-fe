@@ -7,6 +7,7 @@ import { l2Category, toPercent } from '@/utils/l2-category.utils';
 import { areaLabel, CONCEPT_STATUS_LABELS } from '@/utils/interview-areas.utils';
 import type { InterviewSchedule, ProctoringEvent, VoiceEvaluationResult } from '@/types/interview.types';
 import type { VoiceConversationEntryDTO } from '@/services/interview.service';
+import { scorePercent } from '@/utils/format.utils';
 
 /**
  * One interview as a shareable PDF, watermarked like every other document the
@@ -159,7 +160,7 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
     write(`Overall L2 score: ${overall}% (${category ?? 'Below Good'})`, { size: 11, style: 'bold', gap: 2 });
     write(`Technical score (on what was tested): ${technical}%`, { gap: 2 });
   } else {
-    write(`Overall score: ${score.toFixed(1)} / 10 (${performanceLevel(score)?.label ?? ''})`, {
+    write(`Overall score: ${scorePercent(score)} (${performanceLevel(score)?.label ?? ''})`, {
       size: 11,
       style: 'bold',
       gap: 2,
@@ -270,7 +271,7 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
       skills.map((s) => [
         s.skill,
         s.category ?? '—',
-        s.assessed === false ? 'Not assessed' : `${s.score}/10`,
+        s.assessed === false ? 'Not assessed' : scorePercent(s.score),
         s.highestLevel ? LEVEL_NAMES[s.highestLevel] ?? s.highestLevel : '—',
         s.mapped == null ? '—' : s.mapped ? 'Yes' : 'No',
         s.questionNumbers?.length ? `Q${s.questionNumbers.join(', Q')}` : '—',
@@ -297,7 +298,7 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
       headers,
       categories.map((c) => {
         const assessed = c.assessed !== false;
-        const cells = [c.category, weightLabel(c.weight), assessed ? `${c.score}/10` : 'Not assessed'];
+        const cells = [c.category, weightLabel(c.weight), assessed ? scorePercent(c.score) : 'Not assessed'];
         if (hasLevels) cells.push(c.highestLevel ? LEVEL_NAMES[c.highestLevel] ?? c.highestLevel : '—');
         if (hasMapped) cells.push(c.mapped == null ? '—' : c.mapped ? 'Yes' : 'No');
         cells.push(c.questionNumbers?.length ? `Q${c.questionNumbers.join(', Q')}` : '—');
@@ -354,7 +355,7 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
           String(asked.length),
           String(asked.filter((r) => r.answered).length),
           judged.length ? `${judged.filter((r) => r.correct).length} of ${judged.length}` : '—',
-          scored.length ? `${(scored.reduce((a, b) => a + b, 0) / scored.length).toFixed(1)}/10` : '—',
+          scored.length ? scorePercent(scored.reduce((a, b) => a + b, 0) / scored.length) : '—',
           expected.length
             ? `${expected.filter((c) => c.status !== 'NOT_ASKED').length} of ${expected.length}`
             : '—',
@@ -421,9 +422,9 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
         entry.turnKind && entry.turnKind !== 'NEW_QUESTION'
           ? entry.turnKind.replace('_', ' ').toLowerCase()
           : null,
-        entry.answerScore != null ? `${entry.answerScore}/10` : null,
+        entry.answerScore != null ? scorePercent(entry.answerScore) : null,
         entry.reviewedScore != null
-          ? `reviewer changed to ${entry.reviewedScore}/10${entry.reviewedBy ? ` by ${entry.reviewedBy}` : ''}`
+          ? `reviewer changed to ${scorePercent(entry.reviewedScore)}${entry.reviewedBy ? ` by ${entry.reviewedBy}` : ''}`
           : null,
         entry.answerCorrect == null ? null : entry.answerCorrect ? 'correct' : 'not correct',
         entry.codeMismatch ? 'code solves a different problem: no marks' : null,
@@ -445,7 +446,7 @@ export async function buildInterviewReportPdf(input: InterviewReportInput): Prom
       if (note && (note.gotRight || note.missed)) {
         if (note.gotRight) write(`Right: ${note.gotRight}`, { size: 8.5, indent: 10, gap: 1 });
         if (note.missed) {
-          const lost = entry.answerScore != null && entry.answerScore < 10 ? ` (-${10 - entry.answerScore})` : '';
+          const lost = entry.answerScore != null && entry.answerScore < 10 ? ` (-${(10 - entry.answerScore) * 10}%)` : '';
           write(`Missed${lost}: ${note.missed}`, { size: 8.5, indent: 10, gap: 2 });
         }
       }

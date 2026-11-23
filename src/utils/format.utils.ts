@@ -124,3 +124,12 @@ export function formatTimer(totalSeconds: number): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
   return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 }
+
+/**
+ * A 0-10 score as a percentage out of 100, the way results are shown: 6.5 becomes "65%". Scores are kept out of 10
+ * underneath; only how they read changes.
+ */
+export function scorePercent(score?: number | null): string {
+  if (score == null || Number.isNaN(score)) return '—';
+  return `${Math.round(score * 10)}%`;
+}

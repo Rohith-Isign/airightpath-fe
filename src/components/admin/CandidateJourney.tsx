@@ -18,6 +18,7 @@ import { formatElapsedSeconds, formatScheduledDateTime, formatServerDateTime } f
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewSchedule } from '@/types/interview.types';
 import type { JobApplicationDTO } from '@/types/job.types';
+import { scorePercent } from '@/utils/format.utils';
 
 interface CandidateJourneyProps {
   candidate: JobApplicationDTO;
@@ -236,7 +237,7 @@ export function CandidateJourney({ candidate, jobPrefix, onViewInterviewResult }
         const lines = [
           `Scheduled ${formatScheduledDateTime(row.assignedAt)}, due ${formatScheduledDateTime(row.deadlineTime)}`,
           row.startedAt ? `Started ${formatServerDateTime(row.startedAt)}${seconds != null ? ` · ${formatElapsedSeconds(seconds)}` : ''}` : 'Not started',
-          score != null ? `Score ${score}/10` : '',
+          score != null ? `Score ${scorePercent(score)}` : '',
           row.overriddenResult ? `Result overridden by ${row.overriddenBy ?? 'a reviewer'}` : '',
           (row.warningCount ?? row.proctoringWarnings ?? 0) > 0
             ? `${row.warningCount ?? row.proctoringWarnings} proctoring warning(s)`

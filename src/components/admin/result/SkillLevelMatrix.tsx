@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { QuestionRow } from '@/utils/interview-questions.utils';
 import type { VoiceEvaluationResult } from '@/types/interview.types';
+import { scorePercent } from '@/utils/format.utils';
 
 const LEVELS = ['BASIC', 'INTERMEDIATE', 'ADVANCED', 'EXPERT'] as const;
 const LEVEL_NAMES: Record<(typeof LEVELS)[number], string> = {
@@ -94,7 +95,7 @@ export function SkillLevelMatrix({
                           <span className="text-xs text-[var(--text)]">
                             {cell.judged ? `${cell.correct} of ${cell.judged} correct` : `${cell.asked} asked`}
                             {cell.average != null && (
-                              <span className="block text-[var(--textSecondary)]">avg {cell.average.toFixed(1)}/10</span>
+                              <span className="block text-[var(--textSecondary)]">avg {scorePercent(cell.average)}</span>
                             )}
                           </span>
                         )}
@@ -125,7 +126,7 @@ export function SkillLevelMatrix({
         </table>
       </div>
       <p className="text-xs text-[var(--textTertiary)]">
-        Correct means rated 6/10 or more (a reviewer’s score counts where one was given). “Not assessed” is a level the
+        Correct means rated 60% or more (a reviewer’s score counts where one was given). “Not assessed” is a level the
         interview never reached: it shows coverage, not a score of zero.
       </p>
     </div>

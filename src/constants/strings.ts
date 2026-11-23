@@ -533,7 +533,7 @@ export const STRINGS = {
     levelNotRecorded: 'Levels were not recorded for this result. It was graded before levels were added.',
     notAssessed: 'Not assessed',
     notAssessedDetail: 'No question reached this domain. It adds nothing to the overall score and does not count against the candidate.',
-    scoreOutOf: (score: number) => `${score}/10`,
+    scoreOutOf: (score: number) => `${Math.round(score * 10)}%`,
     howBuilt: 'How the overall score is built',
     assessedOf: (count: number) => `${count} of`,
     selectDomain: 'Select a domain to see its detail',
@@ -606,8 +606,8 @@ export const STRINGS = {
     evidenceInsufficient:
       'Too little was asked or answered to give a hire or no-hire verdict. The scores below are for the areas that were assessed; no recommendation has been given.',
     evidencePartial: (coverage: number, assessed: string | null) =>
-      `Only ${coverage}% of the scoring areas were asked about. Areas that were not reached add nothing, so the overall score is lower than the marks on what was tested${assessed ? ` (${assessed}/10 on the assessed areas)` : ''}.`,
-    assessedOnly: (score: string) => `On the assessed areas only: ${score} / 10`,
+      `Only ${coverage}% of the scoring areas were asked about. Areas that were not reached add nothing, so the overall score is lower than the marks on what was tested${assessed ? ` (${Math.round(Number(assessed) * 10)}% on the assessed areas)` : ''}.`,
+    assessedOnly: (score: string) => `On the assessed areas only: ${Math.round(Number(score) * 10)}%`,
     reEvaluate: 'Re-evaluate with AI',
     reEvaluating: 'Re-evaluating…',
     /** A finished interview with no pass or fail: why, and what to do. */

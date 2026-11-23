@@ -109,7 +109,7 @@ const RESULT_COLUMNS = [
   { header: 'Result', width: 16 },
   { header: 'Overridden to', width: 15 },
   { header: 'Overridden by', width: 28 },
-  { header: 'Score /10', width: 11 },
+  { header: 'Score %', width: 11 },
   { header: 'Level', width: 18 },
   { header: 'Recommendation', width: 18 },
   { header: 'Needs review', width: 13 },
@@ -138,7 +138,9 @@ function addResultsSheet(workbook: Workbook, input: InterviewExportInput): void 
       interview.overriddenResult ?? '',
       interview.overriddenBy ?? '',
       // A real number, not a formatted string, so the column averages.
-      isNotAssessable(interview) ? null : (interview.evaluation?.overallScore ?? null),
+      isNotAssessable(interview) || interview.evaluation?.overallScore == null
+        ? null
+        : Math.round(interview.evaluation.overallScore * 10),
       isNotAssessable(interview)
         ? 'Not assessable'
         : (performanceLevel(interview.evaluation?.overallScore)?.label ?? ''),
@@ -167,7 +169,7 @@ const TRANSCRIPT_COLUMNS = [
   { header: 'Speaker', width: 14 },
   { header: 'Topic', width: 22 },
   { header: 'Turn', width: 14 },
-  { header: 'Score /10', width: 10 },
+  { header: 'Score %', width: 10 },
   { header: 'What was said', width: 90 },
   { header: 'Code', width: 60 },
   { header: 'Time', width: 18 },
@@ -188,7 +190,7 @@ function addTranscriptSheet(workbook: Workbook, transcript: VoiceConversationEnt
       entry.role === 'CANDIDATE' ? 'Candidate' : 'Interviewer',
       entry.topic ?? '',
       entry.turnKind && entry.turnKind !== 'NEW_QUESTION' ? entry.turnKind.replace('_', ' ') : '',
-      entry.answerScore ?? null,
+      entry.answerScore != null ? entry.answerScore * 10 : null,
       entry.content,
       entry.codeContent ?? '',
       toDate(entry.timestamp),

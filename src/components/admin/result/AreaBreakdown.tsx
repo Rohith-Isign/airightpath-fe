@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/Badge';
 import type { QuestionRow } from '@/utils/interview-questions.utils';
 import { areaLabel } from '@/utils/interview-areas.utils';
 import type { VoiceEvaluationResult } from '@/types/interview.types';
+import { scorePercent } from '@/utils/format.utils';
 
 
 
@@ -131,7 +132,7 @@ export function AreaBreakdown({
                 <td className="px-3 py-2 text-right">{r.asked}</td>
                 <td className="px-3 py-2 text-right">{r.answered}</td>
                 <td className="px-3 py-2 text-right">{r.judged ? `${r.correct} of ${r.judged}` : '—'}</td>
-                <td className="px-3 py-2 text-right">{r.average != null ? `${r.average.toFixed(1)}/10` : '—'}</td>
+                <td className="px-3 py-2 text-right">{scorePercent(r.average)}</td>
                 <td className="px-3 py-2 text-right">
                   {r.conceptsExpected ? (
                     <span className={r.conceptsReached < r.conceptsExpected ? 'font-semibold text-[var(--warning)]' : ''}>
