@@ -15,6 +15,7 @@ import { useQuestionTimer } from '@/hooks/useQuestionTimer';
 import { useMediaRecorder } from '@/hooks/useMediaRecorder';
 import { useScreenRecorder, ScreenSurfaceError } from '@/hooks/useScreenRecorder';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import { useScreenCoverage } from '@/hooks/useScreenCoverage';
 import { useFaceDetection } from '@/hooks/useFaceDetection';
 import { useDevToolsDetection } from '@/hooks/useDevToolsDetection';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
@@ -319,6 +320,17 @@ export function InterviewPage() {
       voiceInterview.sendProctoringEvent('fullscreen_exit', `Exit count: ${count}`);
     },
   });
+  // A side panel or another window taking part of the screen while the interview is in fullscreen.
+  useScreenCoverage({
+    active:
+      isFullscreen && voiceInterview.state !== 'pre-start' && voiceInterview.state !== 'completed' && !postCompletionStep,
+    onReduced: (detail) => {
+      if (!interviewRunningRef.current) return;
+      showToast(STRINGS.lockdown.screenReduced, 'warning');
+      voiceInterview.sendProctoringEvent('screen_reduced', detail);
+    },
+  });
+
   /** How many exits had been counted when the interview began, so only the ones after it count. */
   const fullscreenExitsAtStartRef = useRef(0);
   const fullscreenExitsRef = useRef(0);
@@ -1704,7 +1716,15 @@ export function InterviewPage() {
                   nothing and pushed the controls off-screen. */}
               {voiceInterview.isCodingQuestion && voiceInterview.state !== 'completed' && !postCompletionStep && (
                 <div ref={codingSectionRef} className="min-w-0 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-2 sm:p-3">
-                  <CodingEditor code={voiceInterview.codeContent} onCodeChange={voiceInterview.setCodeContent} disabled={voiceInterview.state === 'processing'} />
+                  <CodingEditor
+                    code={voiceInterview.codeContent}
+                    onCodeChange={voiceInterview.setCodeContent}
+                    disabled={voiceInterview.state === 'processing'}
+                    onPasteBlocked={() => {
+                      showToast(STRINGS.lockdown.pasteBlocked, 'warning');
+                      voiceInterview.sendProctoringEvent('paste_blocked', 'Tried to paste text into the coding notepad');
+                    }}
+                  />
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {/* Send only: nothing is compiled or run, the interviewer reads
                         what was written. Any spoken explanation already recorded

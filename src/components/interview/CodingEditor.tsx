@@ -5,6 +5,8 @@ interface CodingEditorProps {
   code: string;
   onCodeChange: (code: string) => void;
   disabled?: boolean;
+  /** Called when the candidate tries to paste or drop text in: it is refused, and recorded. */
+  onPasteBlocked?: () => void;
 }
 
 const MIN_HEIGHT = 140;
@@ -32,7 +34,7 @@ const measure = () => {
  * Monaco is deliberately not used: its language modes, autocomplete and
  * bracket-closing make it behave like an IDE, which this is not.
  */
-export function CodingEditor({ code, onCodeChange, disabled }: CodingEditorProps) {
+export function CodingEditor({ code, onCodeChange, disabled, onPasteBlocked }: CodingEditorProps) {
   const [limits, setLimits] = useState(measure);
   const [height, setHeight] = useState(() => measure().base);
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
@@ -117,6 +119,15 @@ export function CodingEditor({ code, onCodeChange, disabled }: CodingEditorProps
         value={code}
         onChange={(e) => onCodeChange(e.target.value)}
         onKeyDown={onKeyDown}
+        // The answer is typed here. Pasting in code written elsewhere, by an AI tool for instance, is refused.
+        onPaste={(e) => {
+          e.preventDefault();
+          onPasteBlocked?.();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          onPasteBlocked?.();
+        }}
         disabled={disabled}
         placeholder="Write your code, pseudocode or logic here, in any language. It is not compiled or run; the interviewer reads it."
         style={{ height }}

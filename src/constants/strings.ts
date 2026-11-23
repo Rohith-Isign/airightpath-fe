@@ -457,6 +457,11 @@ export const STRINGS = {
   },
 
   /** The "Are you still there?" prompt. */
+  lockdown: {
+    screenReduced:
+      'The interview must fill your whole screen. Close any side panel or other window (including AI assistants) and keep the interview in full screen.',
+    pasteBlocked: 'Pasting is not allowed in the notepad. Please type your answer.',
+  },
   englishOnly: {
     title: 'Please answer in English',
     live: (language?: string) =>
