@@ -41,6 +41,16 @@ function withCurrentTurn(
     : [...history, currentTurn];
 }
 
+/**
+ * How long a reviewed answer may become. It was a quarter more than was heard (or 40 characters), which is no room at
+ * all when the speech service caught only the first few words: a candidate finishing their sentence was stopped
+ * mid-word with nothing on screen to say why. Now double what was heard, and at least 300 characters more, with the
+ * room left shown under the box. Still not room to type a long new answer, and every edit is recorded.
+ */
+export function reviewEditLimit(original: string): number {
+  return Math.max(original.length * 2, original.length + 300);
+}
+
 export function useVoiceInterview() {
   // State
   const [state, setState] = useState<VoiceInterviewState>("pre-start");
@@ -853,14 +863,13 @@ export function useVoiceInterview() {
   }, []);
 
   /**
-   * Changes the text. Capped a little above the length of what was heard: room to fix words, not to type a new
-   * answer in place of the spoken one.
+   * Changes the text, up to {@link reviewEditLimit}: room to fix words and finish a sentence the speech service cut
+   * off, not to type a whole new answer in place of the spoken one. Every edit is recorded for the reviewer.
    */
   const setReviewText = useCallback((text: string) => {
     setReview((prev) => {
       if (!prev) return prev;
-      const max = Math.max(Math.ceil(prev.original.length * 1.25), prev.original.length + 40);
-      return { ...prev, text: text.slice(0, max) };
+      return { ...prev, text: text.slice(0, reviewEditLimit(prev.original)) };
     });
   }, []);
 

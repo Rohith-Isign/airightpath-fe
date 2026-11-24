@@ -10,7 +10,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { useElapsed } from '@/hooks/useElapsed';
-import { useVoiceInterview } from '@/hooks/useVoiceInterview';
+import { reviewEditLimit, useVoiceInterview } from '@/hooks/useVoiceInterview';
 import { useQuestionTimer } from '@/hooks/useQuestionTimer';
 import { useMediaRecorder } from '@/hooks/useMediaRecorder';
 import { useScreenRecorder, ScreenSurfaceError } from '@/hooks/useScreenRecorder';
@@ -1952,6 +1952,15 @@ export function InterviewPage() {
                     <p className="text-xs text-slate-300">
                       {voiceInterview.review.editing ? STRINGS.answerReview.editHint : STRINGS.answerReview.hint}
                     </p>
+                    {voiceInterview.review.editing && (() => {
+                      // The room left, so reaching the limit is never a mystery of keys that stop working.
+                      const left = reviewEditLimit(voiceInterview.review.original) - voiceInterview.review.text.length;
+                      return (
+                        <p className={`text-xs font-medium ${left <= 30 ? 'text-amber-300' : 'text-slate-400'}`}>
+                          {STRINGS.answerReview.charactersLeft(left)}
+                        </p>
+                      );
+                    })()}
                     <div className="flex flex-wrap justify-end gap-2">
                       {!voiceInterview.review.editing && (
                         <button

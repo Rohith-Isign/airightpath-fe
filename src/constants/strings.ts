@@ -476,7 +476,9 @@ export const STRINGS = {
     sendingIn: (seconds: number) => `Sending in ${seconds}s`,
     editingFor: (seconds: number) => `Sends in ${seconds}s`,
     hint: 'This is what we heard. If a word is wrong, choose Edit to correct it.',
-    editHint: 'Correct any words that were heard wrongly. This is for fixing mistakes, not for writing a new answer; edits are recorded.',
+    editHint: 'Correct any words that were heard wrongly, or finish a sentence that was cut off. This is not for writing a new answer; edits are recorded.',
+    charactersLeft: (left: number) =>
+      left > 0 ? `${left} characters left` : 'Limit reached: corrections only, not a new answer. Send it as it is.',
     edit: 'Edit',
     sendNow: 'Send now',
     send: 'Send',
