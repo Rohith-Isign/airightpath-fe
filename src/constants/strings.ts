@@ -775,6 +775,7 @@ export const STRINGS = {
 
   /** Candidate → the live interview screen. */
   candidateInterview: {
+    lowVoice: 'Your voice is coming through very low. Please speak a little louder and clearly, or move closer to the microphone.',
     noInterviewData: 'No interview data found.',
     backToInterviews: 'Back to Interviews',
     backToMyInterviews: 'Back to my interviews',

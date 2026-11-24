@@ -9,25 +9,34 @@
  * recording's microphone and the chunking hook each opened a bare {@code audio: true}
  * and took whatever the device defaulted to.</p>
  */
+const flag = (value: unknown, fallback: boolean) => {
+  const v = String(value ?? '').trim().toLowerCase();
+  return v === '' ? fallback : v === 'true';
+};
+
 /**
- * Whether the browser's own noise suppression (and Chrome's voice isolation) is applied. Off by default.
- *
- * It was on, and it cut speech it took for noise: a quiet or unclear voice lost syllables and whole words before the
- * speech service ever heard it, and answers came back short or empty. The speech service copes with room noise far
- * better than with clipped speech, so it now gets the voice as the microphone heard it. Echo cancellation and
- * automatic gain stay: the first keeps the interviewer's voice out, the second lifts a quiet speaker. Set
- * VITE_MIC_NOISE_SUPPRESSION=true to turn suppression back on.
+ * The browser's (Chrome and Edge) noise suppression: on. Without it, room noise around a candidate went into the
+ * transcript as words. Set VITE_MIC_NOISE_SUPPRESSION=false to turn it off.
  */
-const NOISE_SUPPRESSION = String(import.meta.env.VITE_MIC_NOISE_SUPPRESSION ?? '').trim().toLowerCase() === 'true';
+const NOISE_SUPPRESSION = flag(import.meta.env.VITE_MIC_NOISE_SUPPRESSION, true);
+
+/**
+ * Chrome's voice isolation, a much stronger filter on top of noise suppression: off. It removed noise, but it also
+ * cut quiet or unclear speech it did not recognise as a voice, and a candidate speaking low lost words before the
+ * speech service ever heard them. Noise suppression alone keeps the room out without that. Set
+ * VITE_MIC_VOICE_ISOLATION=true to turn it on.
+ */
+const VOICE_ISOLATION = flag(import.meta.env.VITE_MIC_VOICE_ISOLATION, false);
 
 export const MIC_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  // Keeps the interviewer's voice out of the answer.
   echoCancellation: true,
   noiseSuppression: NOISE_SUPPRESSION,
+  // Lifts a quiet speaker to a steady level.
   autoGainControl: true,
   // One channel: speech has no use for two, and it halves what is sent and recorded.
   channelCount: 1,
-  // Chrome's voice isolation goes with noise suppression: asked for only when that is on.
-  ...({ voiceIsolation: NOISE_SUPPRESSION } as MediaTrackConstraints),
+  ...({ voiceIsolation: VOICE_ISOLATION } as MediaTrackConstraints),
 };
 
 export interface MicProcessingReport {

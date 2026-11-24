@@ -1350,6 +1350,7 @@ export function useVoiceInterview() {
     isInterviewerSpeaking: audioPlayback.isPlaying || awaitingInterviewerAudio,
     amplitude: audioPlayback.amplitude,
     audioLevel: audioStreaming.audioLevel,
+    lowVoice: audioStreaming.lowVoice,
     /**
      * The interviewer's spoken voice, for mixing into the screen recording so
      * a reviewer hears both halves of the conversation rather than a

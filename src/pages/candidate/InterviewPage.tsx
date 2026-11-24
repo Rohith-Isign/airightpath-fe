@@ -1845,6 +1845,12 @@ export function InterviewPage() {
                   <span className="text-xs text-[var(--textTertiary)] w-8 text-right">{voiceInterview.audioLevel ?? 0}%</span>
                 </div>
               )}
+              {/* Fixed at the microphone, where it can be: a voice this low is what the speech service mishears. */}
+              {voiceInterview.isRecording && voiceInterview.lowVoice && (
+                <p role="status" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+                  {STRINGS.candidateInterview.lowVoice}
+                </p>
+              )}
               {questionTimer.isTimerActive && voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking && (
                 <div className="mb-3 flex items-center justify-center gap-3">
                   <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${questionTimer.secondsLeft <= 10 ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' : questionTimer.secondsLeft <= 20 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'}`}>
