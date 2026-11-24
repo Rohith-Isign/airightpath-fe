@@ -418,7 +418,26 @@ export interface VoiceEvaluationResult {
   /** How much the score rests on. INSUFFICIENT means too little was asked or answered to give a verdict. */
   evidenceLevel?: 'SUFFICIENT' | 'PARTIAL' | 'INSUFFICIENT';
   /** Everything a complete interview for this role should have tested, each with how the candidate did on it. */
-  expectedConcepts?: { concept: string; area: string; status: 'CORRECT' | 'PARTIAL' | 'INCORRECT' | 'NOT_ASKED'; questionNumbers?: number[] | null }[];
+  expectedConcepts?: {
+    concept: string;
+    area: string;
+    status: 'CORRECT' | 'PARTIAL' | 'INCORRECT' | 'NOT_ASKED';
+    questionNumbers?: number[] | null;
+    /** What in the job it comes from: a required skill, a responsibility, or the depth the experience level needs. */
+    requirement?: 'SKILL' | 'RESPONSIBILITY' | 'EXPERIENCE' | null;
+    /** The required skill it belongs to. */
+    skill?: string | null;
+    /** CORE (the role cannot be done without it, counts double) or SUPPORTING. */
+    importance?: 'CORE' | 'SUPPORTING' | null;
+  }[];
+  /** The pass mark: the share of the role's requirements, out of 100, a pass needs. */
+  passMark?: number | null;
+  /** Whether the role fit reached the pass mark with every core skill shown. */
+  meetsPassMark?: boolean | null;
+  /** Why the result is what it is, in a sentence or two. */
+  resultReason?: string | null;
+  /** Core required skills the candidate did not show at all. */
+  missingCoreSkills?: string[] | null;
   /** Where to improve: for each weak or untested area, the gap and what to study and practise, most important first. */
   improvementPlan?: { skill?: string | null; gap?: string | null; action: string; priority?: 'HIGH' | 'MEDIUM' | 'LOW' | null }[] | null;
   /** For each answered question: what the answer got right, and what cost it the missing marks. */
