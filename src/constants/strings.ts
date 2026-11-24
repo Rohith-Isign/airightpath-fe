@@ -461,6 +461,7 @@ export const STRINGS = {
     screenReduced:
       'The interview must fill your whole screen. Close any side panel or other window (including AI assistants) and keep the interview in full screen.',
     pasteBlocked: 'Pasting is not allowed in the notepad. Please type your answer.',
+    appSwitchBlocked: 'Switching to other applications is not allowed during the interview. This has been recorded.',
   },
   englishOnly: {
     title: 'Please answer in English',

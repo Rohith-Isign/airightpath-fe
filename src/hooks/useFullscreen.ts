@@ -25,7 +25,15 @@ export function useFullscreen(options?: UseFullscreenOptions) {
     const handler = () => {
       const nowFullscreen = !!document.fullscreenElement;
       setIsFullscreen(nowFullscreen);
-      if (!nowFullscreen) keyboardLock()?.unlock?.();
+      // Locked on every way into fullscreen, not only through enterFullscreen: the interview also gets there through
+      // the "return to full screen" button and after the screen-share picker, and a lock taken before fullscreen was
+      // really on was refused without a word, leaving Alt+Tab working.
+      if (nowFullscreen) {
+        keyboardLock()?.lock?.()
+          .catch((e: unknown) => console.warn('[fullscreen] Keyboard lock refused; Alt+Tab is not captured', e));
+      } else {
+        keyboardLock()?.unlock?.();
+      }
 
       // If exited fullscreen and it was NOT intentional, count as a warning
       if (!nowFullscreen && !intentionalExitRef.current) {
@@ -44,8 +52,7 @@ export function useFullscreen(options?: UseFullscreenOptions) {
   const enterFullscreen = useCallback(async () => {
     try {
       await document.documentElement.requestFullscreen();
-      // Locked once fullscreen is on; it is refused outside fullscreen.
-      await keyboardLock()?.lock?.().catch(() => undefined);
+      // The lock itself is taken by the fullscreenchange handler above, once fullscreen is really on.
     } catch {
       // Fullscreen not supported or denied
     }

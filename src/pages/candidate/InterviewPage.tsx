@@ -371,6 +371,10 @@ export function InterviewPage() {
   // browser's own permission prompts before it do not count.
   const tabSwitchesRef = useRef(0);
   usePageVisibility({
+    // Short: a quick flick to another app (an AI assistant, for a glance at an answer) used to come back inside the
+    // 1s window and was never counted. Permission prompts and the screen picker, which the long window was for, all
+    // happen before the interview is running and are not counted anyway.
+    blurDebounceMs: 300,
     onHidden: () => {
       if (!PROCTORING_CONFIG.tabSwitch.enabled || !interviewRunningRef.current) return;
       tabSwitchesRef.current += 1;
@@ -378,6 +382,31 @@ export function InterviewPage() {
       voiceInterview.sendProctoringEvent('tab_switch', `Left the interview tab (${tabSwitchesRef.current})`);
     },
   });
+
+  // Alt+Tab and the Windows key. With the keyboard lock on (Chrome/Edge in fullscreen) they reach the page instead of
+  // switching apps: refused, told, and recorded, so an attempt shows in the report even though it did not work.
+  const reportAppSwitchRef = useRef<(detail: string) => void>(() => undefined);
+  reportAppSwitchRef.current = (detail: string) => {
+    showToast(STRINGS.lockdown.appSwitchBlocked, 'warning');
+    voiceInterview.sendProctoringEvent('app_switch_attempt', detail);
+  };
+  useEffect(() => {
+    let lastReported = 0;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!interviewRunningRef.current) return;
+      const appSwitch = (e.altKey && e.key === 'Tab') || e.key === 'Meta' || e.key === 'OS';
+      if (!appSwitch) return;
+      e.preventDefault();
+      // Holding the key repeats it; one report per few seconds.
+      if (Date.now() - lastReported < 3000) return;
+      lastReported = Date.now();
+      reportAppSwitchRef.current(
+        `Pressed ${e.key === 'Tab' ? 'Alt+Tab' : 'the Windows key'} to switch to another application`,
+      );
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
 
   // DevTools detection
   const { detectionCount: devToolsCount } = useDevToolsDetection();
