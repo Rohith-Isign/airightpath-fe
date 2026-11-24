@@ -481,6 +481,8 @@ export const STRINGS = {
       left > 0 ? `${left} characters left` : 'Limit reached: corrections only, not a new answer. Send it as it is.',
     edit: 'Edit',
     sendNow: 'Send now',
+    rerecord: 'Record again',
+    rerecordHint: 'Not what you said? You can discard it and answer again, once for this question.',
     send: 'Send',
   },
   sessionReplaced: {

@@ -9,15 +9,25 @@
  * recording's microphone and the chunking hook each opened a bare {@code audio: true}
  * and took whatever the device defaulted to.</p>
  */
+/**
+ * Whether the browser's own noise suppression (and Chrome's voice isolation) is applied. Off by default.
+ *
+ * It was on, and it cut speech it took for noise: a quiet or unclear voice lost syllables and whole words before the
+ * speech service ever heard it, and answers came back short or empty. The speech service copes with room noise far
+ * better than with clipped speech, so it now gets the voice as the microphone heard it. Echo cancellation and
+ * automatic gain stay: the first keeps the interviewer's voice out, the second lifts a quiet speaker. Set
+ * VITE_MIC_NOISE_SUPPRESSION=true to turn suppression back on.
+ */
+const NOISE_SUPPRESSION = String(import.meta.env.VITE_MIC_NOISE_SUPPRESSION ?? '').trim().toLowerCase() === 'true';
+
 export const MIC_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
-  noiseSuppression: true,
+  noiseSuppression: NOISE_SUPPRESSION,
   autoGainControl: true,
   // One channel: speech has no use for two, and it halves what is sent and recorded.
   channelCount: 1,
-  // Chrome's newer, stronger voice isolation. A browser that does not know the
-  // constraint ignores it, so it is a free upgrade where it exists.
-  ...({ voiceIsolation: true } as MediaTrackConstraints),
+  // Chrome's voice isolation goes with noise suppression: asked for only when that is on.
+  ...({ voiceIsolation: NOISE_SUPPRESSION } as MediaTrackConstraints),
 };
 
 export interface MicProcessingReport {

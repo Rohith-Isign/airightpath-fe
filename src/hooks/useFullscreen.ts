@@ -29,7 +29,9 @@ export function useFullscreen(options?: UseFullscreenOptions) {
       // the "return to full screen" button and after the screen-share picker, and a lock taken before fullscreen was
       // really on was refused without a word, leaving Alt+Tab working.
       if (nowFullscreen) {
-        keyboardLock()?.lock?.()
+        // Only Tab, which is what Alt+Tab needs. Locking every key also took the Windows key and Print Screen, so a
+        // screenshot could not be taken, and held Escape. Those stay with the operating system.
+        keyboardLock()?.lock?.(['Tab'])
           .catch((e: unknown) => console.warn('[fullscreen] Keyboard lock refused; Alt+Tab is not captured', e));
       } else {
         keyboardLock()?.unlock?.();

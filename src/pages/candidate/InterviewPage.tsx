@@ -313,13 +313,20 @@ export function InterviewPage() {
   const interviewRunningRef = useRef(false);
   /** True while Begin is waiting for the candidate to enter fullscreen, so the box asking for it is shown. */
   const [awaitingFullscreen, setAwaitingFullscreen] = useState(false);
-  const { isFullscreen, enterFullscreen, fullscreenExitCount } = useFullscreen({
+  const { isFullscreen, enterFullscreen, exitFullscreen, fullscreenExitCount } = useFullscreen({
     onExitAttempt: (count) => {
       if (!interviewRunningRef.current) return;
       showToast(MESSAGES.interview.fullscreenExit(count), 'warning');
       voiceInterview.sendProctoringEvent('fullscreen_exit', `Exit count: ${count}`);
     },
   });
+  // Leaving the interview page, by any route, leaves fullscreen and releases the keyboard with it.
+  useEffect(() => {
+    return () => {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+      (navigator as unknown as { keyboard?: { unlock?: () => void } }).keyboard?.unlock?.();
+    };
+  }, []);
   // A side panel or another window taking part of the screen while the interview is in fullscreen.
   useScreenCoverage({
     active:
@@ -383,8 +390,9 @@ export function InterviewPage() {
     },
   });
 
-  // Alt+Tab and the Windows key. With the keyboard lock on (Chrome/Edge in fullscreen) they reach the page instead of
-  // switching apps: refused, told, and recorded, so an attempt shows in the report even though it did not work.
+  // Alt+Tab. With the keyboard lock on (Chrome/Edge in fullscreen) it reaches the page instead of switching apps:
+  // refused, told, and recorded, so an attempt shows in the report even though it did not work. The Windows key and
+  // Print Screen are left alone, so screenshots work; switching away with them still counts as leaving the window.
   const reportAppSwitchRef = useRef<(detail: string) => void>(() => undefined);
   reportAppSwitchRef.current = (detail: string) => {
     showToast(STRINGS.lockdown.appSwitchBlocked, 'warning');
@@ -394,14 +402,13 @@ export function InterviewPage() {
     let lastReported = 0;
     const onKeyDown = (e: KeyboardEvent) => {
       if (!interviewRunningRef.current) return;
-      const appSwitch = (e.altKey && e.key === 'Tab') || e.key === 'Meta' || e.key === 'OS';
-      if (!appSwitch) return;
+      if (!(e.altKey && e.key === 'Tab')) return;
       e.preventDefault();
       // Holding the key repeats it; one report per few seconds.
       if (Date.now() - lastReported < 3000) return;
       lastReported = Date.now();
       reportAppSwitchRef.current(
-        `Pressed ${e.key === 'Tab' ? 'Alt+Tab' : 'the Windows key'} to switch to another application`,
+        'Pressed Alt+Tab to switch to another application',
       );
     };
     window.addEventListener('keydown', onKeyDown, true);
@@ -556,6 +563,10 @@ export function InterviewPage() {
       if (postCompletionStartedRef.current) return;
       postCompletionStartedRef.current = true;
       setShowEndConfirm(false);
+      // The interview is over: proctoring stops, and fullscreen and the keyboard lock are released straight away.
+      // They used to stay on after the end, so the candidate was held in fullscreen with Escape captured.
+      interviewRunningRef.current = false;
+      void exitFullscreen();
       try {
         setPostCompletionStep('ending');
         stopDetection();
@@ -605,6 +616,7 @@ export function InterviewPage() {
       navigate,
       mobileToken,
       showToast,
+      exitFullscreen,
     ]
   );
 
@@ -1660,7 +1672,8 @@ export function InterviewPage() {
             >
               <BookOpen size={14} /> <span className="hidden sm:inline">{STRINGS.candidateInterview.topBar.rules}</span>
             </button>
-            <button onClick={() => setShowEndConfirm(true)} disabled={!!postCompletionStep} className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors">
+            {/* Solid red, so it reads as the live, final action it is: the faint tint it had looked disabled. */}
+            <button onClick={() => setShowEndConfirm(true)} disabled={!!postCompletionStep} className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold transition-colors">
               <LogOut size={14} /> {STRINGS.candidateInterview.topBar.end}
             </button>
           </div>
@@ -1961,7 +1974,19 @@ export function InterviewPage() {
                         </p>
                       );
                     })()}
+                    {voiceInterview.canRerecord && !voiceInterview.review.editing && (
+                      <p className="text-xs text-slate-400">{STRINGS.answerReview.rerecordHint}</p>
+                    )}
                     <div className="flex flex-wrap justify-end gap-2">
+                      {voiceInterview.canRerecord && (
+                        <button
+                          type="button"
+                          onClick={voiceInterview.rerecordReview}
+                          className="rounded-xl border border-white/25 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                        >
+                          {STRINGS.answerReview.rerecord}
+                        </button>
+                      )}
                       {!voiceInterview.review.editing && (
                         <button
                           type="button"

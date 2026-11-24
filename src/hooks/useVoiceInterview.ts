@@ -853,6 +853,27 @@ export function useVoiceInterview() {
     resolve(current.text.trim() ? current.text : current.original);
   }, []);
 
+  /**
+   * Whether this question's answer has already been recorded again once. A transcript that is plainly not what the
+   * candidate said (the microphone caught someone else, or the speech service misheard all of it) cannot be fixed by
+   * editing, so they may discard it and answer again, once per question. Reset when an answer is sent.
+   */
+  const rerecordUsedRef = useRef(false);
+  const rerecordRequestedRef = useRef(false);
+  const [canRerecord, setCanRerecord] = useState(true);
+
+  /** Discards the answer under review and goes back to answering, once per question. */
+  const rerecordReview = useCallback(() => {
+    const resolve = reviewResolveRef.current;
+    if (!resolve || rerecordUsedRef.current) return;
+    rerecordUsedRef.current = true;
+    rerecordRequestedRef.current = true;
+    setCanRerecord(false);
+    reviewResolveRef.current = null;
+    setReview(null);
+    resolve(null);
+  }, []);
+
   /** Opens the text for editing: the short countdown stops and the editing limit starts. */
   const editReview = useCallback(() => {
     setReview((prev) =>
@@ -962,7 +983,31 @@ export function useVoiceInterview() {
       // nothing transcribed to check.
       if (transcript.trim() && !manualTranscript) {
         const reviewed = await reviewAnswer(transcript);
-        if (reviewed === null) return; // this window was replaced, or the page closed, while it was showing
+        if (reviewed === null) {
+          if (rerecordRequestedRef.current) {
+            // The candidate said the text is not what they said. Nothing is sent; they answer the same question
+            // again. Recorded with what was heard, so a reviewer can see it was discarded and why that is plausible.
+            rerecordRequestedRef.current = false;
+            sendToInterview("proctoring-event", {
+              type: "answer_rerecorded",
+              details: `Answer discarded and recorded again. Heard: "${transcript.trim().slice(0, 400)}"`,
+            });
+            transcriptRef.current = "";
+            wordTimestampsRef.current = [];
+            chunkTextsRef.current = new Map();
+            setCurrentTranscript("");
+            setConversation((prev) => [
+              ...prev,
+              {
+                role: "system",
+                content: "That answer was not sent. Press the mic and answer the question again.",
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+            setState("active");
+          }
+          return; // otherwise this window was replaced, or the page closed, while it was showing
+        }
         if (reviewed.trim() !== transcript.trim()) {
           // A correction is fine; typing a different answer is not. Recorded so a reviewer can compare them.
           sendToInterview("proctoring-event", {
@@ -1032,6 +1077,9 @@ export function useVoiceInterview() {
         }
       }
       sendToInterview("submit-answer", payload);
+      // The next question gets its own chance to record again.
+      rerecordUsedRef.current = false;
+      setCanRerecord(true);
 
       // What was said belongs to this answer only. The transcript used to be cleared only when the mic was next
       // pressed, so a code answer sent from the notepad without speaking carried the previous spoken answer along
@@ -1265,6 +1313,8 @@ export function useVoiceInterview() {
     dismissLanguageAlert: () => setLanguageAlert(null),
     review,
     editReview,
+    rerecordReview,
+    canRerecord,
     setReviewText,
     sendReviewNow: finishReview,
     sessionReplaced,
