@@ -11,6 +11,11 @@ import { PendingAssessmentsProvider } from '@/contexts/PendingAssessmentsContext
 import { PendingInterviewsProvider } from '@/contexts/PendingInterviewsContext';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { installInvisibleCharGuard } from '@/utils/invisible-chars.utils';
+
+// No field anywhere accepts invisible characters: a value of only a zero-width space looked empty but passed
+// "required". Installed before the first render, so it covers every input and textarea in the app.
+installInvisibleCharGuard();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
