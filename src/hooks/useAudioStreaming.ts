@@ -32,7 +32,18 @@ import { aiService } from "@/services/ai.service";
 /** Smallest blob worth sending; below this Whisper answers "audio too short". */
 const MIN_CHUNK_BYTES = 2000;
 
-const SILENCE_FLOOR = parseFloat(import.meta.env.VITE_TRANSCRIPTION_SILENCE_FLOOR ?? '') || 6;
+// 4, with the browser's noise suppression on: the room is already removed, so a quiet speaker only has to clear this.
+const SILENCE_FLOOR = parseFloat(import.meta.env.VITE_TRANSCRIPTION_SILENCE_FLOOR ?? '') || 4;
+
+/**
+ * Speech-band level (same 0-100 scale) under which a voice is heard but too low to transcribe well. A candidate who
+ * stays under it for a few seconds while answering is asked to speak up or move closer: a low, unclear voice is what
+ * the speech service mishears, and it is better fixed at the microphone than guessed at afterwards.
+ */
+const LOW_VOICE_LEVEL = parseFloat(import.meta.env.VITE_LOW_VOICE_LEVEL ?? '') || 12;
+/** How long a stretch the level is judged over, and how many low stretches in a row raise the hint. */
+const LOW_VOICE_WINDOW_MS = 2500;
+const LOW_VOICE_WINDOWS = 2;
 
 /**
  * How many readings in a chunk must be above the floor.
@@ -62,6 +73,9 @@ export function useAudioStreaming(
 ) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  /** True while the candidate's voice is coming through too low to transcribe well. */
+  const [lowVoice, setLowVoice] = useState(false);
+  const voiceWindowRef = useRef({ startedAt: 0, peak: 0, lowRuns: 0 });
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   /**
@@ -261,6 +275,25 @@ export function useAudioStreaming(
         if (speechLevel > peakSinceChunkRef.current) {
           peakSinceChunkRef.current = speechLevel;
         }
+
+        // Is the voice there but too low? Judged over short stretches: one with some sound but never reaching the
+        // low-voice level counts as low, one that reaches it clears the hint, and plain silence (thinking) says
+        // nothing either way.
+        const win = voiceWindowRef.current;
+        const nowMs = performance.now();
+        if (win.startedAt === 0) win.startedAt = nowMs;
+        win.peak = Math.max(win.peak, speechLevel);
+        if (nowMs - win.startedAt >= LOW_VOICE_WINDOW_MS) {
+          if (win.peak >= LOW_VOICE_LEVEL) {
+            win.lowRuns = 0;
+            setLowVoice(false);
+          } else if (win.peak >= SILENCE_FLOOR / 2) {
+            win.lowRuns += 1;
+            if (win.lowRuns >= LOW_VOICE_WINDOWS) setLowVoice(true);
+          }
+          win.startedAt = nowMs;
+          win.peak = 0;
+        }
         if (speechLevel >= SILENCE_FLOOR) {
           loudReadingsRef.current += 1;
           quietSinceRef.current = null;
@@ -304,6 +337,8 @@ export function useAudioStreaming(
     }
     analyserRef.current = null;
     setAudioLevel(0);
+    setLowVoice(false);
+    voiceWindowRef.current = { startedAt: 0, peak: 0, lowRuns: 0 };
   }, []);
 
   const startRecording = useCallback(async () => {
@@ -437,6 +472,7 @@ export function useAudioStreaming(
     getSentChunkCount,
     isRecording,
     audioLevel,
+    lowVoice,
     startRecording,
     stopRecording,
     getAudioStream,

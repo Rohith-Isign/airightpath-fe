@@ -48,8 +48,23 @@ export interface VoiceConversationEntryDTO {
   codeOutput?: string;
   /** The interviewer's own 0-10 read on a candidate turn, if it rated one. */
   answerScore?: number;
+  /** Whether that score met the pass mark when it was given (6/10 by default). Absent when not rated. */
+  answerCorrect?: boolean | null;
+  /** A reviewer's score for the answer when they changed the AI's; the AI's answerScore is kept as it was. */
+  reviewedScore?: number | null;
+  reviewNote?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  /** The submitted code solved a different problem than the one asked, so it was scored 0. */
+  codeMismatch?: boolean | null;
   /** The evaluation category an interviewer turn was asking about. */
   topic?: string;
+  /** The specific skill an interviewer turn tested, such as "Spring Boot" (technical round, newer interviews). */
+  skill?: string | null;
+  /** What within the skill an interviewer turn tested, such as "list comprehensions". */
+  competency?: string | null;
+  /** How deep an interviewer question goes (technical round only). Absent on older interviews. */
+  level?: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT' | null;
   /** Whether an interviewer turn opened new ground, pressed, or re-asked. */
   turnKind?: 'NEW_QUESTION' | 'FOLLOW_UP' | 'REPHRASE';
   /**
@@ -134,6 +149,11 @@ export const interviewService = {
   },
 
   /** Has the AI grade the interview again from its transcript and replaces the stored evaluation and score. */
+  /** A reviewer's score for one answer, with the reason; a null score clears it. The AI's score is kept. */
+  reviewAnswer(scheduleId: number, entryId: number, review: { score: number | null; note?: string }) {
+    return api.put<VoiceConversationEntryDTO>(`/api/interview/results/${scheduleId}/answers/${entryId}/review`, review);
+  },
+
   reEvaluate(id: number) {
     return api.post<InterviewSchedule>(ENDPOINTS.INTERVIEWS.RE_EVALUATE(id), undefined, {
       // Grading is a long model call.

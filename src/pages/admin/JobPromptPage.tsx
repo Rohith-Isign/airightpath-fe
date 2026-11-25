@@ -51,7 +51,7 @@ interface PromptTab {
  * Raised from 10,000: the generated coding prompt alone reached the old limit
  * and the editor stopped accepting keystrokes mid-sentence.
  */
-const MAX_PROMPT_LENGTH = 15000;
+const MAX_PROMPT_LENGTH = 30000;
 
 const JOB_PLACEHOLDERS = ['{{skills}}', '{{jobTitle}}', '{{experience}}', '{{education}}', '{{jobDescription}}', '{{companyName}}', '{{location}}', '{{role}}', '{{department}}', '{{jobPrefix}}'];
 

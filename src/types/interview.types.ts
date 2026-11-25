@@ -126,6 +126,13 @@ export interface EffectiveInterviewTemplate {
   adaptiveDifficulty: boolean;
   /** False when none of this was set by the job and it is all platform defaults. */
   configured: boolean;
+  /**
+   * True while the question limits and difficulty are switched off for this round (a server setting, for analysis).
+   * The values above are still the saved ones; they come back into force when the pause is lifted.
+   */
+  paused?: boolean;
+  /** While paused, the turn an interview is stopped at regardless. */
+  safetyCap?: number;
 }
 
 export interface InterviewTemplateRequest {
@@ -282,6 +289,7 @@ export type VoiceInterviewState =
   | "starting"
   | "active"
   | "answering"
+  | "reviewing"
   | "processing"
   | "completed"
   | "error";
@@ -289,6 +297,8 @@ export type VoiceInterviewState =
 // Voice interview REST types
 export interface VoiceStartResponse {
   scheduleId: number;
+  /** This window's id for the interview, sent with every message. Opening it in another window replaces it. */
+  sessionId?: string;
   /**
    * When this interview runs out, as a server timestamp.
    *
@@ -372,6 +382,12 @@ export interface ResponseCompleteMessage {
   terminated: boolean;
   /** Why the interview ended: ai_closed, question_limit, or the server's own reason for forcing it. */
   reason?: string;
+  /** Whether this turn is a new question, a follow-up on the last answer, or the same question re-asked. */
+  turnKind?: 'NEW_QUESTION' | 'FOLLOW_UP' | 'REPHRASE';
+  /** True when the code just submitted solved a different problem than the one asked: it earned no marks. */
+  codeMismatch?: boolean;
+  /** True when the answer just given was not in English: it was not scored, and the candidate is told so. */
+  notEnglish?: boolean;
 }
 
 // Voice evaluation types
@@ -401,6 +417,54 @@ export interface VoiceEvaluationResult {
   assessedScore?: number | null;
   /** How much the score rests on. INSUFFICIENT means too little was asked or answered to give a verdict. */
   evidenceLevel?: 'SUFFICIENT' | 'PARTIAL' | 'INSUFFICIENT';
+  /** Everything a complete interview for this role should have tested, each with how the candidate did on it. */
+  expectedConcepts?: {
+    concept: string;
+    area: string;
+    status: 'CORRECT' | 'PARTIAL' | 'INCORRECT' | 'NOT_ASKED';
+    questionNumbers?: number[] | null;
+    /** What in the job it comes from: a required skill, a responsibility, or the depth the experience level needs. */
+    requirement?: 'SKILL' | 'RESPONSIBILITY' | 'EXPERIENCE' | null;
+    /** The required skill it belongs to. */
+    skill?: string | null;
+    /** CORE (the role cannot be done without it, counts double) or SUPPORTING. */
+    importance?: 'CORE' | 'SUPPORTING' | null;
+  }[];
+  /** The pass mark: the share of the role's requirements, out of 100, a pass needs. */
+  passMark?: number | null;
+  /** Whether the role fit reached the pass mark with every core skill shown. */
+  meetsPassMark?: boolean | null;
+  /** Why the result is what it is, in a sentence or two. */
+  resultReason?: string | null;
+  /** Core required skills the candidate did not show at all. */
+  missingCoreSkills?: string[] | null;
+  /** Where to improve: for each weak or untested area, the gap and what to study and practise, most important first. */
+  improvementPlan?: { skill?: string | null; gap?: string | null; action: string; priority?: 'HIGH' | 'MEDIUM' | 'LOW' | null }[] | null;
+  /** For each answered question: what the answer got right, and what cost it the missing marks. */
+  answerNotes?: { questionNumber: number; gotRight: string; missed: string }[] | null;
+  /** The area each interviewer question was about (FRONTEND, BACKEND, DATABASE, COMMUNICATION and so on). */
+  questionAreas?: { questionNumber: number; area: string }[];
+  /** Score against that full list, 0-100: 1 per concept answered well, a half partly, nothing wrong or not asked. */
+  scopeScore?: number | null;
+  /** One row per skill the job requires (technical round): score, level reached and the category it counts towards. */
+  skillScores?: {
+    skill: string;
+    category?: string | null;
+    mapped?: boolean | null;
+    score: number;
+    highestLevel?: TechnicalLevel | null;
+    questionNumbers?: number[] | null;
+    feedback?: string | null;
+    assessed?: boolean;
+  }[] | null;
+  /** The verdict a senior interviewer would give the hiring manager, in a few sentences. */
+  verdict?: string | null;
+  /** The level the answers showed, with the level the job asks for. */
+  observedSeniority?: string | null;
+  /** What the job needs that this interview never tested. */
+  notCovered?: string[] | null;
+  /** Where answers were right but not deep enough for the role. */
+  depthGaps?: string[] | null;
 }
 
 export interface VoiceCategoryScore {
@@ -415,7 +479,18 @@ export interface VoiceCategoryScore {
   questionNumbers?: number[] | null;
   /** False when no question tested this area: it is shown as not assessed and adds nothing to the overall. */
   assessed?: boolean;
+  /** Set when this row is a skill rather than a scoring category: the category it counts towards. */
+  group?: string;
+  /**
+   * Highest level of this area the candidate demonstrated (L2 only). Absent on a behavioural round and on a result
+   * graded before levels were recorded: show nothing then, not NONE.
+   */
+  highestLevel?: TechnicalLevel | null;
+  /** Whether the resume, projects or introduction showed this area. A claim, not proof of skill. Absent when not stated. */
+  mapped?: boolean | null;
 }
+
+export type TechnicalLevel = 'NONE' | 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT';
 
 export interface SpeechAnalysis {
   averageWordsPerMinute: number;

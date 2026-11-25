@@ -41,6 +41,16 @@ function withCurrentTurn(
     : [...history, currentTurn];
 }
 
+/**
+ * How long a reviewed answer may become. It was a quarter more than was heard (or 40 characters), which is no room at
+ * all when the speech service caught only the first few words: a candidate finishing their sentence was stopped
+ * mid-word with nothing on screen to say why. Now double what was heard, and at least 300 characters more, with the
+ * room left shown under the box. Still not room to type a long new answer, and every edit is recorded.
+ */
+export function reviewEditLimit(original: string): number {
+  return Math.max(original.length * 2, original.length + 300);
+}
+
 export function useVoiceInterview() {
   // State
   const [state, setState] = useState<VoiceInterviewState>("pre-start");
@@ -119,7 +129,7 @@ export function useVoiceInterview() {
   // Coding question state
   const [isCodingQuestion, setIsCodingQuestion] = useState(false);
   const [codeContent, setCodeContent] = useState("");
-  const [codeLanguage, setCodeLanguage] = useState("java");
+  const [codeLanguage, setCodeLanguage] = useState("text");
   /**
    * What the candidate's code printed the last time they ran it.
    *
@@ -128,6 +138,35 @@ export function useVoiceInterview() {
    * sent the source and never learned whether it worked.
    */
   const [codeOutput, setCodeOutput] = useState("");
+  /** The code last sent from the notepad, put back when the interviewer asks for it to be fixed. */
+  const lastSubmittedCodeRef = useRef("");
+  /** This window's id for the interview; see VoiceStartResponse.sessionId. */
+  const sessionIdRef = useRef<string | null>(null);
+  /** Another window opened this interview, so this one has been closed. */
+  const [sessionReplaced, setSessionReplaced] = useState(false);
+
+  /**
+   * The answer's text, shown briefly before it is sent so a speech-to-text mistake can be put right. Sent on its
+   * own after a few seconds, or after a longer limit once the candidate chooses to edit, so it never sits idle.
+   */
+  const [review, setReview] = useState<{
+    original: string;
+    text: string;
+    editing: boolean;
+    secondsLeft: number;
+  } | null>(null);
+  const reviewRef = useRef(review);
+  reviewRef.current = review;
+  const reviewResolveRef = useRef<((text: string | null) => void) | null>(null);
+
+  /**
+   * "Please answer in English", shown prominently: while they are still speaking when the speech check hears
+   * another language, and after an answer the interviewer found was not in English. Cleared when the next
+   * answer starts, or when the candidate closes it.
+   */
+  const [languageAlert, setLanguageAlert] = useState<{ language?: string; live: boolean } | null>(null);
+  /** Whether the chat already says the last answer was not in English, so it is said once per answer. */
+  const languageNoteShownRef = useRef(false);
 
   // Audio hooks
   // Takes the id only; the email was being passed and silently discarded.
@@ -184,7 +223,11 @@ export function useVoiceInterview() {
         console.warn(`Ignoring "${action}" — the interview has not started yet.`);
         return;
       }
-      interviewWsService.send(`/app/interview/${id}/${action}`, body);
+      // Every message says which window sent it, so the server can refuse one from a window that another has
+      // replaced.
+      interviewWsService.send(`/app/interview/${id}/${action}`, sessionIdRef.current
+        ? { ...body, sessionId: sessionIdRef.current }
+        : body);
     },
     [],
   );
@@ -237,7 +280,7 @@ export function useVoiceInterview() {
             setCodeOutput("");
 
             if (!isCoding) {
-              setCodeLanguage("java"); // optional reset
+              setCodeLanguage("text");
             }
 
             // Item 14: Store last question for repeat
@@ -348,6 +391,53 @@ export function useVoiceInterview() {
       //   },
       // );
 
+      // The interview was opened in another window. This one stops at once: the mic, the voice and any answer
+      // in flight, and the page shows why. The newer window carries on with the same interview.
+      interviewWsService.subscribe(
+        `/topic/interview/${id}/session-replaced`,
+        (msg: { sessionId?: string }) => {
+          if (!msg.sessionId || !sessionIdRef.current || msg.sessionId === sessionIdRef.current) return;
+          sessionIdRef.current = null;
+          aiService.setVoiceSessionId(null);
+          if (processingTimeoutRef.current) {
+            clearTimeout(processingTimeoutRef.current);
+            processingTimeoutRef.current = null;
+          }
+          void audioStreaming.stopRecording();
+          audioPlayback.stopPlayback();
+          // An answer waiting to be sent from this window is dropped: the interview carries on elsewhere.
+          reviewResolveRef.current?.(null);
+          reviewResolveRef.current = null;
+          setReview(null);
+          setSessionReplaced(true);
+        },
+      );
+
+      // The answer just sent was spoken in another language. It is not scored, and the candidate is told so at once
+      // rather than finding out from the result.
+      interviewWsService.subscribe(
+        `/topic/interview/${id}/language-warning`,
+        (msg: { language?: string; live?: boolean; source?: string }) => {
+          const language = msg.language
+            ? msg.language.charAt(0).toUpperCase() + msg.language.slice(1)
+            : undefined;
+          setLanguageAlert({ language, live: !!msg.live });
+          // Heard while they are still answering: the banner is enough, and they can switch now.
+          if (msg.live) return;
+          languageNoteShownRef.current = true;
+          setConversation((prev) => [
+            ...prev,
+            {
+              role: "system",
+              content: `Your last answer was not in English${
+                language ? ` (it sounded like ${language})` : ""
+              }, so it could not be scored. This interview can only be done in English: please answer in English.`,
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+        },
+      );
+
       // In useVoiceInterview.ts - response-complete subscription
       interviewWsService.subscribe(
         `/topic/interview/${id}/response-complete`,
@@ -391,14 +481,54 @@ export function useVoiceInterview() {
             // old fixed-question protocol and became true of every reply once
             // questions were generated — so the interview "completed" the
             // moment the candidate answered the first question.
+            // The code just sent answered a different question. Said on screen as well as by the interviewer, so
+            // the candidate does not leave believing it counted.
+            if (msg.codeMismatch) {
+              setConversation((prev) => [
+                ...prev,
+                {
+                  role: "system",
+                  content:
+                    "The code you submitted solves a different problem from the question asked, so it did not earn marks for this question.",
+                  timestamp: new Date().toISOString(),
+                },
+              ]);
+            }
+            // The answer just given was not in English. Carried on the interviewer's reply itself, so the alert
+            // shows with it every time rather than depending on a separate message arriving.
+            if (msg.notEnglish) {
+              setLanguageAlert((prev) => ({ language: prev?.language, live: false }));
+              if (!languageNoteShownRef.current) {
+                languageNoteShownRef.current = true;
+                setConversation((prev) => [
+                  ...prev,
+                  {
+                    role: "system",
+                    content:
+                      "Your last answer was not in English, so it won't be evaluated. This interview can only be done in English: please answer in English.",
+                    timestamp: new Date().toISOString(),
+                  },
+                ]);
+              }
+            }
             const { cleanText, isCoding } = detectAndCleanCodingTag(responseText);
 
             setIsCodingQuestion(isCoding);
-            // Cleared for every question, coding or not. Left in place after a
+            // Cleared for every new question, coding or not. Left in place after a
             // non-coding one, the last problem's code and output were attached
             // to each later spoken answer. The output goes with the editor, or
             // it would be submitted as evidence for the next problem.
-            setCodeContent("");
+            //
+            // The exception is the interviewer asking for the same code to be
+            // fixed (a follow-up or a re-ask with the notepad): the candidate's
+            // last attempt goes back in, as it would on a whiteboard, rather than
+            // making them type it all again.
+            const fixingLastCode =
+              isCoding &&
+              (msg.turnKind === "FOLLOW_UP" || msg.turnKind === "REPHRASE") &&
+              !!lastSubmittedCodeRef.current;
+            setCodeContent(fixingLastCode ? lastSubmittedCodeRef.current : "");
+            if (!isCoding || msg.turnKind === "NEW_QUESTION") lastSubmittedCodeRef.current = "";
             setCodeOutput("");
             setLastQuestionText(cleanText);
             // The previous question's audio must not outlive it: a turn that is
@@ -498,6 +628,8 @@ export function useVoiceInterview() {
         const { data: response } = await aiService.startVoiceInterview(request);
         setScheduleId(response.scheduleId);
         scheduleIdRef.current = response.scheduleId;
+        sessionIdRef.current = response.sessionId ?? null;
+        aiService.setVoiceSessionId(response.sessionId ?? null);
         setInterviewerName(response.interviewerName);
 
         // Detect and strip question type tags from first question
@@ -591,6 +723,8 @@ export function useVoiceInterview() {
     // The mic opens only when the interviewer has finished speaking. It used to interrupt the voice instead, which put
     // the candidate's words on top of the interviewer's and cut the question short.
     if (audioPlayback.isPlaying || awaitingInterviewerAudio) return;
+    setLanguageAlert(null);
+    languageNoteShownRef.current = false;
     transcriptRef.current = "";
     wordTimestampsRef.current = [];
     doneChunksRef.current = new Set();
@@ -700,6 +834,87 @@ export function useVoiceInterview() {
   const submittingRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  /** Shows the answer's text for review, and resolves with the text to send, or null if it was abandoned. */
+  const reviewAnswer = useCallback((text: string) => {
+    return new Promise<string | null>((resolve) => {
+      reviewResolveRef.current = resolve;
+      setReview({ original: text, text, editing: false, secondsLeft: APP_CONFIG.INTERVIEW_REVIEW_SECONDS });
+      setState("reviewing");
+    });
+  }, []);
+
+  /** Ends the review and sends. An emptied text falls back to what was heard: an answer is never sent blank. */
+  const finishReview = useCallback(() => {
+    const current = reviewRef.current;
+    const resolve = reviewResolveRef.current;
+    if (!current || !resolve) return;
+    reviewResolveRef.current = null;
+    setReview(null);
+    resolve(current.text.trim() ? current.text : current.original);
+  }, []);
+
+  /**
+   * Whether this question's answer has already been recorded again once. A transcript that is plainly not what the
+   * candidate said (the microphone caught someone else, or the speech service misheard all of it) cannot be fixed by
+   * editing, so they may discard it and answer again, once per question. Reset when an answer is sent.
+   */
+  const rerecordUsedRef = useRef(false);
+  const rerecordRequestedRef = useRef(false);
+  const [canRerecord, setCanRerecord] = useState(true);
+
+  /** Discards the answer under review and goes back to answering, once per question. */
+  const rerecordReview = useCallback(() => {
+    const resolve = reviewResolveRef.current;
+    if (!resolve || rerecordUsedRef.current) return;
+    rerecordUsedRef.current = true;
+    rerecordRequestedRef.current = true;
+    setCanRerecord(false);
+    reviewResolveRef.current = null;
+    setReview(null);
+    resolve(null);
+  }, []);
+
+  /** Opens the text for editing: the short countdown stops and the editing limit starts. */
+  const editReview = useCallback(() => {
+    setReview((prev) =>
+      prev && !prev.editing
+        ? { ...prev, editing: true, secondsLeft: APP_CONFIG.INTERVIEW_REVIEW_EDIT_SECONDS }
+        : prev,
+    );
+  }, []);
+
+  /**
+   * Changes the text, up to {@link reviewEditLimit}: room to fix words and finish a sentence the speech service cut
+   * off, not to type a whole new answer in place of the spoken one. Every edit is recorded for the reviewer.
+   */
+  const setReviewText = useCallback((text: string) => {
+    setReview((prev) => {
+      if (!prev) return prev;
+      return { ...prev, text: text.slice(0, reviewEditLimit(prev.original)) };
+    });
+  }, []);
+
+  // The countdown, for both the short look and the editing limit. It always ends in a send.
+  const reviewActive = review !== null;
+  useEffect(() => {
+    if (!reviewActive) return;
+    const id = window.setInterval(() => {
+      setReview((prev) => (prev ? { ...prev, secondsLeft: Math.max(0, prev.secondsLeft - 1) } : prev));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [reviewActive]);
+  useEffect(() => {
+    if (review && review.secondsLeft === 0) finishReview();
+  }, [review, finishReview]);
+
+  // Leaving the page with an answer under review abandons it rather than leaving a promise waiting.
+  useEffect(() => {
+    return () => {
+      reviewResolveRef.current?.(null);
+      reviewResolveRef.current = null;
+    };
+  }, []);
+
   // Submit answer — stops recording, waits for final transcription, then sends
   const performSubmit = useCallback(
     async (manualTranscript?: string) => {
@@ -723,7 +938,7 @@ export function useVoiceInterview() {
         });
       }
 
-      const transcript = manualTranscript || transcriptRef.current;
+      let transcript = manualTranscript || transcriptRef.current;
 
       // Code counts as an answer on its own. A coding question can be answered
       // entirely in the editor, and requiring speech as well left a candidate
@@ -764,6 +979,48 @@ export function useVoiceInterview() {
         return;
       }
 
+      // Shown before it is sent, so a mis-heard word can be corrected. Only a spoken answer: a code-only one has
+      // nothing transcribed to check.
+      if (transcript.trim() && !manualTranscript) {
+        const reviewed = await reviewAnswer(transcript);
+        if (reviewed === null) {
+          if (rerecordRequestedRef.current) {
+            // The candidate said the text is not what they said. Nothing is sent; they answer the same question
+            // again. Recorded with what was heard, so a reviewer can see it was discarded and why that is plausible.
+            rerecordRequestedRef.current = false;
+            sendToInterview("proctoring-event", {
+              type: "answer_rerecorded",
+              details: `Answer discarded and recorded again. Heard: "${transcript.trim().slice(0, 400)}"`,
+            });
+            transcriptRef.current = "";
+            wordTimestampsRef.current = [];
+            chunkTextsRef.current = new Map();
+            setCurrentTranscript("");
+            setConversation((prev) => [
+              ...prev,
+              {
+                role: "system",
+                content: "That answer was not sent. Press the mic and answer the question again.",
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+            setState("active");
+          }
+          return; // otherwise this window was replaced, or the page closed, while it was showing
+        }
+        if (reviewed.trim() !== transcript.trim()) {
+          // A correction is fine; typing a different answer is not. Recorded so a reviewer can compare them.
+          sendToInterview("proctoring-event", {
+            type: "transcript_edited",
+            details: `Answer text edited before sending. Heard: "${transcript.trim().slice(0, 400)}" Sent: "${reviewed
+              .trim()
+              .slice(0, 400)}"`,
+          });
+        }
+        transcript = reviewed;
+        setState("processing");
+      }
+
       // The answer is only sent if the connection is up. A send on a dead socket is dropped without a word, the
       // page then sat in "processing" for the full timeout, and the candidate repeated an answer the server
       // already had. The client reconnects on its own within a couple of seconds, so wait for it first.
@@ -786,6 +1043,7 @@ export function useVoiceInterview() {
       // Only a coding question takes code: on any other, the editor is not on screen, so whatever is
       // left in it is not part of the answer.
       const submittedCode = isCodingQuestion ? codeContent : "";
+      if (submittedCode.trim()) lastSubmittedCodeRef.current = submittedCode;
       const submittedLanguage = codeLanguage;
       const submittedOutput = isCodingQuestion ? codeOutput : "";
 
@@ -819,6 +1077,17 @@ export function useVoiceInterview() {
         }
       }
       sendToInterview("submit-answer", payload);
+      // The next question gets its own chance to record again.
+      rerecordUsedRef.current = false;
+      setCanRerecord(true);
+
+      // What was said belongs to this answer only. The transcript used to be cleared only when the mic was next
+      // pressed, so a code answer sent from the notepad without speaking carried the previous spoken answer along
+      // with it, and the interviewer read the same old words attached to every new submission.
+      transcriptRef.current = "";
+      wordTimestampsRef.current = [];
+      chunkTextsRef.current = new Map();
+      setCurrentTranscript("");
 
       audioArrivedRef.current = false;
       clearAwaitingAudio();
@@ -832,7 +1101,7 @@ export function useVoiceInterview() {
         void recoverLostReply();
       }, APP_CONFIG.INTERVIEW_PROCESSING_TIMEOUT_MS);
     },
-    [audioStreaming, codeContent, codeLanguage, codeOutput, isCodingQuestion, sendToInterview, waitForConnection, recoverLostReply],
+    [audioStreaming, codeContent, codeLanguage, codeOutput, isCodingQuestion, sendToInterview, waitForConnection, recoverLostReply, reviewAnswer],
   );
 
   const submitAnswer = useCallback(
@@ -1040,6 +1309,15 @@ export function useVoiceInterview() {
   }, []);
 
   return {
+    languageAlert,
+    dismissLanguageAlert: () => setLanguageAlert(null),
+    review,
+    editReview,
+    rerecordReview,
+    canRerecord,
+    setReviewText,
+    sendReviewNow: finishReview,
+    sessionReplaced,
     // State
     state,
     endReason,
@@ -1072,6 +1350,7 @@ export function useVoiceInterview() {
     isInterviewerSpeaking: audioPlayback.isPlaying || awaitingInterviewerAudio,
     amplitude: audioPlayback.amplitude,
     audioLevel: audioStreaming.audioLevel,
+    lowVoice: audioStreaming.lowVoice,
     /**
      * The interviewer's spoken voice, for mixing into the screen recording so
      * a reviewer hears both halves of the conversation rather than a

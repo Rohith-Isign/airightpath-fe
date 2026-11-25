@@ -43,11 +43,11 @@ export function useQuestionTimer({ state, isPlaying, isCodingQuestion, onTimeout
   const isCodingRef = useRef(isCodingQuestion);
   isCodingRef.current = isCodingQuestion;
 
-  const startTimer = useCallback(() => {
+  const startTimer = useCallback((seconds?: number) => {
     clearTimer();
-    const timeout = isCodingRef.current
+    const timeout = seconds ?? (isCodingRef.current
       ? APP_CONFIG.INTERVIEW_CODING_QUESTION_TIMEOUT_SECONDS
-      : APP_CONFIG.INTERVIEW_QUESTION_TIMEOUT_SECONDS;
+      : APP_CONFIG.INTERVIEW_QUESTION_TIMEOUT_SECONDS);
     remainingRef.current = timeout;
     setSecondsLeft(timeout);
     setIsTimerActive(true);
@@ -123,9 +123,13 @@ export function useQuestionTimer({ state, isPlaying, isCodingQuestion, onTimeout
     };
   }, []);
 
+  /** Gives the open question more time: the countdown restarts from the given number of seconds. */
+  const extend = useCallback((seconds: number) => startTimer(seconds), [startTimer]);
+
   return {
     secondsLeft,
     isTimerActive,
+    extend,
     consecutiveSkips,
     resetSkipCounter,
     incrementSkipCounter,

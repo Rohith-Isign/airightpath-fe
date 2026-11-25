@@ -49,6 +49,7 @@ import {
   interviewCompletionLabel,
   interviewCompletionTone,
 } from '@/utils/interview-submission.utils';
+import { scorePercent } from '@/utils/format.utils';
 
 /**
  * Widths for the fixed-layout table, in two sets.
@@ -160,7 +161,7 @@ function ScoreCell({ interview }: Readonly<{ interview: InterviewSchedule }>) {
   const level = performanceLevel(score);
   return (
     <span className="flex flex-col items-start gap-0.5">
-      <span className="font-semibold text-[var(--text)]">{score.toFixed(1)}/10</span>
+      <span className="font-semibold text-[var(--text)]">{scorePercent(score)}</span>
       {level && (
         <Badge variant={level.variant} size="sm">
           {level.label}
@@ -694,7 +695,7 @@ export function InterviewResultsPage() {
                   <Award size={20} className="text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-[var(--text)]">{stats.avgScore}/10</p>
+                  <p className="text-2xl font-bold text-[var(--text)]">{scorePercent(Number(stats.avgScore))}</p>
                   <p className="text-xs text-[var(--textSecondary)]">{STRINGS.interviewResults.stats.avgScore}</p>
                 </div>
               </div>

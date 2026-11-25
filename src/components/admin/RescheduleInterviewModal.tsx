@@ -43,6 +43,9 @@ export function RescheduleInterviewModal({
   let problem: string | null = null;
   if (!start || !end) {
     problem = 'Both the start and end are needed.';
+  } else if (start !== toPickerValue(interview.assignedAt) && start < nowDateTimeLocal()) {
+    // Keeping the start it already had is fine (only the end is moving); a new start must be now or later.
+    problem = 'That start time has already passed. Choose the current time or a later one.';
   } else if (start >= end) {
     problem = 'The interview has to start before it ends.';
   } else if (isPast(end)) {

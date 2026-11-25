@@ -1,6 +1,6 @@
 import { STRINGS } from '@/constants/strings';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -32,8 +32,13 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { RadialScore, SummaryStat, SkillBar } from '@/components/admin/result/ResultPrimitives';
 import { PerformanceRating } from '@/components/admin/result/PerformanceRating';
 import { AreaQuestions } from '@/components/admin/result/AreaQuestions';
-import { questionRows } from '@/utils/interview-questions.utils';
+import { answerQuestionNumbers, questionRows } from '@/utils/interview-questions.utils';
 import { ScoreBreakdown } from '@/components/admin/result/ScoreBreakdown';
+import { TechnicalDomainReport } from '@/components/admin/result/TechnicalDomainReport';
+import { AreaBreakdown } from '@/components/admin/result/AreaBreakdown';
+import { HiringVerdict } from '@/components/admin/result/HiringVerdict';
+import { SkillLevelMatrix } from '@/components/admin/result/SkillLevelMatrix';
+import { ImprovementPlan } from '@/components/admin/result/ImprovementPlan';
 import { ProctoringCaptures } from '@/components/admin/result/ProctoringCaptures';
 import { MobileCaptures } from '@/components/admin/result/MobileCaptures';
 import { CodeBlock } from '@/components/interview/CodeBlock';
@@ -66,6 +71,7 @@ import type {
   ProctoringEvent,
   VoiceEvaluationResult,
 } from '@/types/interview.types';
+import { scorePercent } from '@/utils/format.utils';
 
 /** Pipeline order. L2 precedes L3 however the rows happen to be dated. */
 const ROUND_ORDER: InterviewRound[] = ['L2_TECHNICAL', 'L3_BEHAVIORAL'];
@@ -440,7 +446,7 @@ export function InterviewCandidateResultPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryStat
           icon={<BarChart3 size={16} />}
-          value={overall != null ? `${overall.toFixed(1)}/10` : '--'}
+          value={overall != null ? scorePercent(overall) : '--'}
           label={STRINGS.candidateResult.overallScore}
           badge={(() => {
             const level = performanceLevel(overall);
@@ -664,7 +670,7 @@ function RoundSummaryCard({
                   label={category.category}
                   // Category scores are 0-10; SkillBar draws a percentage.
                   percentage={Math.round((category.score ?? 0) * 10)}
-                  detail={`${category.score}/10`}
+                  detail={scorePercent(category.score)}
                 />
               ),
             )}
@@ -788,6 +794,25 @@ function AttemptSection({
   const [open, setOpen] = useState(defaultOpen);
   const [exporting, setExporting] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
+  const formatMenuRef = useRef<HTMLDivElement>(null);
+
+  // The format menu closes on a click anywhere else or on Escape, like any other menu; it used to stay open until a
+  // format was picked.
+  useEffect(() => {
+    if (!formatOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!formatMenuRef.current?.contains(event.target as Node)) setFormatOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFormatOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [formatOpen]);
   const [reEvaluating, setReEvaluating] = useState(false);
   const [confirmReEvaluate, setConfirmReEvaluate] = useState(false);
   const { schedule, attemptNumber, attemptCount } = attempt;
@@ -840,6 +865,7 @@ function AttemptSection({
           evaluation: attempt.evaluation,
           transcript: attempt.transcript,
           reviewReasons: attempt.evaluation?.reviewReasons,
+          proctoring: attempt.proctoring,
           generatedAt: new Date(),
         });
         downloadBlob(blob, interviewReportFileName(schedule));
@@ -863,7 +889,9 @@ function AttemptSection({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface1)]">
+    // No overflow-hidden: it clipped the Download menu, which opens below the header row and outside the box when
+    // the section is folded, leaving only a sliver of it on screen.
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface1)]">
       {confirmReEvaluate && (
         <ConfirmDialog
           isOpen
@@ -937,10 +965,12 @@ function AttemptSection({
               {reEvaluating ? STRINGS.scoreBreakdown.reEvaluating : STRINGS.scoreBreakdown.reEvaluate}
             </Button>
           )}
-          <div className="relative">
+          <div className="relative" ref={formatMenuRef}>
             <Button
               variant="ghost"
               size="sm"
+              aria-haspopup="menu"
+              aria-expanded={formatOpen}
               leftIcon={
                 exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />
               }
@@ -1028,9 +1058,26 @@ function AttemptSection({
 }
 
 function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
-  const { schedule, evaluation, transcript, proctoring } = round;
+  const { schedule, evaluation, proctoring } = round;
+  // Answers a reviewer has re-scored on this screen, applied over what was loaded so the change shows at once.
+  const [reviewed, setReviewed] = useState<Map<number, VoiceConversationEntryDTO>>(new Map());
+  const transcript = useMemo(
+    () => round.transcript.map((entry) => reviewed.get(entry.id) ?? entry),
+    [round.transcript, reviewed],
+  );
+  const onReviewed = useCallback(
+    (entry: VoiceConversationEntryDTO) => setReviewed((prev) => new Map(prev).set(entry.id, entry)),
+    [],
+  );
   const resolved = evaluation;
   const questions = useMemo(() => questionRows(transcript), [transcript]);
+  // Which question each answer belongs to, so the grader's note on it can sit under the answer.
+  const answerNumbers = useMemo(() => answerQuestionNumbers(transcript), [transcript]);
+  const notesByQuestion = useMemo(
+    () => new Map((evaluation?.answerNotes ?? []).map((n) => [n.questionNumber, n])),
+    [evaluation?.answerNotes],
+  );
+  const isTechnicalRound = roundKeyOf(schedule) === 'L2_TECHNICAL';
 
   return (
     <div className="space-y-6">
@@ -1043,6 +1090,112 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
           <InterviewSubmissionInfo schedule={schedule} />
         </CardContent>
       </Card>
+
+      {/* ── Scores by area ──────────────────────────────────────────── */}
+      {/* First, because the verdict is what a reviewer came for; the evidence (proctoring, transcript) supports it
+          below. L2 gets the domain report; the behavioural round keeps its own area list. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <BarChart3 size={18} className="text-[var(--primary)]" />
+            <CardTitle>{isTechnicalRound ? STRINGS.technicalReport.title : STRINGS.candidateResult.scoresByArea}</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {resolved?.categoryScores?.length && isTechnicalRound ? (
+            <div className="space-y-5">
+              <EvidenceNotice evaluation={resolved} />
+              <HiringVerdict evaluation={resolved} />
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
+                <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.overallAssessment}</h4>
+                <PerformanceRating score={resolved.overallScore} reason={resolved.summary} size="md" showMeaning />
+              </div>
+              <TechnicalDomainReport evaluation={resolved} rows={questions} />
+              <div className="border-t border-[var(--border)] pt-4">
+                <SkillLevelMatrix evaluation={resolved} rows={questions} />
+              </div>
+              <div className="border-t border-[var(--border)] pt-4">
+                <AreaBreakdown evaluation={resolved} rows={questions} />
+              </div>
+              <div className="grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2">
+                <BulletList title={STRINGS.candidateResult.strengths} items={resolved.strengths} tone="success" />
+                <BulletList
+                  title={STRINGS.candidateResult.areasToImprove}
+                  items={resolved.areasForImprovement}
+                  tone="warning"
+                />
+              </div>
+              <ImprovementPlan evaluation={resolved} />
+              <details className="rounded-xl border border-[var(--border)] p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-[var(--text)]">
+                  {STRINGS.technicalReport.howBuilt}
+                </summary>
+                <div className="mt-3">
+                  <ScoreBreakdown evaluation={resolved} transcript={transcript} />
+                </div>
+              </details>
+            </div>
+          ) : resolved?.categoryScores?.length ? (
+            <div className="space-y-4">
+              {/* The verdict first, in words, with the grader's reasoning: which candidate is strongest and why
+                  should not need a reviewer to interpret a number. */}
+              <EvidenceNotice evaluation={resolved} />
+              <HiringVerdict evaluation={resolved} />
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
+                <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.overallAssessment}</h4>
+                <PerformanceRating
+                  score={resolved.overallScore}
+                  reason={resolved.summary}
+                  size="md"
+                  showMeaning
+                />
+              </div>
+              <div className="border-t border-[var(--border)] pt-4">
+                <AreaBreakdown evaluation={resolved} rows={questions} />
+              </div>
+              <div className="border-t border-[var(--border)] pt-4">
+                <h4 className="mb-3 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.howScoreReached}</h4>
+                <ScoreBreakdown evaluation={resolved} transcript={transcript} />
+              </div>
+              <h4 className="border-t border-[var(--border)] pt-4 text-sm font-semibold text-[var(--text)]">
+                {STRINGS.candidateResult.eachAreaWithReasoning}
+              </h4>
+              {resolved.categoryScores.map((category) => (
+                <div key={category.category} className="space-y-1.5">
+                  {category.assessed === false ? (
+                    <NotAssessedRow label={category.category} />
+                  ) : (
+                    <>
+                      <SkillBar
+                        label={category.category}
+                        // Category scores are 0-10; SkillBar draws a percentage.
+                        percentage={Math.round((category.score ?? 0) * 10)}
+                        detail={scorePercent(category.score)}
+                      />
+                      <PerformanceRating score={category.score} reason={category.feedback} showMeaning />
+                    </>
+                  )}
+                  <AreaQuestions numbers={category.questionNumbers} rows={questions} />
+                </div>
+              ))}
+              <div className="grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2">
+                <BulletList title={STRINGS.candidateResult.strengths} items={resolved.strengths} tone="success" />
+                <BulletList
+                  title={STRINGS.candidateResult.areasToImprove}
+                  items={resolved.areasForImprovement}
+                  tone="warning"
+                />
+              </div>
+              <ImprovementPlan evaluation={resolved} />
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
+              {STRINGS.candidateResult.notScored}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
 
       {/* ── Who sat it, and where ───────────────────────────────────── */}
       <ProctoringCaptures
@@ -1097,71 +1250,6 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
         </CardContent>
       </Card>
 
-      {/* ── Scores by area ──────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <BarChart3 size={18} className="text-[var(--primary)]" />
-            <CardTitle>{STRINGS.candidateResult.scoresByArea}</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {resolved?.categoryScores?.length ? (
-            <div className="space-y-4">
-              {/* The verdict first, in words, with the grader's reasoning: which candidate is strongest and why
-                  should not need a reviewer to interpret a number. */}
-              <EvidenceNotice evaluation={resolved} />
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
-                <h4 className="mb-2 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.overallAssessment}</h4>
-                <PerformanceRating
-                  score={resolved.overallScore}
-                  reason={resolved.summary}
-                  size="md"
-                  showMeaning
-                />
-              </div>
-              <div className="border-t border-[var(--border)] pt-4">
-                <h4 className="mb-3 text-sm font-semibold text-[var(--text)]">{STRINGS.candidateResult.howScoreReached}</h4>
-                <ScoreBreakdown evaluation={resolved} transcript={transcript} />
-              </div>
-              <h4 className="border-t border-[var(--border)] pt-4 text-sm font-semibold text-[var(--text)]">
-                {STRINGS.candidateResult.eachAreaWithReasoning}
-              </h4>
-              {resolved.categoryScores.map((category) => (
-                <div key={category.category} className="space-y-1.5">
-                  {category.assessed === false ? (
-                    <NotAssessedRow label={category.category} />
-                  ) : (
-                    <>
-                      <SkillBar
-                        label={category.category}
-                        // Category scores are 0-10; SkillBar draws a percentage.
-                        percentage={Math.round((category.score ?? 0) * 10)}
-                        detail={`${category.score}/10`}
-                      />
-                      <PerformanceRating score={category.score} reason={category.feedback} showMeaning />
-                    </>
-                  )}
-                  <AreaQuestions numbers={category.questionNumbers} rows={questions} />
-                </div>
-              ))}
-              <div className="grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2">
-                <BulletList title={STRINGS.candidateResult.strengths} items={resolved.strengths} tone="success" />
-                <BulletList
-                  title={STRINGS.candidateResult.areasToImprove}
-                  items={resolved.areasForImprovement}
-                  tone="warning"
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="py-6 text-center text-sm text-[var(--textSecondary)]">
-              {STRINGS.candidateResult.notScored}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
       {/* ── The conversation ────────────────────────────────────────── */}
       <Card>
         <CardHeader>
@@ -1178,7 +1266,15 @@ function RoundDetailPanel({ round }: Readonly<{ round: RoundDetail }>) {
           ) : (
             <div className="space-y-3">
               {transcript.map((entry) => (
-                <TranscriptTurn key={entry.id} entry={entry} />
+                <TranscriptTurn
+                  key={entry.id}
+                  entry={entry}
+                  scheduleId={schedule.id}
+                  onReviewed={onReviewed}
+                  note={
+                    entry.role === 'CANDIDATE' ? notesByQuestion.get(answerNumbers.get(entry.id) ?? -1) : undefined
+                  }
+                />
               ))}
             </div>
           )}
@@ -1367,15 +1463,139 @@ function BulletList({
 }
 
 /** How a probe turn is labelled. A new question needs no label — it is the norm. */
+const LEVEL_VARIANT = {
+  BASIC: 'default',
+  INTERMEDIATE: 'info',
+  ADVANCED: 'primary',
+  EXPERT: 'success',
+} as const;
+
+/**
+ * Lets a reviewer change one answer's score, with a reason, before the result is finalised. The AI's score stays on
+ * record; the next re-evaluation grades from the reviewer's.
+ */
+function AnswerReviewControl({
+  scheduleId,
+  entry,
+  onReviewed,
+}: Readonly<{ scheduleId: number; entry: VoiceConversationEntryDTO; onReviewed: (e: VoiceConversationEntryDTO) => void }>) {
+  const [open, setOpen] = useState(false);
+  const [score, setScore] = useState<string>(String(entry.reviewedScore ?? entry.answerScore ?? ''));
+  const [note, setNote] = useState(entry.reviewNote ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (clear = false) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const { data } = await interviewService.reviewAnswer(
+        scheduleId,
+        entry.id,
+        clear ? { score: null } : { score: Number(score), note },
+      );
+      onReviewed(data);
+      setOpen(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'The score could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1.5 text-[11px] font-semibold text-white/80 underline-offset-2 hover:underline"
+      >
+        {entry.reviewedScore != null ? 'Change reviewed score' : 'Adjust score'}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-2 rounded-lg bg-white p-2.5 text-xs text-[var(--text)]">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="font-semibold" htmlFor={`review-score-${entry.id}`}>
+          Score
+        </label>
+        <select
+          id={`review-score-${entry.id}`}
+          value={score}
+          onChange={(e) => setScore(e.target.value)}
+          className="rounded border border-[var(--border)] px-1.5 py-1"
+        >
+          {Array.from({ length: 11 }, (_, i) => (
+            <option key={i} value={i}>
+              {i * 10}%
+            </option>
+          ))}
+        </select>
+        {entry.answerScore != null && <span className="text-[var(--textSecondary)]">AI gave {scorePercent(entry.answerScore)}</span>}
+      </div>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={2}
+        placeholder="Why the score is being changed (required)"
+        className="block w-full rounded border border-[var(--border)] p-1.5"
+      />
+      {error && <p className="text-[var(--error)]">{error}</p>}
+      <p className="text-[var(--textTertiary)]">The AI’s score is kept on record. Re-evaluate with AI afterwards to update the overall result.</p>
+      <div className="flex flex-wrap justify-end gap-2">
+        {entry.reviewedScore != null && (
+          <button type="button" disabled={saving} onClick={() => save(true)} className="px-2 py-1 font-semibold text-[var(--error)]">
+            Remove review
+          </button>
+        )}
+        <button type="button" disabled={saving} onClick={() => setOpen(false)} className="px-2 py-1 font-semibold">
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={saving || note.trim().length < 3 || score === ''}
+          onClick={() => save()}
+          className="rounded bg-[var(--primary)] px-3 py-1 font-semibold text-white disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const TURN_KIND_LABELS: Partial<Record<NonNullable<VoiceConversationEntryDTO['turnKind']>, string>> =
   {
     FOLLOW_UP: STRINGS.candidateResult.turn.followUp,
     REPHRASE: STRINGS.candidateResult.turn.rephrased,
   };
 
-function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }>) {
+function TranscriptTurn({
+  entry,
+  note,
+  scheduleId,
+  onReviewed,
+}: Readonly<{
+  entry: VoiceConversationEntryDTO;
+  note?: { gotRight: string; missed: string };
+  scheduleId: number;
+  onReviewed: (entry: VoiceConversationEntryDTO) => void;
+}>) {
   const isCandidate = entry.role === 'CANDIDATE';
   const probeLabel = entry.turnKind ? TURN_KIND_LABELS[entry.turnKind] : undefined;
+  // The server keeps a leading [CODING] on a coding question because the candidate's screen reads it to open the
+  // notepad. A reviewer does not need the raw tag in the text; it is shown as a badge instead.
+  const isCodingQuestion = !isCandidate && /^\s*\[CODING\]/i.test(entry.content ?? '');
+  // A code answer is stored with the code and a note for the grader ("[CODE (text)] … [RUN OUTPUT] …") after the
+  // spoken words. The code is shown in its own block below, so only the words are shown here, not the same code
+  // twice and an internal note the reviewer does not need.
+  const shownText = isCodingQuestion
+    ? (entry.content ?? '').replace(/^\s*\[CODING\]\s*/i, '')
+    : isCandidate && entry.codeContent
+      ? (entry.content ?? '').split(/\n*\[CODE \(/)[0].trim() || STRINGS.technicalReport.codeOnly
+      : entry.content;
   return (
     <div className={`flex ${isCandidate ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -1388,16 +1608,29 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
         {/* Why the interview doubled back, and onto what. Without these a
             reviewer reads three questions on hash maps and cannot tell a
             deliberate probe from the model losing the thread. */}
-        {!isCandidate && (probeLabel || entry.topic) && (
+        {!isCandidate && (probeLabel || entry.topic || entry.level || isCodingQuestion) && (
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+            {entry.level && (
+              <Badge variant={LEVEL_VARIANT[entry.level]} size="sm">
+                {STRINGS.technicalReport.levelNames[entry.level]}
+              </Badge>
+            )}
+            {isCodingQuestion && (
+              <Badge variant="info" size="sm">
+                {STRINGS.technicalReport.codingQuestion}
+              </Badge>
+            )}
             {probeLabel && (
               <span className="rounded-full bg-[var(--surface2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--textSecondary)]">
                 {probeLabel}
               </span>
             )}
+            {/* The evaluation category the interviewer filed this under: a domain, not the kind of question. */}
             {entry.topic && (
               <span className="text-[10px] uppercase tracking-wider text-[var(--textTertiary)]">
-                {entry.topic}
+                {entry.skill ? `Skill: ${entry.skill} · ` : ''}
+                {entry.competency ? `Tests: ${entry.competency} · ` : ''}
+                {STRINGS.technicalReport.domainLabel}: {entry.topic}
               </span>
             )}
           </div>
@@ -1415,13 +1648,57 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
           </div>
         )}
 
-        <p className="whitespace-pre-wrap text-sm">{entry.content}</p>
+        {/* Flagged by the interviewer and scored 0: the code here answers a different question. */}
+        {isCandidate && entry.codeMismatch && (
+          <div className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-black/30 px-2 py-1">
+            <AlertTriangle size={13} className="flex-shrink-0 text-amber-300" />
+            <span className="text-[11px] font-semibold text-white">{STRINGS.technicalReport.codeMismatch}</span>
+          </div>
+        )}
+
+        <p className="whitespace-pre-wrap text-sm">{shownText}</p>
 
         {isCandidate && entry.codeContent && (
           <CodeBlock code={entry.codeContent} language={entry.codeLanguage} />
         )}
         {/* The model was shown this when scoring, so a reviewer without it is
             reading a different transcript than the one that produced the score. */}
+        {/* A reviewer's correction, shown beside the AI's score, never in place of the record of it. */}
+        {isCandidate && entry.reviewedScore != null && (
+          <div className="mt-2 rounded-lg bg-black/25 px-2.5 py-1.5 text-xs text-white">
+            <span className="font-semibold">
+              Reviewer: {scorePercent(entry.reviewedScore)}
+              {entry.answerScore != null ? ` (AI gave ${scorePercent(entry.answerScore)})` : ''}
+            </span>
+            {entry.reviewNote && <span> — {entry.reviewNote}</span>}
+            {entry.reviewedBy && <span className="block text-white/70">by {entry.reviewedBy}</span>}
+          </div>
+        )}
+        {isCandidate && entry.answerScore != null && (
+          <AnswerReviewControl scheduleId={scheduleId} entry={entry} onReviewed={onReviewed} />
+        )}
+        {/* Why the answer scored what it did: what was right, and what the missing marks were for. */}
+        {isCandidate && note && (note.gotRight || note.missed) && (
+          <div className="mt-2 space-y-1 rounded-lg bg-white/90 p-2.5 text-xs text-[var(--text)]">
+            {entry.answerScore != null && (
+              <p className="font-semibold">Why {scorePercent(entry.answerScore)}</p>
+            )}
+            {note.gotRight && (
+              <p>
+                <span className="font-semibold text-[var(--success)]">✓ Right: </span>
+                {note.gotRight}
+              </p>
+            )}
+            {note.missed && (
+              <p>
+                <span className="font-semibold text-[var(--error)]">
+                  ✗ Missed{entry.answerScore != null && entry.answerScore < 10 ? ` (−${(10 - entry.answerScore) * 10}%)` : ''}:{' '}
+                </span>
+                {note.missed}
+              </p>
+            )}
+          </div>
+        )}
         {isCandidate && entry.codeOutput?.trim() && (
           <div className="mt-2 rounded-lg bg-black/20 p-2">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">
@@ -1451,7 +1728,17 @@ function TranscriptTurn({ entry }: Readonly<{ entry: VoiceConversationEntryDTO }
               that is about whether it was right rather than how it sounded.
               It is what the next question's difficulty was set from. */}
           {isCandidate && entry.answerScore != null && (
-            <span className="text-xs font-medium text-white/80">{entry.answerScore}/10</span>
+            <span className="text-xs font-medium text-white/80">{scorePercent(entry.answerScore)}</span>
+          )}
+          {/* Correct or not, as the server judged it against the pass mark when the answer was rated. */}
+          {isCandidate && entry.answerCorrect != null && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                entry.answerCorrect ? 'bg-white/90 text-[var(--success)]' : 'bg-black/30 text-white'
+              }`}
+            >
+              {entry.answerCorrect ? `✓ ${STRINGS.technicalReport.correct}` : `✗ ${STRINGS.technicalReport.notCorrect}`}
+            </span>
           )}
         </div>
       </div>

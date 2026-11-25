@@ -2,6 +2,7 @@ import { STRINGS } from '@/constants/strings';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { performanceLevel } from '@/utils/performance-level.utils';
+import { scorePercent } from '@/utils/format.utils';
 
 /** Longer than this and the reason is folded behind "Show more". */
 const FOLD_AFTER = 170;
@@ -36,7 +37,7 @@ export function PerformanceRating({
         <Badge variant={level.variant} size={size}>
           {level.label}
         </Badge>
-        <span className="text-xs text-[var(--textTertiary)]">{score?.toFixed(1)} / 10</span>
+        <span className="text-xs text-[var(--textTertiary)]">{scorePercent(score)}</span>
       </div>
       {text && (
         <p className="text-xs leading-relaxed text-[var(--textSecondary)]">

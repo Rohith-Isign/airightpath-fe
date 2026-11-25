@@ -18,7 +18,7 @@ import { INTERVIEW_ASSIGN_STAGES } from '@/utils/interview-assign-stages';
 import type { JobPostDTO, JobApplicationDTO } from '@/types/job.types';
 import { INTERVIEW_ROUND_LABELS } from '@/types/interview.types';
 import type { InterviewRound, InterviewSchedule } from '@/types/interview.types';
-import { formatServerDateTime } from '@/utils/format.utils';
+import { formatScheduledDateTime } from '@/utils/format.utils';
 
 const ROUND_OPTIONS = (Object.keys(INTERVIEW_ROUND_LABELS) as InterviewRound[]).map((value) => ({
   value,
@@ -51,6 +51,14 @@ export function InterviewSchedulerPage() {
   const [minDateTime] = useState(nowDateTimeLocal);
   const deadlineInPast = !!deadlineTime && isPast(deadlineTime);
   const endBeforeStart = !!deadlineTime && !!startTime && deadlineTime <= startTime;
+  /**
+   * Set when the admin picks a start themselves. The default "now" goes stale while the form is filled in, so an
+   * untouched start is moved up to the current minute on submit instead of being refused.
+   */
+  const [startEdited, setStartEdited] = useState(!!handoff.startTime);
+  /** The start an existing booking already has: keeping it is fine even once it has passed. */
+  const [existingStart, setExistingStart] = useState('');
+  const startInPast = startEdited && !!startTime && startTime !== existingStart && startTime < nowDateTimeLocal();
   const [sendEmail, setSendEmail] = useState(handoff.sendEmail ?? true);
   /**
    * Which interview to book. L2 first because it is the round that follows the
@@ -136,10 +144,10 @@ export function InterviewSchedulerPage() {
     if (!mine) return '';
     const short = round === 'L2_TECHNICAL' ? 'L2' : 'L3';
     if (mine.attemptStatus === 'COMPLETED') return `${short} finished`;
-    if (mine.deadlineTime && isPast(mine.deadlineTime)) return `${short} missed (was due ${formatServerDateTime(mine.deadlineTime)})`;
+    if (mine.deadlineTime && isPast(mine.deadlineTime)) return `${short} missed (was due ${formatScheduledDateTime(mine.deadlineTime)})`;
     return mine.attemptStatus === 'IN_PROGRESS'
       ? `${short} in progress`
-      : `${short} assigned: ${formatServerDateTime(mine.assignedAt)} → ${mine.deadlineTime ? formatServerDateTime(mine.deadlineTime) : 'no end time set'}`;
+      : `${short} assigned: ${formatScheduledDateTime(mine.assignedAt)} → ${mine.deadlineTime ? formatScheduledDateTime(mine.deadlineTime) : 'no end time set'}`;
   }
 
   /** Not started yet, so their window can still be moved. */
@@ -156,6 +164,7 @@ export function InterviewSchedulerPage() {
     if (!first || (timesTouched.current && deadlineTime)) return;
     const picker = (stamp?: string) => /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(stamp ?? '')?.slice(1, 3).join('T') ?? '';
     setStartTime(picker(first.assignedAt) || startTime);
+    setExistingStart(picker(first.assignedAt));
     setDeadlineTime(picker(first.deadlineTime));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstMovableId]);
@@ -222,10 +231,17 @@ export function InterviewSchedulerPage() {
       showToast(MESSAGES.admin.interviewScheduler.deadlineTimeRequired, 'warning');
       return;
     }
+    if (startInPast) {
+      showToast('The start time has already passed. Choose the current time or a later one.', 'warning');
+      return;
+    }
     if (!startTime || endBeforeStart) {
       showToast('The interview must end after it starts.', 'warning');
       return;
     }
+    // An untouched default start that went stale while the form was filled in opens the interview now instead.
+    const now = nowDateTimeLocal();
+    const opensAt = startTime !== existingStart && startTime < now ? now : startTime;
 
     setSubmitting(true);
     try {
@@ -233,7 +249,7 @@ export function InterviewSchedulerPage() {
       // left alone; everyone else is booked now.
       for (const sch of movable) {
         await interviewService.rescheduleInterview(sch.id, {
-          assignedAt: startTime,
+          assignedAt: opensAt,
           deadlineTime,
           notify: sendEmail,
         });
@@ -243,7 +259,7 @@ export function InterviewSchedulerPage() {
         await interviewService.assignInterviewBulk({
           emails: toBook,
           jobPrefix: selectedPrefix,
-          assignedAt: startTime,
+          assignedAt: opensAt,
           deadlineTime,
           sendEmail,
           round,
@@ -422,8 +438,8 @@ export function InterviewSchedulerPage() {
                 </p>
                 {movable.slice(0, 5).map((sch) => (
                   <p key={sch.id} className="text-xs text-[var(--textSecondary)]">
-                    {sch.email}: {formatServerDateTime(sch.assignedAt)} →{' '}
-                    {sch.deadlineTime ? formatServerDateTime(sch.deadlineTime) : 'no end time set, add one below'}
+                    {sch.email}: {formatScheduledDateTime(sch.assignedAt)} →{' '}
+                    {sch.deadlineTime ? formatScheduledDateTime(sch.deadlineTime) : 'no end time set, add one below'}
                   </p>
                 ))}
                 <p className="text-xs text-[var(--textSecondary)]">
@@ -443,10 +459,12 @@ export function InterviewSchedulerPage() {
               value={startTime}
               onChange={(value) => {
                 timesTouched.current = true;
+                setStartEdited(true);
                 setStartTime(value);
               }}
               leftIcon={<Calendar size={16} />}
-              helperText="The interview opens for the candidate at this time"
+              helperText={startInPast ? undefined : 'The interview opens for the candidate at this time — now or later'}
+              error={startInPast ? 'The start time has already passed. Choose the current time or a later one.' : undefined}
             />
             <DateTimeInput
               label="End date & time (deadline)"
@@ -500,7 +518,7 @@ export function InterviewSchedulerPage() {
                 onClick={handleSubmit}
                 isLoading={submitting}
                 leftIcon={!submitting ? <Send size={16} /> : undefined}
-                disabled={!selectedPrefix || selectedEmails.size === 0 || !deadlineTime || !startTime || endBeforeStart}
+                disabled={!selectedPrefix || selectedEmails.size === 0 || !deadlineTime || !startTime || endBeforeStart || startInPast}
               >
                 {movable.length > 0 ? 'Update Interview' : 'Schedule Interview'}
                 {selectedEmails.size > 1 ? ` (${selectedEmails.size})` : ''}

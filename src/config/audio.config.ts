@@ -9,15 +9,34 @@
  * recording's microphone and the chunking hook each opened a bare {@code audio: true}
  * and took whatever the device defaulted to.</p>
  */
+const flag = (value: unknown, fallback: boolean) => {
+  const v = String(value ?? '').trim().toLowerCase();
+  return v === '' ? fallback : v === 'true';
+};
+
+/**
+ * The browser's (Chrome and Edge) noise suppression: on. Without it, room noise around a candidate went into the
+ * transcript as words. Set VITE_MIC_NOISE_SUPPRESSION=false to turn it off.
+ */
+const NOISE_SUPPRESSION = flag(import.meta.env.VITE_MIC_NOISE_SUPPRESSION, true);
+
+/**
+ * Chrome's voice isolation, a much stronger filter on top of noise suppression: off. It removed noise, but it also
+ * cut quiet or unclear speech it did not recognise as a voice, and a candidate speaking low lost words before the
+ * speech service ever heard them. Noise suppression alone keeps the room out without that. Set
+ * VITE_MIC_VOICE_ISOLATION=true to turn it on.
+ */
+const VOICE_ISOLATION = flag(import.meta.env.VITE_MIC_VOICE_ISOLATION, false);
+
 export const MIC_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  // Keeps the interviewer's voice out of the answer.
   echoCancellation: true,
-  noiseSuppression: true,
+  noiseSuppression: NOISE_SUPPRESSION,
+  // Lifts a quiet speaker to a steady level.
   autoGainControl: true,
   // One channel: speech has no use for two, and it halves what is sent and recorded.
   channelCount: 1,
-  // Chrome's newer, stronger voice isolation. A browser that does not know the
-  // constraint ignores it, so it is a free upgrade where it exists.
-  ...({ voiceIsolation: true } as MediaTrackConstraints),
+  ...({ voiceIsolation: VOICE_ISOLATION } as MediaTrackConstraints),
 };
 
 export interface MicProcessingReport {

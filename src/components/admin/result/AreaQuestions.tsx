@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/Badge';
 import { STRINGS } from '@/constants/strings';
 import { performanceLevel } from '@/utils/performance-level.utils';
 import type { QuestionRow } from '@/utils/interview-questions.utils';
+import { scorePercent } from '@/utils/format.utils';
 
 /**
  * How many questions one area's score rests on, how many were answered, and which they were.
@@ -63,7 +64,7 @@ export function AreaQuestions({
                     )}
                     {!row.skipped && level && (
                       <Badge variant={level.variant} size="sm">
-                        {level.label} · {row.score?.toFixed(0)}/10
+                        {level.label} · {scorePercent(row.score)}
                       </Badge>
                     )}
                     {!row.skipped && !level && (

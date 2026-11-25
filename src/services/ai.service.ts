@@ -53,7 +53,17 @@ const PIECE_BYTES = 5 * 1024 * 1024;
 /** Waits before pieces' second to fifth attempts. */
 const PIECE_BACKOFF_MS = [1_000, 3_000, 8_000, 15_000];
 
+/**
+ * The id this window was given when it opened the running interview. Sent with each audio upload so the server
+ * can refuse audio from a window that another one has since replaced.
+ */
+let voiceSessionId: string | null = null;
+
 export const aiService = {
+  setVoiceSessionId(id: string | null) {
+    voiceSessionId = id;
+  },
+
   startInterview(data: StartInterviewRequest) {
     return api.post<StartInterviewResponse>(ENDPOINTS.AI.START_INTERVIEW, data);
   },
@@ -102,6 +112,7 @@ export const aiService = {
     const form = new FormData();
     form.append("audio", audio, `answer_${chunkIndex}.webm`);
     form.append("chunkIndex", String(chunkIndex));
+    if (voiceSessionId) form.append("sessionId", voiceSessionId);
     return api.post(`/api/interview/voice/${scheduleId}/audio-chunk`, form, {
       headers: { "Content-Type": "multipart/form-data" },
       timeout: 2 * 60 * 1000,
@@ -208,7 +219,12 @@ export const aiService = {
   },
 
   endVoiceInterview(scheduleId: number) {
-    return api.post<void>(ENDPOINTS.AI.VOICE_END(scheduleId));
+    // Says which window is ending it, so a window another one has replaced cannot end the interview there.
+    return api.post<void>(
+      ENDPOINTS.AI.VOICE_END(scheduleId),
+      undefined,
+      voiceSessionId ? { params: { sessionId: voiceSessionId } } : undefined,
+    );
   },
 
   getVoiceStatus(scheduleId: number) {

@@ -5,21 +5,21 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   Clock, Mic, User, Bot, Loader2, Video, AlertTriangle, Maximize, Shield,
   Wifi, WifiOff, Square, LogOut, CheckCircle2, Volume2,
-  EyeOff, Users, Timer, Monitor, MonitorUp, Play, Send, Smartphone, BookOpen,
+  EyeOff, Users, Timer, Monitor, MonitorUp, Send, Smartphone, BookOpen,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { useElapsed } from '@/hooks/useElapsed';
-import { useVoiceInterview } from '@/hooks/useVoiceInterview';
+import { reviewEditLimit, useVoiceInterview } from '@/hooks/useVoiceInterview';
 import { useQuestionTimer } from '@/hooks/useQuestionTimer';
 import { useMediaRecorder } from '@/hooks/useMediaRecorder';
 import { useScreenRecorder, ScreenSurfaceError } from '@/hooks/useScreenRecorder';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import { useScreenCoverage } from '@/hooks/useScreenCoverage';
 import { useFaceDetection } from '@/hooks/useFaceDetection';
 import { useDevToolsDetection } from '@/hooks/useDevToolsDetection';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
-import { aiService } from '@/services/ai.service';
 import { extractApiError } from '@/services/api.service';
 import { interviewWsService } from '@/services/interview-ws.service';
 import { interviewService } from '@/services/interview.service';
@@ -63,10 +63,6 @@ export function InterviewPage() {
   // Voice interview hook
   const voiceInterview = useVoiceInterview();
 
-  // Compilation state
-  const [compileOutput, setCompileOutput] = useState<string>('');
-  const [compiling, setCompiling] = useState(false);
-
   // Mobile companion state
   /**
    * Whether the identity photo and room sweep are both done.
@@ -93,6 +89,13 @@ export function InterviewPage() {
   const [isSetupActive, setIsSetupActive] = useState(false);
   // Question timer
   const questionTimerRef = useRef<{ incrementSkipCounter: () => void } | null>(null);
+  /** "Time is up" on a coding question: send the notepad, or take a little more time. */
+  const [codingTimeUpOpen, setCodingTimeUpOpen] = useState(false);
+  const [codingTimeUpSeconds, setCodingTimeUpSeconds] = useState<number>(
+    APP_CONFIG.INTERVIEW_CODING_TIME_UP_PROMPT_SECONDS,
+  );
+  /** Extra time already given on the question now open; reset when the next question arrives. */
+  const extensionsUsedRef = useRef(0);
   const questionTimer = useQuestionTimer({
     state: voiceInterview.state,
     isPlaying: voiceInterview.isPlaying,
@@ -108,6 +111,14 @@ export function InterviewPage() {
         // The 60-second prompt is only a nudge: the question's time ran out with it still open, so it closes and
         // the question is skipped and counted below, like any other unanswered one.
         setStillThereOpen(false);
+      }
+      // A coding question is asked about, not taken away. Someone who has written most of a solution in the
+      // notepad lost it mid-line to an automatic submit; now they are asked whether to send it or take a little
+      // longer, and only if nobody answers is the notepad sent (or the question skipped when it is empty).
+      if (voiceInterview.isCodingQuestion) {
+        setCodingTimeUpSeconds(APP_CONFIG.INTERVIEW_CODING_TIME_UP_PROMPT_SECONDS);
+        setCodingTimeUpOpen(true);
+        return;
       }
       if (voiceInterview.codeContent.trim()) {
         showToast(MESSAGES.interview.answerTimeLimit, 'warning');
@@ -302,13 +313,31 @@ export function InterviewPage() {
   const interviewRunningRef = useRef(false);
   /** True while Begin is waiting for the candidate to enter fullscreen, so the box asking for it is shown. */
   const [awaitingFullscreen, setAwaitingFullscreen] = useState(false);
-  const { isFullscreen, enterFullscreen, fullscreenExitCount } = useFullscreen({
+  const { isFullscreen, enterFullscreen, exitFullscreen, fullscreenExitCount } = useFullscreen({
     onExitAttempt: (count) => {
       if (!interviewRunningRef.current) return;
       showToast(MESSAGES.interview.fullscreenExit(count), 'warning');
       voiceInterview.sendProctoringEvent('fullscreen_exit', `Exit count: ${count}`);
     },
   });
+  // Leaving the interview page, by any route, leaves fullscreen and releases the keyboard with it.
+  useEffect(() => {
+    return () => {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+      (navigator as unknown as { keyboard?: { unlock?: () => void } }).keyboard?.unlock?.();
+    };
+  }, []);
+  // A side panel or another window taking part of the screen while the interview is in fullscreen.
+  useScreenCoverage({
+    active:
+      isFullscreen && voiceInterview.state !== 'pre-start' && voiceInterview.state !== 'completed' && !postCompletionStep,
+    onReduced: (detail) => {
+      if (!interviewRunningRef.current) return;
+      showToast(STRINGS.lockdown.screenReduced, 'warning');
+      voiceInterview.sendProctoringEvent('screen_reduced', detail);
+    },
+  });
+
   /** How many exits had been counted when the interview began, so only the ones after it count. */
   const fullscreenExitsAtStartRef = useRef(0);
   const fullscreenExitsRef = useRef(0);
@@ -349,6 +378,10 @@ export function InterviewPage() {
   // browser's own permission prompts before it do not count.
   const tabSwitchesRef = useRef(0);
   usePageVisibility({
+    // Short: a quick flick to another app (an AI assistant, for a glance at an answer) used to come back inside the
+    // 1s window and was never counted. Permission prompts and the screen picker, which the long window was for, all
+    // happen before the interview is running and are not counted anyway.
+    blurDebounceMs: 300,
     onHidden: () => {
       if (!PROCTORING_CONFIG.tabSwitch.enabled || !interviewRunningRef.current) return;
       tabSwitchesRef.current += 1;
@@ -356,6 +389,31 @@ export function InterviewPage() {
       voiceInterview.sendProctoringEvent('tab_switch', `Left the interview tab (${tabSwitchesRef.current})`);
     },
   });
+
+  // Alt+Tab. With the keyboard lock on (Chrome/Edge in fullscreen) it reaches the page instead of switching apps:
+  // refused, told, and recorded, so an attempt shows in the report even though it did not work. The Windows key and
+  // Print Screen are left alone, so screenshots work; switching away with them still counts as leaving the window.
+  const reportAppSwitchRef = useRef<(detail: string) => void>(() => undefined);
+  reportAppSwitchRef.current = (detail: string) => {
+    showToast(STRINGS.lockdown.appSwitchBlocked, 'warning');
+    voiceInterview.sendProctoringEvent('app_switch_attempt', detail);
+  };
+  useEffect(() => {
+    let lastReported = 0;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!interviewRunningRef.current) return;
+      if (!(e.altKey && e.key === 'Tab')) return;
+      e.preventDefault();
+      // Holding the key repeats it; one report per few seconds.
+      if (Date.now() - lastReported < 3000) return;
+      lastReported = Date.now();
+      reportAppSwitchRef.current(
+        'Pressed Alt+Tab to switch to another application',
+      );
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
 
   // DevTools detection
   const { detectionCount: devToolsCount } = useDevToolsDetection();
@@ -505,6 +563,10 @@ export function InterviewPage() {
       if (postCompletionStartedRef.current) return;
       postCompletionStartedRef.current = true;
       setShowEndConfirm(false);
+      // The interview is over: proctoring stops, and fullscreen and the keyboard lock are released straight away.
+      // They used to stay on after the end, so the candidate was held in fullscreen with Escape captured.
+      interviewRunningRef.current = false;
+      void exitFullscreen();
       try {
         setPostCompletionStep('ending');
         stopDetection();
@@ -554,6 +616,7 @@ export function InterviewPage() {
       navigate,
       mobileToken,
       showToast,
+      exitFullscreen,
     ]
   );
 
@@ -594,6 +657,41 @@ export function InterviewPage() {
       : APP_CONFIG.INTERVIEW_IDLE_PROMPT_SECONDS) * 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearInactivityTimers, showToast]);
+
+  // The "time is up" countdown on a coding question. Unanswered, the notepad is sent as the answer; an empty one is
+  // a skipped question, counted like any other.
+  useEffect(() => {
+    if (!codingTimeUpOpen) return;
+    const id = window.setInterval(() => {
+      setCodingTimeUpSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [codingTimeUpOpen]);
+
+  const submitAfterTimeUp = useCallback(() => {
+    setCodingTimeUpOpen(false);
+    if (voiceInterview.codeContent.trim()) {
+      void voiceInterview.submitAnswer();
+      return;
+    }
+    showToast(MESSAGES.interview.questionTimedOut, 'info');
+    questionTimerRef.current?.incrementSkipCounter();
+    voiceInterview.skipQuestion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceInterview.codeContent, voiceInterview.submitAnswer, voiceInterview.skipQuestion, showToast]);
+
+  useEffect(() => {
+    if (codingTimeUpOpen && codingTimeUpSeconds === 0) submitAfterTimeUp();
+  }, [codingTimeUpOpen, codingTimeUpSeconds, submitAfterTimeUp]);
+
+  // A new question, or the candidate answering by voice, ends the prompt and resets the extra time.
+  useEffect(() => {
+    extensionsUsedRef.current = 0;
+    setCodingTimeUpOpen(false);
+  }, [voiceInterview.conversation.length]);
+  useEffect(() => {
+    if (voiceInterview.state !== 'active') setCodingTimeUpOpen(false);
+  }, [voiceInterview.state]);
 
   // The "still there?" countdown. Unanswered, the interview is closed and submitted with what was said so far.
   useEffect(() => {
@@ -689,42 +787,6 @@ export function InterviewPage() {
     showToast(MESSAGES.interview.maxWarnings, 'warning');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalWarnings, voiceInterview.state]);
-
-  // Compile handler
-  const handleCompile = async () => {
-    if (!voiceInterview.codeContent.trim()) {
-      showToast(MESSAGES.interview.writeCodeFirst, 'warning');
-      return;
-    }
-    setCompiling(true);
-    try {
-      const res = await aiService.compileCode({
-        code: voiceInterview.codeContent,
-        language: voiceInterview.codeLanguage,
-      });
-      // Both: a program that printed something and then crashed has output and an error, and the error is what
-      // explains where the output stops.
-      const output = [res.data.output, res.data.error].filter(Boolean).join('\n');
-      setCompileOutput(output);
-      // Also held on the interview state, so it is submitted with the answer
-      // rather than staying on this screen.
-      voiceInterview.setCodeOutput(output);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      const failure = 'Compilation failed: ' + (err.response?.data?.message || err.message);
-      setCompileOutput(failure);
-      // A failed compile is evidence too — the interviewer should see that the
-      // submitted code does not build.
-      voiceInterview.setCodeOutput(failure);
-    } finally {
-      setCompiling(false);
-    }
-  };
-
-  // Clear compile output when new question arrives
-  useEffect(() => {
-    setCompileOutput('');
-  }, [voiceInterview.conversation.length, voiceInterview.isCodingQuestion]);
 
   // The three previews (camera, shared screen, phone) sit in the sidebar, which is only on the page once the
   // interview has left the instructions. Their streams arrive earlier than that: the screen is shared and the
@@ -823,7 +885,9 @@ export function InterviewPage() {
       }
     }, 150);
     return () => window.clearTimeout(id);
-  }, [voiceInterview.isCodingQuestion]);
+    // The conversation length too: a coding question that follows another one (or asks for a fix) keeps the flag
+    // on, so keyed on the flag alone the notepad was left below the fold and the candidate asked where it was.
+  }, [voiceInterview.isCodingQuestion, voiceInterview.conversation.length]);
 
   // Natural completion detection
   // The closing reply is the last thing the candidate hears, so the submit screen waits for it: a short pause for
@@ -1360,6 +1424,58 @@ export function InterviewPage() {
         </div>
       )}
 
+      {/* Another window took this interview over. Nothing here works any more, and nothing dismisses this but
+          leaving, which also stops the camera and screen recording this window started. */}
+      <Modal
+        isOpen={voiceInterview.sessionReplaced}
+        onClose={() => undefined}
+        title={STRINGS.sessionReplaced.title}
+        size="sm"
+        footer={
+          <Button onClick={() => navigate(ROUTES.CANDIDATE.INTERVIEWS)}>{STRINGS.sessionReplaced.action}</Button>
+        }
+      >
+        <p className="text-sm text-[var(--textSecondary)]">{STRINGS.sessionReplaced.body}</p>
+      </Modal>
+
+      {/* "Time is up" on a coding question: send the notepad now, or take a little longer. Not dismissable, so the
+          choice is made by the candidate or, failing that, by the countdown. */}
+      <Modal
+        isOpen={codingTimeUpOpen}
+        onClose={() => undefined}
+        title={STRINGS.codingTimeUp.title}
+        size="sm"
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            {extensionsUsedRef.current < APP_CONFIG.INTERVIEW_CODING_MAX_EXTENSIONS && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  extensionsUsedRef.current += 1;
+                  setCodingTimeUpOpen(false);
+                  questionTimer.extend(APP_CONFIG.INTERVIEW_CODING_EXTENSION_SECONDS);
+                  startInactivityTimers();
+                }}
+              >
+                {STRINGS.codingTimeUp.more(Math.round(APP_CONFIG.INTERVIEW_CODING_EXTENSION_SECONDS / 60))}
+              </Button>
+            )}
+            <Button onClick={submitAfterTimeUp} disabled={!voiceInterview.codeContent.trim()}>
+              {STRINGS.codingTimeUp.submit}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-[var(--textSecondary)]">
+          {voiceInterview.codeContent.trim()
+            ? STRINGS.codingTimeUp.body(codingTimeUpSeconds)
+            : STRINGS.codingTimeUp.emptyBody(codingTimeUpSeconds)}
+        </p>
+        {extensionsUsedRef.current >= APP_CONFIG.INTERVIEW_CODING_MAX_EXTENSIONS && (
+          <p className="mt-2 text-xs text-[var(--textTertiary)]">{STRINGS.codingTimeUp.noMore}</p>
+        )}
+      </Modal>
+
       {/* "Still there?" — shown after a long silence or a run of skipped questions. Confirming carries on;
           if it goes unanswered the interview is closed when the countdown reaches zero. It cannot be dismissed
           any other way, so silence is never mistaken for an answer. */}
@@ -1556,7 +1672,8 @@ export function InterviewPage() {
             >
               <BookOpen size={14} /> <span className="hidden sm:inline">{STRINGS.candidateInterview.topBar.rules}</span>
             </button>
-            <button onClick={() => setShowEndConfirm(true)} disabled={!!postCompletionStep} className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors">
+            {/* Solid red, so it reads as the live, final action it is: the faint tint it had looked disabled. */}
+            <button onClick={() => setShowEndConfirm(true)} disabled={!!postCompletionStep} className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold transition-colors">
               <LogOut size={14} /> {STRINGS.candidateInterview.topBar.end}
             </button>
           </div>
@@ -1611,6 +1728,18 @@ export function InterviewPage() {
                 )}
                 <div className={`max-w-[85%] sm:max-w-[70%] min-w-0 break-words p-3 sm:p-4 rounded-lg ${entry.role === 'interviewer' ? 'bg-[var(--surface1)] text-[var(--text)]' : entry.role === 'candidate' ? 'bg-[var(--primary)] text-white' : entry.role === 'system' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm border border-amber-200 dark:border-amber-800' : 'bg-transparent text-[var(--textTertiary)] italic text-sm p-2'} ${entry.isStreaming ? 'border border-blue-300 dark:border-blue-700' : ''}`}>
                   <p className="text-base leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                  {/* What the candidate sent from the notepad, kept on screen after Send so they can see what was
+                      submitted. Read-only and plain: nothing was run, so there is no output to show. */}
+                  {entry.role === 'candidate' && entry.codeContent?.trim() && (
+                    <div className="mt-2 overflow-hidden rounded-lg border border-white/20 bg-[#1e1e1e]">
+                      <div className="border-b border-[#3c3c3c] bg-[#252526] px-3 py-1 text-xs font-medium text-gray-300">
+                        Submitted from notepad
+                      </div>
+                      <pre className="max-h-64 overflow-auto p-3 font-mono text-sm leading-relaxed text-gray-200 whitespace-pre-wrap break-words">
+                        {entry.codeContent}
+                      </pre>
+                    </div>
+                  )}
                   {entry.role !== 'filler' && entry.role !== 'system' && <p className={`text-xs mt-2 ${entry.role === 'interviewer' ? 'text-[var(--textTertiary)]' : 'text-white/70'}`}>{new Date(entry.timestamp).toLocaleTimeString()}</p>}
                 </div>
               </div>
@@ -1629,16 +1758,19 @@ export function InterviewPage() {
                   nothing and pushed the controls off-screen. */}
               {voiceInterview.isCodingQuestion && voiceInterview.state !== 'completed' && !postCompletionStep && (
                 <div ref={codingSectionRef} className="min-w-0 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-2 sm:p-3">
-                  <CodingEditor code={voiceInterview.codeContent} language={voiceInterview.codeLanguage} onCodeChange={voiceInterview.setCodeContent} onLanguageChange={voiceInterview.setCodeLanguage} disabled={voiceInterview.state === 'processing'} />
+                  <CodingEditor
+                    code={voiceInterview.codeContent}
+                    onCodeChange={voiceInterview.setCodeContent}
+                    disabled={voiceInterview.state === 'processing'}
+                    onPasteBlocked={() => {
+                      showToast(STRINGS.lockdown.pasteBlocked, 'warning');
+                      voiceInterview.sendProctoringEvent('paste_blocked', 'Tried to paste text into the coding notepad');
+                    }}
+                  />
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button size="sm" variant="outline" onClick={handleCompile} disabled={compiling || !voiceInterview.codeContent.trim()}>
-                      {compiling ? <Loader2 size={14} className="animate-spin mr-2" /> : <Play size={14} className="mr-2" />}
-                      {STRINGS.candidateInterview.chat.compileAndRun}
-                    </Button>
-                    {/* There was no way to submit code at all. The only route was
-                        to speak and stop the mic, so a candidate who had written a
-                        working solution and had nothing to say about it was stuck.
-                        Any spoken explanation already recorded goes with it. */}
+                    {/* Send only: nothing is compiled or run, the interviewer reads
+                        what was written. Any spoken explanation already recorded
+                        goes with it. */}
                     <Button
                       size="sm"
                       onClick={() => voiceInterview.submitAnswer()}
@@ -1652,15 +1784,6 @@ export function InterviewPage() {
                       {STRINGS.candidateInterview.chat.submitAnswer}
                     </Button>
                   </div>
-                  {compileOutput && (
-                    <div className="mt-2 min-w-0 p-3 rounded-lg bg-[#1e1e1e] text-gray-200 font-mono text-xs sm:text-sm overflow-auto max-h-32 sm:max-h-48">
-                      {/* break-words as well as wrap: a stack trace or a long
-                          compiler path has no spaces to wrap at, and without it
-                          the panel stretches the whole column wider than the
-                          phone and the page scrolls sideways. */}
-                      <pre className="whitespace-pre-wrap break-words">{compileOutput}</pre>
-                    </div>
-                  )}
                 </div>
               )}
           </div>
@@ -1680,6 +1803,31 @@ export function InterviewPage() {
                   stray words on the screen, which the candidate then took to be part of their answer. The
                   audio is still recorded and converted to text for the interviewer; the candidate sees only
                   that it is being heard, never the text. */}
+              {/* English only. Shown while they are speaking when another language is heard, and after an answer
+                  that was not in English, in words a nervous candidate will not misread. */}
+              {voiceInterview.languageAlert && (
+                <div
+                  role="alert"
+                  className="mb-3 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100"
+                >
+                  <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-300" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{STRINGS.englishOnly.title}</p>
+                    <p className="text-sm">
+                      {voiceInterview.languageAlert.live
+                        ? STRINGS.englishOnly.live(voiceInterview.languageAlert.language)
+                        : STRINGS.englishOnly.after(voiceInterview.languageAlert.language)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={voiceInterview.dismissLanguageAlert}
+                    className="flex-shrink-0 rounded-lg px-2 py-1 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-800/40"
+                  >
+                    {STRINGS.englishOnly.dismiss}
+                  </button>
+                </div>
+              )}
               {voiceInterview.isRecording && (
                 <div className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface1)] p-3">
                   <Mic size={14} className="text-emerald-500" />
@@ -1696,6 +1844,12 @@ export function InterviewPage() {
                   </div>
                   <span className="text-xs text-[var(--textTertiary)] w-8 text-right">{voiceInterview.audioLevel ?? 0}%</span>
                 </div>
+              )}
+              {/* Fixed at the microphone, where it can be: a voice this low is what the speech service mishears. */}
+              {voiceInterview.isRecording && voiceInterview.lowVoice && (
+                <p role="status" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+                  {STRINGS.candidateInterview.lowVoice}
+                </p>
               )}
               {questionTimer.isTimerActive && voiceInterview.state === 'active' && !voiceInterview.isInterviewerSpeaking && (
                 <div className="mb-3 flex items-center justify-center gap-3">
@@ -1780,6 +1934,82 @@ export function InterviewPage() {
                         <Timer size={14} className={answerSecondsLeft <= 30 ? 'animate-pulse' : ''} />
                         {formatClock(APP_CONFIG.INTERVIEW_ANSWER_TIMEOUT_SECONDS - answerSecondsLeft)}
                       </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* The answer as heard, for a moment before it is sent: long enough to spot a wrong word, short
+                    enough not to stretch the interview. Editing gives longer, and still sends on its own. */}
+                {voiceInterview.state === 'reviewing' && voiceInterview.review && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-white">{STRINGS.answerReview.title}</span>
+                      <span className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 font-mono text-sm font-semibold text-white">
+                        <Timer size={14} />
+                        {voiceInterview.review.editing
+                          ? STRINGS.answerReview.editingFor(voiceInterview.review.secondsLeft)
+                          : STRINGS.answerReview.sendingIn(voiceInterview.review.secondsLeft)}
+                      </span>
+                    </div>
+                    {voiceInterview.review.editing ? (
+                      <textarea
+                        autoFocus
+                        value={voiceInterview.review.text}
+                        onChange={(e) => voiceInterview.setReviewText(e.target.value)}
+                        // Corrections are typed, not pasted in from somewhere else.
+                        onPaste={(e) => e.preventDefault()}
+                        onDrop={(e) => e.preventDefault()}
+                        rows={4}
+                        aria-label={STRINGS.answerReview.title}
+                        className="block w-full resize-y rounded-xl border border-white/20 bg-white/10 p-3 text-base leading-relaxed text-white outline-none focus:border-white/50"
+                      />
+                    ) : (
+                      <p className="max-h-32 overflow-y-auto rounded-xl bg-white/10 p-3 text-sm leading-relaxed text-white">
+                        {voiceInterview.review.text}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-300">
+                      {voiceInterview.review.editing ? STRINGS.answerReview.editHint : STRINGS.answerReview.hint}
+                    </p>
+                    {voiceInterview.review.editing && (() => {
+                      // The room left, so reaching the limit is never a mystery of keys that stop working.
+                      const left = reviewEditLimit(voiceInterview.review.original) - voiceInterview.review.text.length;
+                      return (
+                        <p className={`text-xs font-medium ${left <= 30 ? 'text-amber-300' : 'text-slate-400'}`}>
+                          {STRINGS.answerReview.charactersLeft(left)}
+                        </p>
+                      );
+                    })()}
+                    {voiceInterview.canRerecord && !voiceInterview.review.editing && (
+                      <p className="text-xs text-slate-400">{STRINGS.answerReview.rerecordHint}</p>
+                    )}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {voiceInterview.canRerecord && (
+                        <button
+                          type="button"
+                          onClick={voiceInterview.rerecordReview}
+                          className="rounded-xl border border-white/25 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                        >
+                          {STRINGS.answerReview.rerecord}
+                        </button>
+                      )}
+                      {!voiceInterview.review.editing && (
+                        <button
+                          type="button"
+                          onClick={voiceInterview.editReview}
+                          className="rounded-xl border border-white/25 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                        >
+                          {STRINGS.answerReview.edit}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={voiceInterview.sendReviewNow}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
+                      >
+                        <Send size={14} />
+                        {voiceInterview.review.editing ? STRINGS.answerReview.send : STRINGS.answerReview.sendNow}
+                      </button>
                     </div>
                   </div>
                 )}

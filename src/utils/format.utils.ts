@@ -41,6 +41,17 @@ export function parseServerInstant(dateStr: string): Date {
  * stored as typed, so they must be shown back exactly as typed —
  * {@link formatDateTime} does that.
  */
+/**
+ * A scheduled time (an interview's start or deadline) shown exactly as the recruiter picked it.
+ *
+ * Those are wall-clock times in the business timezone, not UTC stamps, so they must not go through
+ * {@link formatServerDateTime}: that reads them as UTC and shows an IST reader every slot 5h30 late.
+ */
+export function formatScheduledDateTime(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  return formatDateTime(dateStr);
+}
+
 export function formatServerDateTime(dateStr?: string | null): string {
   if (!dateStr) return '';
   const date = parseServerInstant(dateStr);
@@ -112,4 +123,13 @@ export function formatTimer(totalSeconds: number): string {
   const seconds = totalSeconds % 60;
   const pad = (n: number) => n.toString().padStart(2, '0');
   return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+}
+
+/**
+ * A 0-10 score as a percentage out of 100, the way results are shown: 6.5 becomes "65%". Scores are kept out of 10
+ * underneath; only how they read changes.
+ */
+export function scorePercent(score?: number | null): string {
+  if (score == null || Number.isNaN(score)) return '—';
+  return `${Math.round(score * 10)}%`;
 }

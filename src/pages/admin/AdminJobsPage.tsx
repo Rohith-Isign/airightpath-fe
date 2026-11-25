@@ -19,7 +19,6 @@ import {
   UserCheck,
   Pencil,
   Trash2,
-  Eye,
 } from 'lucide-react';
 import { jobService, isEndpointMissing } from '@/services/job.service';
 import { jobApplicationService } from '@/services/job-application.service';

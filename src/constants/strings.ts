@@ -457,6 +457,50 @@ export const STRINGS = {
   },
 
   /** The "Are you still there?" prompt. */
+  lockdown: {
+    screenReduced:
+      'The interview must fill your whole screen. Close any side panel or other window (including AI assistants) and keep the interview in full screen.',
+    pasteBlocked: 'Pasting is not allowed in the notepad. Please type your answer.',
+    appSwitchBlocked: 'Switching to other applications is not allowed during the interview. This has been recorded.',
+  },
+  englishOnly: {
+    title: 'Please answer in English',
+    live: (language?: string) =>
+      `It sounds like you are speaking ${language ?? 'another language'}. This interview can only be done in English, so please continue in English.`,
+    after: (language?: string) =>
+      `You are speaking in ${language ?? 'another language'}, but this interview can only be done in English, so that answer won't be evaluated. Please answer in English.`,
+    dismiss: 'OK',
+  },
+  answerReview: {
+    title: 'Check your answer',
+    sendingIn: (seconds: number) => `Sending in ${seconds}s`,
+    editingFor: (seconds: number) => `Sends in ${seconds}s`,
+    hint: 'This is what we heard. If a word is wrong, choose Edit to correct it.',
+    editHint: 'Correct any words that were heard wrongly, or finish a sentence that was cut off. This is not for writing a new answer; edits are recorded.',
+    charactersLeft: (left: number) =>
+      left > 0 ? `${left} characters left` : 'Limit reached: corrections only, not a new answer. Send it as it is.',
+    edit: 'Edit',
+    sendNow: 'Send now',
+    rerecord: 'Record again',
+    rerecordHint: 'Not what you said? You can discard it and answer again, once for this question.',
+    send: 'Send',
+  },
+  sessionReplaced: {
+    title: 'Interview opened in another window',
+    body:
+      'This interview was opened in another browser or tab, so it has been closed here. It continues in the other window, from where you left off. This has been noted on your interview record.',
+    action: 'Go to my interviews',
+  },
+  codingTimeUp: {
+    title: 'Time is up for this question',
+    body: (seconds: number) =>
+      `Submit what you have in the notepad, or take a little more time to finish. If there is no reply, your notepad is sent in ${seconds}s.`,
+    emptyBody: (seconds: number) =>
+      `Your notepad is empty. Take a little more time, or the question is skipped in ${seconds}s.`,
+    submit: 'Submit my answer',
+    more: (minutes: number) => `I need ${minutes} more minutes`,
+    noMore: 'No more extra time is available for this question.',
+  },
   stillThere: {
     title: 'Are you still there?',
     confirm: "Yes, I'm still here",
@@ -470,6 +514,75 @@ export const STRINGS = {
   },
 
   /** The score explanation on the interview result page. */
+  technicalReport: {
+    title: 'Technical assessment',
+    overall: 'Overall score',
+    overallL2: 'Overall L2 score',
+    overallL2Hint: 'Score against everything the role needed: every concept a complete interview should have tested. A concept never asked earns nothing, so a candidate who covered half the job scores about half, however well they answered.',
+    technicalScore: 'Technical score',
+    technicalScoreHint: 'How well the candidate did on the areas that were actually tested. Equal to the overall score when every area was tested.',
+    belowBands: 'Below Good',
+    coverage: 'Coverage',
+    coverageHint: 'Share of the scoring areas, by weight, that the questions reached',
+    confidence: 'Grader confidence',
+    confidenceHint: "How sure the grader was of its own verdict. Not how confident the candidate sounded",
+    highestLevel: 'Highest level shown',
+    domainsAssessed: (done: number, total: number) => `${done} of ${total} domains assessed`,
+    needsReview: 'A person should review this result',
+    domains: 'Technical domains',
+    weight: 'Weight',
+    mapped: 'On resume',
+    unmapped: 'Not on resume',
+    mappedHint: 'The resume, projects or introduction showed this area. It records what they claimed, not what they can do.',
+    unmappedHint: 'Nothing on the resume or in the introduction showed this area; it was tested because the role needs it.',
+    levels: 'Levels demonstrated',
+    levelNames: { BASIC: 'Basic', INTERMEDIATE: 'Intermediate', ADVANCED: 'Advanced', EXPERT: 'Expert', NONE: 'None' },
+    reached: 'Shown',
+    notReached: 'Not shown',
+    levelsNote: 'A level is marked only when the candidate answered it well. "Not shown" means it was not demonstrated, which is not the same as failing it.',
+    levelNotRecorded: 'Levels were not recorded for this result. It was graded before levels were added.',
+    notAssessed: 'Not assessed',
+    notAssessedDetail: 'No question reached this domain. It adds nothing to the overall score and does not count against the candidate.',
+    scoreOutOf: (score: number) => `${Math.round(score * 10)}%`,
+    howBuilt: 'How the overall score is built',
+    assessedOf: (count: number) => `${count} of`,
+    selectDomain: 'Select a domain to see its detail',
+    overallShort: 'Overall',
+    assessmentSummary: 'Assessment summary',
+    skillsCovered: 'Skills covered',
+    confidenceHigh: 'High',
+    confidenceMedium: 'Medium',
+    confidenceLow: 'Low',
+    levelAchievement: 'Level-wise achievement',
+    tabOverall: 'Overall',
+    tabSkills: (count: number) => `Skill-wise report (${count})`,
+    assessedSkills: (count: number) => `Assessed skills (${count})`,
+    highestDemonstrated: 'Highest demonstrated',
+    skillScore: 'Skill score',
+    levelPerformance: 'Level-wise performance',
+    levelDescriptions: {
+      BASIC: 'Fundamentals & core concepts',
+      INTERMEDIATE: 'Application & implementation',
+      ADVANCED: 'Complex problems & optimisation',
+      EXPERT: 'Architecture, trade-offs & scalability',
+    },
+    correct: 'Correct',
+    codeOnly: '(Answered in the notepad, without speaking)',
+    scopeFormulaNote:
+      'Overall = the share of everything this interview should have covered that the candidate earned: each expected concept counts 1 when answered well, a half when partly right, and nothing when wrong or never asked. The table above shows the scoring areas; the score itself is measured against the full list of concepts under Coverage by area.',
+    codeMismatch: 'Code solves a different problem than asked: no marks for this question',
+    notCorrect: 'Not correct',
+    correctOf: (correct: number, rated: number) => `${correct} of ${rated} correct`,
+    byLevel: 'Questions by level',
+    byLevelNote: 'How deep each question went, and how the answers to them were rated. A level with no questions was not reached.',
+    questionsAtLevel: (count: number) => `${count} question${count === 1 ? '' : 's'}`,
+    avgAnswer: 'Avg answer',
+    noneAsked: 'None asked',
+    levelUnknown: 'Level not recorded',
+    domainLabel: 'Domain',
+    codingQuestion: 'Coding',
+
+  },
   scoreBreakdown: {
     questionsAsked: 'Questions asked',
     answered: 'Answered',
@@ -503,8 +616,8 @@ export const STRINGS = {
     evidenceInsufficient:
       'Too little was asked or answered to give a hire or no-hire verdict. The scores below are for the areas that were assessed; no recommendation has been given.',
     evidencePartial: (coverage: number, assessed: string | null) =>
-      `Only ${coverage}% of the scoring areas were asked about. Areas that were not reached add nothing, so the overall score is lower than the marks on what was tested${assessed ? ` (${assessed}/10 on the assessed areas)` : ''}.`,
-    assessedOnly: (score: string) => `On the assessed areas only: ${score} / 10`,
+      `Only ${coverage}% of the scoring areas were asked about. Areas that were not reached add nothing, so the overall score is lower than the marks on what was tested${assessed ? ` (${Math.round(Number(assessed) * 10)}% on the assessed areas)` : ''}.`,
+    assessedOnly: (score: string) => `On the assessed areas only: ${Math.round(Number(score) * 10)}%`,
     reEvaluate: 'Re-evaluate with AI',
     reEvaluating: 'Re-evaluating…',
     /** A finished interview with no pass or fail: why, and what to do. */
@@ -633,7 +746,8 @@ export const STRINGS = {
     overallAssessment: 'Overall assessment',
     howScoreReached: 'How this score was reached',
     eachAreaWithReasoning: 'Each area, with the reasoning',
-    notScored: 'This round has not been scored yet. Scores appear once the interview completes.',
+    notScored:
+      'This round has no evaluation yet. If the interview has finished, use “Re-evaluate with AI” above to grade it now.',
     transcriptTitle: (count: number) => `Transcript (${count})`,
     noTranscript: 'No transcript recorded for this round.',
     recording: {
@@ -661,6 +775,7 @@ export const STRINGS = {
 
   /** Candidate → the live interview screen. */
   candidateInterview: {
+    lowVoice: 'Your voice is coming through very low. Please speak a little louder and clearly, or move closer to the microphone.',
     noInterviewData: 'No interview data found.',
     backToInterviews: 'Back to Interviews',
     backToMyInterviews: 'Back to my interviews',

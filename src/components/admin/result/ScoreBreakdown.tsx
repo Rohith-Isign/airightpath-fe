@@ -6,6 +6,7 @@ import { SummaryStat } from '@/components/admin/result/ResultPrimitives';
 import { performanceLevel, type PerformanceLevel } from '@/utils/performance-level.utils';
 import type { VoiceConversationEntryDTO } from '@/services/interview.service';
 import type { VoiceEvaluationResult } from '@/types/interview.types';
+import { scorePercent } from '@/utils/format.utils';
 
 const SKIPPED = '[NO RESPONSE - SKIPPED]';
 /** An area at or under this is called out as somewhere the candidate fell short. */
@@ -140,7 +141,7 @@ export function ScoreBreakdown({
                       <td className="px-3 py-2 text-[var(--textSecondary)]">
                         {Math.round(share(area.weight || 0) * 100)}%
                       </td>
-                      <td className="px-3 py-2 text-[var(--textSecondary)]">{area.score}/10</td>
+                      <td className="px-3 py-2 text-[var(--textSecondary)]">{scorePercent(area.score)}</td>
                       <td className="px-3 py-2">
                         {level && (
                           <Badge variant={level.variant} size="sm">
@@ -159,7 +160,7 @@ export function ScoreBreakdown({
                     {STRINGS.scoreBreakdown.overall}
                   </td>
                   <td className="px-3 py-2 text-right font-bold text-[var(--text)]">
-                    {evaluation.overallScore.toFixed(1)} / 10
+                    {scorePercent(evaluation.overallScore)}
                   </td>
                 </tr>
               </tbody>
@@ -171,7 +172,11 @@ export function ScoreBreakdown({
             </p>
           )}
           <p className="mt-1.5 text-xs text-[var(--textTertiary)]">
-            {STRINGS.scoreBreakdown.formulaNote}
+            {/* The overall is the scope score when the grader listed the expected concepts, and the weighted
+                area score otherwise; the note has to describe the one actually used. */}
+            {evaluation.scopeScore != null
+              ? STRINGS.technicalReport.scopeFormulaNote
+              : STRINGS.scoreBreakdown.formulaNote}
           </p>
         </div>
       )}
@@ -183,7 +188,7 @@ export function ScoreBreakdown({
             {weakest.map((area) => (
               <li key={area.category} className="text-xs leading-relaxed text-[var(--textSecondary)]">
                 <span className="font-semibold text-[var(--text)]">
-                  {area.category} ({area.score}/10):
+                  {area.category} ({scorePercent(area.score)}):
                 </span>{' '}
                 {area.feedback || STRINGS.scoreBreakdown.noDetail}
               </li>
@@ -222,7 +227,7 @@ export function ScoreBreakdown({
                           </Badge>
                         ) : level ? (
                           <Badge variant={level.variant} size="sm">
-                            {level.label} · {row.score?.toFixed(0)}/10
+                            {level.label} · {scorePercent(row.score)}
                           </Badge>
                         ) : (
                           <Badge variant="default" size="sm">
