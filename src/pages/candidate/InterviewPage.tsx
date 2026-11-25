@@ -551,6 +551,16 @@ export function InterviewPage() {
     PROCTORING_CONFIG.eyeDetection.enabled ||
     PROCTORING_CONFIG.camera.required;
 
+  // The code answer's send button: shown while a coding question is open, usable once something is written and
+  // nothing is already being sent or reviewed.
+  const codeSubmitShown =
+    voiceInterview.isCodingQuestion && voiceInterview.state !== 'completed' && !postCompletionStep;
+  const codeSubmitDisabled =
+    voiceInterview.state === 'processing' ||
+    voiceInterview.state === 'reviewing' ||
+    voiceInterview.isSubmitting ||
+    !voiceInterview.codeContent.trim();
+
   // Post-completion flow
   //
   // The submission is complete the moment the interview ends. Recordings are
@@ -1665,6 +1675,19 @@ export function InterviewPage() {
                 </p>
               </div>
             </div>
+            {/* Sending code is always one click away, top right, wherever the notepad has scrolled to: the button
+                under the notepad was off-screen and candidates could not find it. */}
+            {codeSubmitShown && (
+              <button
+                type="button"
+                onClick={() => voiceInterview.submitAnswer()}
+                disabled={codeSubmitDisabled}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3"
+                title={codeSubmitDisabled ? STRINGS.candidateInterview.chat.submitCodeHint : undefined}
+              >
+                <Send size={14} /> <span className="hidden sm:inline">{STRINGS.candidateInterview.chat.submitCode}</span>
+              </button>
+            )}
             <button
               onClick={() => setShowRules(true)}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[var(--surface1)] text-[var(--textSecondary)] hover:bg-[var(--surface2)] hover:text-[var(--text)] text-sm font-medium transition-colors"
@@ -1758,6 +1781,9 @@ export function InterviewPage() {
                   nothing and pushed the controls off-screen. */}
               {voiceInterview.isCodingQuestion && voiceInterview.state !== 'completed' && !postCompletionStep && (
                 <div ref={codingSectionRef} className="min-w-0 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-2 sm:p-3">
+                  {/* Send only: nothing is compiled or run, the interviewer reads what was written. Any spoken
+                      explanation already recorded goes with it. The button is in the notepad's header and in the top
+                      bar, never below the notepad where it scrolled out of sight. */}
                   <CodingEditor
                     code={voiceInterview.codeContent}
                     onCodeChange={voiceInterview.setCodeContent}
@@ -1766,24 +1792,10 @@ export function InterviewPage() {
                       showToast(STRINGS.lockdown.pasteBlocked, 'warning');
                       voiceInterview.sendProctoringEvent('paste_blocked', 'Tried to paste text into the coding notepad');
                     }}
+                    onSubmit={() => voiceInterview.submitAnswer()}
+                    submitDisabled={codeSubmitDisabled}
+                    submitLabel={STRINGS.candidateInterview.chat.submitCode}
                   />
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {/* Send only: nothing is compiled or run, the interviewer reads
-                        what was written. Any spoken explanation already recorded
-                        goes with it. */}
-                    <Button
-                      size="sm"
-                      onClick={() => voiceInterview.submitAnswer()}
-                      disabled={
-                        voiceInterview.state === 'processing' ||
-                        voiceInterview.isSubmitting ||
-                        !voiceInterview.codeContent.trim()
-                      }
-                      leftIcon={<Send size={14} />}
-                    >
-                      {STRINGS.candidateInterview.chat.submitAnswer}
-                    </Button>
-                  </div>
                 </div>
               )}
           </div>

@@ -830,6 +830,8 @@ export const STRINGS = {
       generatingEvaluation: 'Generating evaluation...',
       compileAndRun: 'Compile & Run',
       submitAnswer: 'Submit answer',
+      submitCode: 'Submit',
+      submitCodeHint: 'Write your answer in the notepad first',
     },
     controls: {
       speechNotCaptured: (reason: string) => `Speech not captured: ${reason}`,
@@ -846,7 +848,7 @@ export const STRINGS = {
       interviewerThinking: 'The interviewer is thinking…',
       hintTapMic: 'Tap the mic when you are ready to answer.',
       hintCodingTapMic:
-        'Write your code above, then tap the mic to talk through it. Stop when you are done — both are submitted together.',
+        'Write your code or logic in the notepad, then press Submit (top right). To explain it as well, tap the mic first — what you wrote is sent with what you say.',
       hintListen: 'Listen to the question — the mic unlocks when they finish.',
       hintSpeak: 'Speak clearly, then tap stop when you have finished.',
       hintCodingSpeak: 'Explaining your code. Tap stop when you have finished.',
