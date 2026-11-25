@@ -1,6 +1,7 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getDefaultDashboard } from '@/config/routes';
+import { resolvePostLoginPath } from '@/config/routes';
+import { peekPostLoginRedirect } from '@/utils/post-login-redirect.utils';
 import { AuthLoadingScreen } from './AuthLoadingScreen';
 import type { ReactNode } from 'react';
 
@@ -19,13 +20,18 @@ interface PublicOnlyRouteProps {
  */
 export function PublicOnlyRoute({ children }: PublicOnlyRouteProps) {
   const { isAuthenticated, isLoading, roles } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return <AuthLoadingScreen />;
   }
 
   if (isAuthenticated) {
-    return <Navigate to={getDefaultDashboard(roles)} replace />;
+    // The page they were trying to open before signing in (a shared apply link, say), else their dashboard. This
+    // used to be the dashboard always, and as it runs the moment sign-in succeeds it beat the login page's own
+    // redirect to the link.
+    const from = (location.state as { from?: string } | null)?.from ?? peekPostLoginRedirect();
+    return <Navigate to={resolvePostLoginPath(roles, from)} replace />;
   }
 
   return <>{children}</>;
