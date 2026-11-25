@@ -115,7 +115,14 @@ export function resolvePostLoginPath(
   roles: readonly string[],
   from?: string | null
 ): string {
-  if (from && from.startsWith('/') && !AUTH_ONLY_PATHS.includes(from.split('?')[0])) {
+  if (from && from.startsWith('/') && !from.startsWith('//') && !AUTH_ONLY_PATHS.includes(from.split('?')[0])) {
+    // Only somewhere this user may go: an admin page for an admin, a candidate page for a candidate. A link meant for
+    // the other side lands on their own dashboard rather than a "forbidden" page.
+    const isAdmin = roles.some((r) => r === 'ADMIN' || r === 'SUPER_ADMIN');
+    const area = from.split('/')[1];
+    if ((area === 'admin' && !isAdmin) || (area === 'candidate' && isAdmin)) {
+      return getDefaultDashboard(roles);
+    }
     return from;
   }
   return getDefaultDashboard(roles);

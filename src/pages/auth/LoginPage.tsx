@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Logo } from '@/components/ui/Logo';
 import { ROUTES, resolvePostLoginPath } from '@/config/routes';
+import { peekPostLoginRedirect } from '@/utils/post-login-redirect.utils';
 import { loginSchema } from '@/config/validation';
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -22,7 +23,9 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = (location.state as { from?: string })?.from;
+  // Where they were going: carried by the redirect that brought them here, or remembered across a detour through
+  // registration.
+  const from = (location.state as { from?: string } | null)?.from ?? peekPostLoginRedirect();
 
   const {
     register,

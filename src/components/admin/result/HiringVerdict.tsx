@@ -1,36 +1,14 @@
 import { Badge } from '@/components/ui/Badge';
 import type { VoiceEvaluationResult } from '@/types/interview.types';
+import { ScoreExplanation } from './ScoreExplanation';
 
 /**
- * The grader's verdict as a senior interviewer would give it: what kind of candidate this is, the level they actually
- * showed against the level the job asks for, what the interview never tested, and where answers were right but not
- * deep enough. Read first, because it is the decision; the scores below are the evidence for it.
- *
- * <p>Shows nothing for an evaluation graded before the verdict was asked for.</p>
- */
-const STATUS_LABEL: Record<string, { label: string; className: string }> = {
-  CORRECT: { label: 'Shown', className: 'text-[var(--success)]' },
-  PARTIAL: { label: 'Partly shown', className: 'text-[var(--warning)]' },
-  INCORRECT: { label: 'Not shown', className: 'text-[var(--error)]' },
-  NOT_ASKED: { label: 'Not reached', className: 'text-[var(--textTertiary)]' },
-};
-
-const REQUIREMENT_LABEL: Record<string, string> = {
-  SKILL: 'Skill',
-  RESPONSIBILITY: 'Responsibility',
-  EXPERIENCE: 'Experience depth',
-};
-
-/**
- * Why the candidate passed or failed, against the role: the role fit next to the pass mark, the core skills not
- * shown, and every requirement of the role with how the candidate did on it, core ones first. A recruiter asked "62%
+ * Why the candidate passed or failed, against the role: the role fit next to the pass mark and the core skills not
+ * shown. The full working, requirement by requirement, is in ScoreExplanation. A recruiter asked "62%
  * and failed: what is the threshold?"; this answers it on the page.
  */
 function RoleFit({ evaluation }: Readonly<{ evaluation: VoiceEvaluationResult }>) {
   if (evaluation.resultReason == null) return null;
-  const requirements = [...(evaluation.expectedConcepts ?? [])]
-    .filter((c) => c.requirement != null)
-    .sort((a, b) => (a.importance === 'CORE' ? 0 : 1) - (b.importance === 'CORE' ? 0 : 1));
   return (
     <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface2,var(--surface1))] p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -42,44 +20,22 @@ function RoleFit({ evaluation }: Readonly<{ evaluation: VoiceEvaluationResult }>
         )}
       </div>
       <p className="text-sm text-[var(--text)]">{evaluation.resultReason}</p>
-      {requirements.length > 0 && (
-        <details className="text-sm">
-          <summary className="cursor-pointer font-medium text-[var(--primary)]">
-            Role requirements ({requirements.length})
-          </summary>
-          <ul className="mt-2 divide-y divide-[var(--border)]">
-            {requirements.map((c) => {
-              const status = STATUS_LABEL[c.status] ?? STATUS_LABEL.NOT_ASKED;
-              return (
-                <li key={`${c.concept}-${c.skill ?? ''}`} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
-                  <span className="min-w-0 text-[var(--text)]">
-                    {c.importance === 'CORE' && (
-                      <span className="mr-1.5 rounded bg-[var(--primary)]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--primary)]">
-                        Core
-                      </span>
-                    )}
-                    {c.concept}
-                    <span className="ml-1.5 text-xs text-[var(--textTertiary)]">
-                      {REQUIREMENT_LABEL[c.requirement ?? 'SKILL']}
-                      {c.skill ? ` · ${c.skill}` : ''}
-                    </span>
-                  </span>
-                  <span className={`shrink-0 text-xs font-semibold ${status.className}`}>{status.label}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </details>
-      )}
     </div>
   );
 }
 
+/**
+ * The grader's verdict as a senior interviewer would give it: what kind of candidate this is, the level they actually
+ * showed against the level the job asks for, what the interview never tested, and where answers were right but not
+ * deep enough. Read first, because it is the decision; the scores below are the evidence for it.
+ *
+ * <p>Shows nothing for an evaluation graded before the verdict was asked for.</p>
+ */
 export function HiringVerdict({ evaluation }: Readonly<{ evaluation: VoiceEvaluationResult }>) {
   const notCovered = evaluation.notCovered ?? [];
   const depthGaps = evaluation.depthGaps ?? [];
   if (!evaluation.verdict && !evaluation.observedSeniority && !notCovered.length && !depthGaps.length
-      && evaluation.resultReason == null) return null;
+      && evaluation.resultReason == null && !evaluation.expectedConcepts?.length) return null;
 
   return (
     <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface1)] p-4">
@@ -92,6 +48,7 @@ export function HiringVerdict({ evaluation }: Readonly<{ evaluation: VoiceEvalua
         )}
       </div>
       <RoleFit evaluation={evaluation} />
+      <ScoreExplanation evaluation={evaluation} />
       {evaluation.verdict && (
         <p className="text-sm leading-relaxed text-[var(--text)]">{evaluation.verdict}</p>
       )}

@@ -222,6 +222,8 @@ export interface InterviewSchedule {
 }
 
 export interface StartInterviewRequest {
+  /** This browser tab's session id for the interview, kept across a reload of the tab. */
+  sessionId?: string;
   email: string;
   jobPrefix: string;
   resumeSummary?: string;

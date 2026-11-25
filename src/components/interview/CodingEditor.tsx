@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { ChevronsUpDown, FileText, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronsUpDown, FileText, Maximize2, Minimize2, Send } from 'lucide-react';
 
 interface CodingEditorProps {
   code: string;
@@ -7,6 +7,10 @@ interface CodingEditorProps {
   disabled?: boolean;
   /** Called when the candidate tries to paste or drop text in: it is refused, and recorded. */
   onPasteBlocked?: () => void;
+  /** Sends what is written. Shown in the notepad's own header, so it is never scrolled out of sight. */
+  onSubmit?: () => void;
+  submitDisabled?: boolean;
+  submitLabel?: string;
 }
 
 const MIN_HEIGHT = 140;
@@ -34,7 +38,15 @@ const measure = () => {
  * Monaco is deliberately not used: its language modes, autocomplete and
  * bracket-closing make it behave like an IDE, which this is not.
  */
-export function CodingEditor({ code, onCodeChange, disabled, onPasteBlocked }: CodingEditorProps) {
+export function CodingEditor({
+  code,
+  onCodeChange,
+  disabled,
+  onPasteBlocked,
+  onSubmit,
+  submitDisabled,
+  submitLabel = 'Submit',
+}: CodingEditorProps) {
   const [limits, setLimits] = useState(measure);
   const [height, setHeight] = useState(() => measure().base);
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
@@ -103,6 +115,7 @@ export function CodingEditor({ code, onCodeChange, disabled, onPasteBlocked }: C
             Notepad — write your code or logic in any language
           </span>
         </div>
+        <div className="flex shrink-0 items-center gap-1.5">
         <button
           type="button"
           onClick={() => setHeight(isTall ? limits.base : limits.tall)}
@@ -113,6 +126,18 @@ export function CodingEditor({ code, onCodeChange, disabled, onPasteBlocked }: C
           {isTall ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           <span className="hidden sm:inline">{isTall ? 'Shrink' : 'Expand'}</span>
         </button>
+        {onSubmit && (
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitDisabled}
+            className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Send size={12} />
+            {submitLabel}
+          </button>
+        )}
+        </div>
       </div>
 
       <textarea

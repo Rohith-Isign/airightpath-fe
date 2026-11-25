@@ -34,6 +34,8 @@ import { useTimer } from '@/hooks/useTimer';
 import { useExamProctoring } from '@/hooks/useExamProctoring';
 import axios from 'axios';
 import { Button } from '@/components/ui/Button';
+import { useExamSessionLock } from '@/hooks/useExamSessionLock';
+import { ExamOpenElsewhere } from '@/components/exam/ExamOpenElsewhere';
 import { Badge } from '@/components/ui/Badge';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
@@ -106,6 +108,8 @@ export function CodingAssessmentPage() {
   const [code, setCode] = useState(LANGUAGE_SKELETONS.java);
   const [language, setLanguage] = useState('java');
   const [loading, setLoading] = useState(true);
+  // The exam runs in one browser tab at a time; the paper is only loaded once this tab holds it.
+  const examLock = useExamSessionLock({ kind: 'assessment', id: assessment?.id });
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -364,7 +368,7 @@ export function CodingAssessmentPage() {
   // ── Initialize exam ───────────────────────────────────────────────
   useEffect(() => {
     async function initExam() {
-      if (!assessment?.id || initRef.current) return;
+      if (!assessment?.id || initRef.current || examLock.status !== 'held') return;
       initRef.current = true;
       setLoading(true);
       setError(null);
@@ -434,7 +438,7 @@ export function CodingAssessmentPage() {
     }
     initExam();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [examLock.status]);
 
   // Resizable output panel
   useEffect(() => {
@@ -719,6 +723,10 @@ export function CodingAssessmentPage() {
         </Button>
       </div>
     );
+  }
+
+  if (examLock.status === 'blocked') {
+    return <ExamOpenElsewhere message={examLock.message} onBack={() => navigate(ROUTES.CANDIDATE.ASSESSMENTS)} />;
   }
 
   if (loading) {
