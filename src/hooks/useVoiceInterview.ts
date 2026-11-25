@@ -141,6 +141,8 @@ export function useVoiceInterview() {
   const [codeOutput, setCodeOutput] = useState("");
   /** The code last sent from the notepad, put back when the interviewer asks for it to be fixed. */
   const lastSubmittedCodeRef = useRef("");
+  /** Whether the question on screen is a coding task: the last code is brought back only for a follow-up to one. */
+  const lastTurnWasCodingRef = useRef(false);
   /** This window's id for the interview; see VoiceStartResponse.sessionId. */
   const sessionIdRef = useRef<string | null>(null);
   /** Another window opened this interview, so this one has been closed. */
@@ -512,12 +514,16 @@ export function useVoiceInterview() {
             // fixed (a follow-up or a re-ask with the notepad): the candidate's
             // last attempt goes back in, as it would on a whiteboard, rather than
             // making them type it all again.
+            // Only on the same coding task: the question before was a coding one too, and this is not a new question.
+            // Code written for one problem appeared under the next problem when the turn was marked a follow-up.
             const fixingLastCode =
               isCoding &&
+              lastTurnWasCodingRef.current &&
               (msg.turnKind === "FOLLOW_UP" || msg.turnKind === "REPHRASE") &&
               !!lastSubmittedCodeRef.current;
             setCodeContent(fixingLastCode ? lastSubmittedCodeRef.current : "");
-            if (!isCoding || msg.turnKind === "NEW_QUESTION") lastSubmittedCodeRef.current = "";
+            if (!fixingLastCode) lastSubmittedCodeRef.current = "";
+            lastTurnWasCodingRef.current = isCoding;
             setCodeOutput("");
             setLastQuestionText(cleanText);
             // The previous question's audio must not outlive it: a turn that is
@@ -629,10 +635,11 @@ export function useVoiceInterview() {
           response.firstQuestion,
         );
         setIsCodingQuestion(isCoding);
-        if (isCoding) {
-          setCodeContent("");
-          setCodeOutput("");
-        }
+        // A fresh notepad on start and on resume, whatever the question: nothing from an earlier session or problem.
+        setCodeContent("");
+        setCodeOutput("");
+        lastSubmittedCodeRef.current = "";
+        lastTurnWasCodingRef.current = isCoding;
 
         // Item 14: Store first question for repeat
         setLastQuestionText(firstQuestion);
