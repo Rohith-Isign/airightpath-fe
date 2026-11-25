@@ -17,6 +17,8 @@ import { assessmentService } from '@/services/assessment.service';
 import { useTimer } from '@/hooks/useTimer';
 import { useExamProctoring } from '@/hooks/useExamProctoring';
 import { Button } from '@/components/ui/Button';
+import { useExamSessionLock } from '@/hooks/useExamSessionLock';
+import { ExamOpenElsewhere } from '@/components/exam/ExamOpenElsewhere';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
@@ -57,6 +59,8 @@ export function AptitudeAssessmentPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
+  // The exam runs in one browser tab at a time; the paper is only loaded once this tab holds it.
+  const examLock = useExamSessionLock({ kind: 'assessment', id: assessment?.id });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
@@ -207,7 +211,7 @@ export function AptitudeAssessmentPage() {
   // Fetch questions and start exam
   useEffect(() => {
     async function initExam() {
-      if (!assessment?.id || initRef.current) return;
+      if (!assessment?.id || initRef.current || examLock.status !== 'held') return;
       initRef.current = true;
       setLoading(true);
       setError(null);
@@ -278,7 +282,7 @@ export function AptitudeAssessmentPage() {
     }
     initExam();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [examLock.status]);
 
   const handleAnswerSelect = (questionId: number, answerKey: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: answerKey }));
@@ -301,6 +305,10 @@ export function AptitudeAssessmentPage() {
         </Button>
       </div>
     );
+  }
+
+  if (examLock.status === 'blocked') {
+    return <ExamOpenElsewhere message={examLock.message} onBack={() => navigate(ROUTES.CANDIDATE.ASSESSMENTS)} />;
   }
 
   if (loading) {

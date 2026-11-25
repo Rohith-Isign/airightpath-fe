@@ -4,6 +4,7 @@ import { aiService } from "@/services/ai.service";
 import { APP_CONFIG } from "@/config/app.config";
 import { useAudioStreaming } from "./useAudioStreaming";
 import { useAudioPlayback } from "./useAudioPlayback";
+import { examHeartbeat, examTabSessionId, releaseExamSession } from "./useExamSessionLock";
 import type {
   ConversationEntry,
   StartInterviewRequest,
@@ -397,19 +398,7 @@ export function useVoiceInterview() {
         `/topic/interview/${id}/session-replaced`,
         (msg: { sessionId?: string }) => {
           if (!msg.sessionId || !sessionIdRef.current || msg.sessionId === sessionIdRef.current) return;
-          sessionIdRef.current = null;
-          aiService.setVoiceSessionId(null);
-          if (processingTimeoutRef.current) {
-            clearTimeout(processingTimeoutRef.current);
-            processingTimeoutRef.current = null;
-          }
-          void audioStreaming.stopRecording();
-          audioPlayback.stopPlayback();
-          // An answer waiting to be sent from this window is dropped: the interview carries on elsewhere.
-          reviewResolveRef.current?.(null);
-          reviewResolveRef.current = null;
-          setReview(null);
-          setSessionReplaced(true);
+          stopAsReplacedRef.current();
         },
       );
 
@@ -625,7 +614,10 @@ export function useVoiceInterview() {
         setState("starting");
         setError(null);
 
-        const { data: response } = await aiService.startVoiceInterview(request);
+        // This tab's own session id, kept across a reload of the tab: the server runs the interview in one tab at a
+        // time and refuses a start from another while this one holds it.
+        const tabSessionId = request.scheduleId != null ? examTabSessionId("interview", request.scheduleId) : undefined;
+        const { data: response } = await aiService.startVoiceInterview({ ...request, sessionId: tabSessionId });
         setScheduleId(response.scheduleId);
         scheduleIdRef.current = response.scheduleId;
         sessionIdRef.current = response.sessionId ?? null;
@@ -768,6 +760,58 @@ export function useVoiceInterview() {
       cancelled = true;
       window.clearInterval(timer);
     };
+  }, [state]);
+
+  /**
+   * This window no longer runs the interview: it was opened in another window, which now holds it. Everything here
+   * stops at once (the mic, the voice and any answer waiting to be sent) and the page says why.
+   */
+  const stopAsReplacedRef = useRef<() => void>(() => undefined);
+  stopAsReplacedRef.current = () => {
+    sessionIdRef.current = null;
+    aiService.setVoiceSessionId(null);
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+      processingTimeoutRef.current = null;
+    }
+    void audioStreaming.stopRecording();
+    audioPlayback.stopPlayback();
+    reviewResolveRef.current?.(null);
+    reviewResolveRef.current = null;
+    setReview(null);
+    setSessionReplaced(true);
+  };
+
+  // Keeps this tab's hold on the interview while it runs, so it cannot be opened in a second browser or tab at the
+  // same time, and gives it back when the page closes. A refusal means another tab has it: this one stops.
+  const lockActive = state !== "pre-start" && state !== "starting" && state !== "completed" && !sessionReplaced;
+  useEffect(() => {
+    const id = scheduleIdRef.current;
+    const sessionId = sessionIdRef.current;
+    if (!lockActive || id === null || !sessionId) return;
+    let stopped = false;
+    const beat = async () => {
+      const current = sessionIdRef.current;
+      if (!current) return;
+      const { result } = await examHeartbeat("interview", id, current);
+      if (!stopped && result === "blocked") stopAsReplacedRef.current();
+    };
+    const timer = window.setInterval(() => void beat(), 15_000);
+    const onPageHide = () => releaseExamSession("interview", id, sessionId);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [lockActive]);
+
+  // Given back when the interview ends, so it does not hold for the rest of the lease.
+  useEffect(() => {
+    if (state !== "completed") return;
+    const id = scheduleIdRef.current;
+    const sessionId = sessionIdRef.current;
+    if (id !== null && sessionId) releaseExamSession("interview", id, sessionId);
   }, [state]);
 
   /** Waits for the live connection, which reconnects by itself, for up to `ms`. */
