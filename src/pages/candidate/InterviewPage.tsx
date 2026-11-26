@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   Clock, Mic, User, Bot, Loader2, Video, AlertTriangle, Maximize, Shield,
   Wifi, WifiOff, Square, LogOut, CheckCircle2, Volume2,
-  EyeOff, Users, Timer, Monitor, MonitorUp, Send, Smartphone, BookOpen,
+  EyeOff, Users, Timer, Monitor, MonitorUp, Send, Smartphone, BookOpen, VideoOff,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
@@ -218,7 +218,11 @@ export function InterviewPage() {
     stopAndGetBlob: stopVideoAndGetBlob,
     isRecording: isVideoRecording,
     stream: recorderStream,
+    cameraState,
+    turnOn: turnCameraOn,
   } = useMediaRecorder({
+    // Watched so a preview that froze or went black while the camera claims to be on is noticed and reopened.
+    previewRef: videoRef,
     timeslice: APP_CONFIG.VIDEO_CHUNK_SECONDS * 1000,
     // Stream-only when the camera recording is switched off: face detection
     // still needs live frames, and taking the camera down to stop the recording
@@ -804,6 +808,16 @@ export function InterviewPage() {
   // exist yet and never ran again, so the panels stayed black or showed a placeholder while everything was in fact
   // being recorded. Keying them on the interview's state as well re-attaches the stream once the panel is there.
   const sidebarShown = voiceInterview.state !== 'pre-start';
+
+  // The face check reads frames from the preview. A camera that came back (reconnected, or turned on after it failed
+  // to start at Begin, where the check was never started) starts it again; it picks up the new stream from the
+  // element.
+  useEffect(() => {
+    if (cameraState === 'live' && sidebarShown && videoRef.current && PROCTORING_CONFIG.eyeDetection.enabled) {
+      startDetection(videoRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraState, sidebarShown]);
 
   // Video preview
   useEffect(() => {
@@ -2139,8 +2153,43 @@ export function InterviewPage() {
               black rectangle labelled "Camera" is worse than no panel. */}
           {cameraStreamWanted && (
           <div>
-            <div className="aspect-video bg-black rounded-lg overflow-hidden mb-2">
+            <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-2">
               <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+              {/* Never a silent black box: while the camera is being reopened, or is off or blocked, the panel says
+                  so and offers to turn it on. */}
+              {sidebarShown && cameraState !== 'live' && cameraState !== 'idle' && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/85 p-3 text-center">
+                  {cameraState === 'reconnecting' ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin text-white" />
+                      <p className="text-xs text-white">{STRINGS.candidateInterview.sidebar.cameraReconnecting}</p>
+                    </>
+                  ) : (
+                    <>
+                      <VideoOff size={20} className="text-red-400" />
+                      <p className="text-xs font-semibold text-white">
+                        {cameraState === 'denied'
+                          ? STRINGS.candidateInterview.sidebar.cameraBlocked
+                          : STRINGS.candidateInterview.sidebar.cameraOff}
+                      </p>
+                      <p className="text-[11px] leading-snug text-white/75">
+                        {cameraState === 'denied'
+                          ? STRINGS.candidateInterview.sidebar.cameraBlockedHint
+                          : STRINGS.candidateInterview.sidebar.cameraOffHint}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void turnCameraOn()}
+                        className="mt-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                      >
+                        {cameraState === 'denied'
+                          ? STRINGS.candidateInterview.sidebar.cameraTryAgain
+                          : STRINGS.candidateInterview.sidebar.cameraTurnOn}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1 text-xs text-[var(--textSecondary)]">
               <Video size={12} /> <span>{isVideoRecording ? STRINGS.candidateInterview.sidebar.cameraRecording : STRINGS.candidateInterview.sidebar.camera}</span>
