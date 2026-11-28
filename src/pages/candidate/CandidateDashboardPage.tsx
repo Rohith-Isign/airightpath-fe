@@ -297,7 +297,7 @@ export function CandidateDashboardPage() {
                   <div>
                     <p className="font-medium text-[var(--text)]">
                       {interview.jobPrefix}
-                      {INTERVIEW_ROUND_LABELS[interview.round] && (
+                      {interview.round && INTERVIEW_ROUND_LABELS[interview.round] && (
                         <span className="ml-2 text-xs font-normal text-[var(--textSecondary)]">
                           {INTERVIEW_ROUND_LABELS[interview.round]}
                         </span>

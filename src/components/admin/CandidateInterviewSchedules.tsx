@@ -64,9 +64,9 @@ export function CandidateInterviewSchedules({
           >
             <div className="min-w-0">
               <p className="text-sm font-medium text-[var(--text)]">
-                {INTERVIEW_ROUND_LABELS[i.round] ?? 'Interview'}{' '}
+                {(i.round && INTERVIEW_ROUND_LABELS[i.round]) || 'Interview'}{' '}
                 <Badge variant={notStarted ? 'warning' : 'success'} size="sm">
-                  {notStarted ? 'Not started' : i.attemptStatus.replaceAll('_', ' ').toLowerCase()}
+                  {notStarted ? 'Not started' : i.attemptStatus.replace(/_/g, ' ').toLowerCase()}
                 </Badge>
               </p>
               <p className="text-xs text-[var(--textSecondary)]">
