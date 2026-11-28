@@ -38,7 +38,7 @@ export function RescheduleInterviewModal({
   const [end, setEnd] = useState(toPickerValue(interview.deadlineTime));
   const [saving, setSaving] = useState(false);
 
-  const roundLabel = INTERVIEW_ROUND_LABELS[interview.round] ?? 'Interview';
+  const roundLabel = (interview.round && INTERVIEW_ROUND_LABELS[interview.round]) || 'Interview';
 
   let problem: string | null = null;
   if (!start || !end) {
