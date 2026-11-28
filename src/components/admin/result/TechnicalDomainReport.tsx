@@ -26,6 +26,15 @@ function weightLabel(weight: number): string {
   return `${Math.round(percent)}%`;
 }
 
+/**
+ * The line under a card's name: its scoring group, else its weight. Skill cards carry no weight of their own (it is
+ * NaN), and one with no group showed "Weight NaN%"; those show nothing.
+ */
+function areaLabel(category: VoiceCategoryScore): string | null {
+  if (category.group) return category.group;
+  return Number.isFinite(category.weight) ? `${T.weight} ${weightLabel(category.weight)}` : null;
+}
+
 function isAssessed(category: VoiceCategoryScore): boolean {
   return category.assessed !== false;
 }
@@ -206,9 +215,7 @@ function DomainRow({
         </div>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[var(--textSecondary)]">
-        <span>
-          {category.group ?? `${T.weight} ${weightLabel(category.weight)}`}
-        </span>
+        {areaLabel(category) && <span>{areaLabel(category)}</span>}
         {category.mapped != null && (
           <Badge variant={category.mapped ? 'primary' : 'secondary'} size="sm">
             {category.mapped ? T.mapped : T.unmapped}
@@ -245,9 +252,11 @@ function DomainDetail({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="text-lg font-semibold text-[var(--text)]">{category.category}</h4>
-          <Badge variant="default" size="sm">
-            {category.group ?? `${T.weight} ${weightLabel(category.weight)}`}
-          </Badge>
+          {areaLabel(category) && (
+            <Badge variant="default" size="sm">
+              {areaLabel(category)}
+            </Badge>
+          )}
           {category.mapped != null && (
             <span title={category.mapped ? T.mappedHint : T.unmappedHint}>
               <Badge variant={category.mapped ? 'primary' : 'secondary'} size="sm">

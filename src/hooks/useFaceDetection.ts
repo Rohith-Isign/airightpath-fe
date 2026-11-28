@@ -1,4 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { enhancedFrame } from '@/utils/low-light.utils';
+
+/** On the lenient pass, a face must be at least this share of the frame's width to count. */
+const MIN_LENIENT_FACE_SHARE = 0.1;
 
 interface UseFaceDetectionOptions {
   maxWarnings?: number;
@@ -127,12 +131,32 @@ export function useFaceDetection(options?: UseFaceDetectionOptions) {
           const faceapi = faceApiRef.current;
 
           try {
-            const detections = await faceapi
-              .detectAllFaces(
-                videoRef.current,
-                new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 })
-              )
-              .withFaceLandmarks(true); // true = use tiny model
+            const video = videoRef.current;
+            const detect = (input: HTMLVideoElement | HTMLCanvasElement, inputSize: number, scoreThreshold: number) =>
+              faceapi
+                .detectAllFaces(input, new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold }))
+                .withFaceLandmarks(true); // true = use tiny model
+
+            // Bright light first, as before. Only when that finds nobody is the frame brightened and looked at again,
+            // so a well-lit candidate costs nothing extra (see low-light.utils).
+            let detections = await detect(video, 320, 0.4);
+            if (detections.length === 0) {
+              const frame = enhancedFrame(video);
+              if (frame) {
+                detections = await detect(frame.canvas, 320, 0.4);
+                if (detections.length === 0) {
+                  // Last, a more lenient look at a larger size. It can confirm the candidate is there, never that
+                  // someone else is: only the strongest face is kept, and only one big enough to be a person at the
+                  // screen rather than a shape in the background.
+                  const lenient = (await detect(frame.canvas, 416, 0.25)).filter(
+                    (d) => d.detection.box.width >= frame.canvas.width * MIN_LENIENT_FACE_SHARE,
+                  );
+                  if (lenient.length > 0) {
+                    detections = [lenient.reduce((best, d) => (d.detection.score > best.detection.score ? d : best))];
+                  }
+                }
+              }
+            }
 
             if (detections.length === 0) {
               // No face detected — require 2 consecutive frames to avoid flicker

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { enhancedFrame } from '@/utils/low-light.utils';
 
 export type PhoneAlertReason = 'EXTRA_PERSON' | 'NO_CANDIDATE';
 
@@ -65,10 +66,23 @@ export function usePhoneProctor({ videoRef, enabled, onAlert }: Options) {
         return;
       }
       try {
-        const faces = await faceApi.detectAllFaces(
+        let faces = await faceApi.detectAllFaces(
           video,
           new faceApi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }),
         );
+        // Nobody seen: in a dim room that is usually a dark face, not an empty chair. Looked at again brightened, at a
+        // larger size, before it counts towards a "nobody there" photo. Only the empty case is retried, so a
+        // brightened frame never adds a second person.
+        if (faces.length === 0) {
+          const frame = enhancedFrame(video);
+          if (frame) {
+            const retry = await faceApi.detectAllFaces(
+              frame.canvas,
+              new faceApi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 }),
+            );
+            if (retry.length > 0) faces = retry.slice(0, 1);
+          }
+        }
         extraLooks = faces.length >= 2 ? extraLooks + 1 : 0;
         emptyLooks = faces.length === 0 ? emptyLooks + 1 : 0;
         if (extraLooks >= EXTRA_PERSON_LOOKS) {

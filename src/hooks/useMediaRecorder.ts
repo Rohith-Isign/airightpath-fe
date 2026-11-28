@@ -1,6 +1,6 @@
 import { PROCTORING_CONFIG } from '@/config/proctoring.config';
 import { recordingSync } from '@/services/recording-sync.service';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface UseMediaRecorderOptions {
   mimeType?: string;
@@ -35,7 +35,22 @@ interface UseMediaRecorderOptions {
    * the interview has not been created when this hook is.
    */
   persist?: { scheduleId: () => number | null | undefined };
+  /**
+   * The <video> showing the camera. Watched so a preview that has frozen or gone black while the camera claims to be
+   * on is noticed and the camera reopened.
+   */
+  previewRef?: React.RefObject<HTMLVideoElement | null>;
 }
+
+/**
+ * Where the camera stands, for the page to show.
+ * - idle: not asked for yet, or stopped
+ * - live: delivering a picture
+ * - reconnecting: lost, and being reopened
+ * - denied: the browser or the candidate blocked it; needs the site permission changed
+ * - unavailable: could not be opened (in use by another app, unplugged, a driver problem)
+ */
+export type CameraState = 'idle' | 'live' | 'reconnecting' | 'denied' | 'unavailable';
 
 /**
  * Stands in for a chunk that is already stored elsewhere.
@@ -48,12 +63,27 @@ interface UseMediaRecorderOptions {
  */
 const EMPTY_BLOB = new Blob([]);
 
-/** Fresh recorders attempted before giving up on a camera that delivers nothing. */
+/** Fresh recorders attempted before giving up on a camera that delivers nothing (the automatic no-footage check). */
 const MAX_RESTARTS = 2;
+
+/** How long a camera may show no picture (muted track, frozen preview) before it is reopened. */
+const DARK_GRACE_MS = 5000;
+
+/** How often the camera's health is checked. */
+const HEALTH_CHECK_MS = 4000;
+
+/** Attempts, with a growing pause, at reopening the camera each time it is lost. */
+const REOPEN_ATTEMPTS = 3;
+
+const isPermissionError = (err: unknown) =>
+  err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+
+const describe = (err: unknown) => (err instanceof DOMException ? `${err.name}: ${err.message}` : String(err));
 
 export function useMediaRecorder(options?: UseMediaRecorderOptions) {
   const [isRecording, setIsRecording] = useState(false);
   const [chunks, setChunks] = useState<Blob[]>([]);
+  const [cameraState, setCameraState] = useState<CameraState>('idle');
   const chunksRef = useRef<Blob[]>([]);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -64,11 +94,17 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
   const restartsRef = useRef(0);
   const watchdogRef = useRef<number | null>(null);
   const stoppingRef = useRef(false);
+  /** Whether the camera has been asked for (start called) and not stopped: only then is it kept alive. */
+  const wantedRef = useRef(false);
+  const reconnectingRef = useRef(false);
+  const darkTimerRef = useRef<number | null>(null);
   const segmentTimerRef = useRef<number | null>(null);
   /** The stored session the current recorder is writing to. */
   const sessionRef = useRef<string | null>(null);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  /** Set below; a ref so the track handlers always call the current one. */
+  const reconnectRef = useRef<(reason: string) => Promise<boolean>>(async () => false);
 
   const clearWatchdog = () => {
     if (watchdogRef.current != null) {
@@ -81,22 +117,41 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
     }
   };
 
+  const clearDarkTimer = () => {
+    if (darkTimerRef.current != null) {
+      window.clearTimeout(darkTimerRef.current);
+      darkTimerRef.current = null;
+    }
+  };
+
+  /**
+   * Watches a stream's video track for the two ways a camera goes dark: it ends (taken by another app, unplugged, a
+   * driver reset), or it stays "on" but stops sending pictures (muted), which is what a laptop waking from sleep or a
+   * system restart of the camera service leaves behind. Either way it is reopened.
+   */
+  const watchStream = useCallback((stream: MediaStream) => {
+    stream.getVideoTracks().forEach((track) => {
+      track.onended = () => {
+        if (streamRef.current === stream) void reconnectRef.current('The camera stopped delivering video.');
+      };
+      track.onmute = () => {
+        clearDarkTimer();
+        darkTimerRef.current = window.setTimeout(() => {
+          if (streamRef.current === stream && track.muted && track.readyState === 'live') {
+            void reconnectRef.current('The camera stopped sending a picture.');
+          }
+        }, DARK_GRACE_MS);
+      };
+      track.onunmute = () => clearDarkTimer();
+    });
+  }, []);
+
   /**
    * Record `stream`, and notice if it stops delivering.
    *
-   * <p>A camera taken by another application — a call app, a second tab, a
-   * driver reset — ends its video track. The recorder does not fail when that
-   * happens: it simply never produces a frame, the interview carries on, and at
-   * the end there is a zero-byte recording and nothing to say why. Seen
-   * directly: the recorder's start event arrived nine seconds late with no
-   * data in it.</p>
-   *
-   * <p>So two things are watched. A video track that ends before anything has
-   * been captured, and a recorder that has produced no data well after it
-   * should have. Either way the camera is reacquired and recording starts
-   * again — only while nothing has been captured, because a recording that
-   * already holds footage must not be replaced by a fresh file that loses
-   * it.</p>
+   * <p>A recorder whose camera is taken away does not fail: it simply never
+   * produces a frame. So a recorder that has produced no data well after it
+   * should have reopens the camera (a limited number of times).</p>
    */
   const attach = useCallback((stream: MediaStream) => {
     const opts = optionsRef.current;
@@ -127,44 +182,6 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
     recorder.onstop = () => setIsRecording(false);
     recorder.onerror = () => optionsRef.current?.onProblem?.('The camera recorder reported an error.');
 
-    const restart = async (reason: string) => {
-      if (stoppingRef.current || recorderRef.current !== recorder) return;
-      if (chunksRef.current.length > 0) {
-        // Footage exists; replacing the recorder would discard it. Report only.
-        optionsRef.current?.onProblem?.(`${reason} Earlier footage is kept.`);
-        return;
-      }
-      if (restartsRef.current >= MAX_RESTARTS) {
-        optionsRef.current?.onProblem?.(`${reason} The camera could not be recovered.`);
-        return;
-      }
-      restartsRef.current += 1;
-      try {
-        if (recorder.state !== 'inactive') recorder.stop();
-      } catch { /* already stopped */ }
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      try {
-        const fresh = await navigator.mediaDevices.getUserMedia(constraintsRef.current);
-        if (stoppingRef.current) {
-          fresh.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = fresh;
-        optionsRef.current?.onProblem?.(`${reason} The camera was reconnected and recording restarted.`);
-        attach(fresh);
-        setStreamVersion((v) => v + 1);
-      } catch (err) {
-        const why = err instanceof DOMException ? `${err.name}: ${err.message}` : String(err);
-        optionsRef.current?.onProblem?.(`${reason} The camera could not be reopened (${why}).`);
-      }
-    };
-
-    stream.getVideoTracks().forEach((track) => {
-      track.onended = () => {
-        void restart('The camera stopped delivering video.');
-      };
-    });
-
     recorderRef.current = recorder;
     recorder.start(optionsRef.current?.timeslice);
     setIsRecording(true);
@@ -175,7 +192,13 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
     clearWatchdog();
     if (slice) {
       watchdogRef.current = window.setTimeout(() => {
-        if (chunksRef.current.length === 0) void restart('The camera produced no footage.');
+        if (recorderRef.current !== recorder || chunksRef.current.length > 0) return;
+        if (restartsRef.current >= MAX_RESTARTS) {
+          optionsRef.current?.onProblem?.('The camera produced no footage. The camera could not be recovered.');
+          return;
+        }
+        restartsRef.current += 1;
+        void reconnectRef.current('The camera produced no footage.');
       }, slice * 2 + 5000);
     }
 
@@ -195,22 +218,127 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
             recordingSync.submit(sessionRef.current, new Blob(finished, { type: current.mimeType || 'video/webm' }));
             sessionRef.current = null;
           }
-          if (!stoppingRef.current) attach(live);
+          if (!stoppingRef.current && streamRef.current === live) attach(live);
         };
         current.stop();
       }, segmentMs);
     }
   }, []);
 
+  /**
+   * Closes off the recorder on the stream being replaced, keeping what it recorded. Returns whether recording can
+   * carry on on the new stream.
+   */
+  const closeRecorderForSwap = useCallback((): boolean => {
+    const recorder = recorderRef.current;
+    if (optionsRef.current?.record === false) return false;
+    clearWatchdog();
+    const hasFootage = chunksRef.current.length > 0;
+    if (optionsRef.current?.persist) {
+      // Stored as it was recorded: the part so far is closed off and uploaded, and a new part starts.
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.onstop = () => {
+          if (hasFootage) recordingSync.submit(session);
+          else recordingSync.discard(session);
+        };
+        try {
+          recorder.stop();
+        } catch {
+          /* already stopped */
+        }
+      } else if (hasFootage) {
+        recordingSync.submit(session);
+      } else {
+        recordingSync.discard(session);
+      }
+      chunksRef.current = [];
+      setChunks([]);
+      return true;
+    }
+    // Held in memory: two recordings cannot be joined into one file, so footage already recorded is kept and the
+    // recording is not restarted. The camera still comes back for the preview and the face check.
+    if (recorder && recorder.state !== 'inactive') {
+      try {
+        recorder.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    if (hasFootage) return false;
+    chunksRef.current = [];
+    setChunks([]);
+    return true;
+  }, []);
+
+  /**
+   * Reopens the camera: after it was lost, went dark, or (from the page's "Turn camera on") was never opened. Tries a
+   * few times with a growing pause, because a camera released by a sleeping system or a restarting driver is often
+   * not ready at once. Says on the record what happened.
+   */
+  const reconnect = useCallback(async (reason: string): Promise<boolean> => {
+    if (stoppingRef.current || reconnectingRef.current) return false;
+    reconnectingRef.current = true;
+    clearDarkTimer();
+    setCameraState('reconnecting');
+    try {
+      const recordAgain = closeRecorderForSwap();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+
+      let fresh: MediaStream | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < REOPEN_ATTEMPTS && !fresh; attempt += 1) {
+        try {
+          fresh = await navigator.mediaDevices.getUserMedia(constraintsRef.current);
+        } catch (err) {
+          lastError = err;
+          if (isPermissionError(err)) break; // waiting does not change a refusal
+          await new Promise((resolve) => window.setTimeout(resolve, 1500 * (attempt + 1)));
+        }
+        if (stoppingRef.current) {
+          fresh?.getTracks().forEach((t) => t.stop());
+          return false;
+        }
+      }
+
+      if (!fresh) {
+        streamRef.current = null;
+        setStreamVersion((v) => v + 1);
+        setCameraState(isPermissionError(lastError) ? 'denied' : 'unavailable');
+        optionsRef.current?.onProblem?.(`${reason} The camera could not be reopened (${describe(lastError)}).`);
+        return false;
+      }
+
+      streamRef.current = fresh;
+      watchStream(fresh);
+      if (recordAgain && optionsRef.current?.record !== false) attach(fresh);
+      setStreamVersion((v) => v + 1);
+      setCameraState('live');
+      optionsRef.current?.onProblem?.(
+        `${reason} The camera was reconnected${recordAgain && optionsRef.current?.record !== false
+          ? ' and recording continued' : ''}.`,
+      );
+      return true;
+    } finally {
+      reconnectingRef.current = false;
+    }
+  }, [attach, closeRecorderForSwap, watchStream]);
+  reconnectRef.current = reconnect;
+
   const start = useCallback(async (constraints: MediaStreamConstraints = { audio: true, video: true }): Promise<MediaStream> => {
+    // Kept before asking, so "Turn camera on" can ask again the same way if this first attempt fails.
+    constraintsRef.current = constraints;
+    wantedRef.current = true;
+    stoppingRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
-      constraintsRef.current = constraints;
       restartsRef.current = 0;
-      stoppingRef.current = false;
       chunksRef.current = [];
       setChunks([]);
+      watchStream(stream);
+      setCameraState('live');
 
       // Stream only: the caller wants live frames, not a recording.
       if (optionsRef.current?.record === false) {
@@ -219,30 +347,113 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
         return stream;
       }
 
-      // vp8 and a capped bitrate, matching the screen recorder.
-      //
-      // This set no bitrate at all, so the browser chose its own — around
-      // 2.5 Mbps for a camera stream. Over a seventy-minute interview that is
-      // well past a gigabyte, and a camera image never compresses down the way
-      // a mostly-static screen does. It exceeded the server's own 500MB limit,
-      // let alone anything in front of it, and took longer than the upload
-      // timeout however good the connection: the camera recording has never
-      // once been stored, on any interview, while screen recordings of the
-      // same interviews sometimes were.
-      //
-      // This is proctoring evidence of a face, not cinematography. The numbers
-      // are config so they can be tuned without a redeploy.
+      // vp8 and a capped bitrate, matching the screen recorder: this is proctoring evidence of a face, and an
+      // uncapped camera recording exceeded the server's upload limit on every long interview.
       attach(stream);
       return stream;
     } catch (err) {
+      setCameraState(isPermissionError(err) ? 'denied' : 'unavailable');
       console.error('Failed to start recording:', err);
       throw err;
     }
-  }, [attach]);
+  }, [attach, watchStream]);
+
+  /** The page's "Turn camera on": opens the camera again, whatever state it is in. */
+  const turnOn = useCallback(async (): Promise<boolean> => {
+    wantedRef.current = true;
+    stoppingRef.current = false;
+    return reconnect('The camera was turned on again by the candidate.');
+  }, [reconnect]);
+
+  /**
+   * Keeps the camera alive while it is wanted: a track that ended unnoticed, a preview frozen or black while the
+   * camera claims to be on, and a return to the page, the network or the device (a laptop waking, Wi-Fi back, a
+   * webcam plugged back in) all reopen it.
+   */
+  useEffect(() => {
+    let lastTime = -1;
+    let frozenSince = 0;
+
+    const lost = () => {
+      const stream = streamRef.current;
+      const track = stream?.getVideoTracks()[0];
+      return !stream || !track || track.readyState === 'ended';
+    };
+
+    const check = () => {
+      if (!wantedRef.current || stoppingRef.current || reconnectingRef.current || document.hidden) return;
+      if (lost()) {
+        void reconnectRef.current('The camera was found switched off.');
+        return;
+      }
+      const video = optionsRef.current?.previewRef?.current;
+      if (!video || video.srcObject !== streamRef.current) {
+        frozenSince = 0;
+        return;
+      }
+      if (video.paused) void video.play().catch(() => {});
+      const stalled = video.readyState < 2 || video.videoWidth === 0 || video.currentTime === lastTime;
+      lastTime = video.currentTime;
+      if (!stalled) {
+        frozenSince = 0;
+        return;
+      }
+      if (frozenSince === 0) frozenSince = Date.now();
+      else if (Date.now() - frozenSince >= DARK_GRACE_MS) {
+        frozenSince = 0;
+        void reconnectRef.current('The camera picture froze.');
+      }
+    };
+
+    const onReturn = () => {
+      if (!wantedRef.current || stoppingRef.current) return;
+      // Back from sleep, a lost connection or a hidden tab: a camera that is not delivering is reopened at once.
+      if (lost() || streamRef.current?.getVideoTracks()[0]?.muted) {
+        void reconnectRef.current('The camera was off after the device or connection came back.');
+      }
+    };
+    const onVisible = () => {
+      if (!document.hidden) onReturn();
+    };
+
+    // Allowed again in the browser's site settings: opened straight away, without the candidate pressing anything.
+    let permission: PermissionStatus | null = null;
+    const onPermission = () => {
+      if (permission?.state === 'granted' && wantedRef.current && !stoppingRef.current && lost()) {
+        void reconnectRef.current('Camera permission was allowed again.');
+      }
+    };
+    navigator.permissions
+      ?.query({ name: 'camera' as PermissionName })
+      .then((status) => {
+        permission = status;
+        status.addEventListener('change', onPermission);
+      })
+      .catch(() => {
+        /* this browser cannot report the camera permission */
+      });
+
+    const timer = window.setInterval(check, HEALTH_CHECK_MS);
+    window.addEventListener('online', onReturn);
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onVisible);
+    navigator.mediaDevices?.addEventListener?.('devicechange', onReturn);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('online', onReturn);
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onVisible);
+      navigator.mediaDevices?.removeEventListener?.('devicechange', onReturn);
+      permission?.removeEventListener('change', onPermission);
+      clearDarkTimer();
+    };
+  }, []);
 
   const stop = useCallback(() => {
     stoppingRef.current = true;
+    wantedRef.current = false;
     clearWatchdog();
+    clearDarkTimer();
     // Guarded: in stream-only mode there is no recorder, and calling stop() on
     // one that never started throws.
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
@@ -250,6 +461,7 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    setCameraState('idle');
   }, []);
 
   const stopAndGetBlob = useCallback(async (): Promise<Blob | null> => {
@@ -269,7 +481,10 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
 
   const collectFinalBlob = (): Promise<Blob | null> => {
     stoppingRef.current = true;
+    wantedRef.current = false;
     clearWatchdog();
+    clearDarkTimer();
+    setCameraState('idle');
     return new Promise((resolve) => {
       const recorder = recorderRef.current;
       if (!recorder || recorder.state === 'inactive') {
@@ -313,5 +528,16 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions) {
     chunksRef.current = [];
   }, []);
 
-  return { isRecording, chunks, start, stop, stopAndGetBlob, getBlob, reset, stream: streamRef.current };
+  return {
+    isRecording,
+    chunks,
+    start,
+    stop,
+    stopAndGetBlob,
+    getBlob,
+    reset,
+    stream: streamRef.current,
+    cameraState,
+    turnOn,
+  };
 }

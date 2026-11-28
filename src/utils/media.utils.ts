@@ -1,6 +1,9 @@
 /** Frame grabbing from a live <video> element, used by the exam identity check. */
+import { brightenImageData, DIM_FRAME_LUMA } from '@/utils/low-light.utils';
 
 interface CaptureOptions {
+  /** Brighten the photo when it was taken in dim light (default true). */
+  brightenDim?: boolean;
   /** Longest edge of the produced image. The frame is scaled down to fit. */
   maxWidth?: number;
   /** JPEG quality, 0–1. */
@@ -16,7 +19,7 @@ interface CaptureOptions {
  */
 export async function captureVideoFrame(
   video: HTMLVideoElement | null,
-  { maxWidth = 640, quality = 0.85 }: CaptureOptions = {}
+  { maxWidth = 640, quality = 0.85, brightenDim = true }: CaptureOptions = {}
 ): Promise<Blob | null> {
   if (!video || video.readyState < 2) return null;
 
@@ -29,9 +32,20 @@ export async function captureVideoFrame(
   canvas.width = Math.round(sourceWidth * scale);
   canvas.height = Math.round(sourceHeight * scale);
 
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return null;
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // A photo taken in a dim room came out too dark for a reviewer to make out the face. Brightened only when dim; a
+  // well-lit photo is kept exactly as taken.
+  if (brightenDim) {
+    try {
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      if (brightenImageData(image) < DIM_FRAME_LUMA) ctx.putImageData(image, 0, 0);
+    } catch {
+      // Unreadable canvas: keep the photo as taken.
+    }
+  }
 
   return new Promise<Blob | null>((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality);
