@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { isRetryable } from '@/utils/recording-upload.utils';
+import { sendRecordingPiece } from '@/utils/recording-direct-upload';
 
 /**
  * The paired phone's way of getting its recording to the server.
@@ -70,10 +71,21 @@ export const mobileUploadService = {
   ): Promise<void> {
     for (let attempt = 1; ; attempt++) {
       try {
-        await http().post('/api/mobile/recording-upload/part', piece, {
-          headers: { 'Content-Type': 'application/octet-stream' },
-          params: { token, uploadId: session.uploadId, blobName: session.blobName, part },
-        });
+        const params = { token, uploadId: session.uploadId, blobName: session.blobName, part };
+        await sendRecordingPiece(
+          piece,
+          async () => {
+            const res = await http().post<{ url: string }>('/api/mobile/recording-upload/part-url', null, {
+              params: { ...params, size: piece.size },
+            });
+            return res.data.url;
+          },
+          () =>
+            http().post('/api/mobile/recording-upload/part', piece, {
+              headers: { 'Content-Type': 'application/octet-stream' },
+              params,
+            }),
+        );
         return;
       } catch (err) {
         if (!isRetryable(err) || attempt > PIECE_BACKOFF_MS.length) throw err;
