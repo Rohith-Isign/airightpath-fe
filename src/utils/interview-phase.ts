@@ -13,7 +13,7 @@ import type { CandidateInterviewStanding } from '@/utils/interview-standing.util
  *
  * They are typed as application statuses so they can sit among the stage tabs, but they are never stored.
  */
-export const INTERVIEW_PHASES = ['L2_SENT', 'L2_DONE', 'L3_SENT', 'L3_DONE'] as JobApplicationStatus[];
+export const INTERVIEW_PHASES = ['L2_SENT', 'L2_DONE', 'L3_SENT', 'L3_DONE'] as string[] as JobApplicationStatus[];
 
 const asStage = (value: string) => value as JobApplicationStatus;
 

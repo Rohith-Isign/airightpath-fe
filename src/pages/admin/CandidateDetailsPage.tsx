@@ -556,7 +556,7 @@ export function CandidateDetailsPage() {
   // Available actions for the current stage
   const availableActions = STAGE_ACTIONS[activeStage] ?? [];
   /** Mails that open the next step of the pipeline: they come before the buttons that assign work. */
-  const leadActions = availableActions.filter((key) => key === 'ack' || key === 'reconfirmation');
+  const leadActions: BulkAction[] = availableActions.filter((key) => key === 'ack' || key === 'reconfirmation');
   /** Outcome mails (success, failure), after the assign and result buttons. Rejection is placed last on its own. */
   const trailingActions = availableActions.filter((key) => !leadActions.includes(key) && key !== 'rejection');
 

@@ -122,7 +122,7 @@ export function InterviewListPage() {
                           {interview.jobPrefix}
                         </h3>
                         <p className="text-xs text-[var(--textSecondary)]">
-                          {INTERVIEW_ROUND_LABELS[interview.round]
+                          {interview.round && INTERVIEW_ROUND_LABELS[interview.round]
                             ? STRINGS.myInterviews.cardSubtitleFor(INTERVIEW_ROUND_LABELS[interview.round])
                             : STRINGS.myInterviews.cardSubtitle}
                         </p>

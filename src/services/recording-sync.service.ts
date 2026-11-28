@@ -296,6 +296,18 @@ function transportFor(meta: SessionMeta): Transport {
 const isGone = (err: unknown) => extractApiError(err).status === 410;
 
 /**
+ * Stop sending a session the server has closed. What it had already received is
+ * kept there; what was still waiting here cannot be added, and the audit says so
+ * rather than claiming nothing was ever captured.
+ */
+async function dropClosedByServer(meta: SessionMeta) {
+  const entry = statsFor(meta);
+  entry.failureReason = 'The server had already closed this upload, so part of the recording was not saved.';
+  entry.bytes += meta.upload?.bytes ?? 0;
+  await removeSession(meta.id);
+}
+
+/**
  * Work on one session's upload, one thing at a time. The live sender and the
  * finishing step both move the same marker through the chunks, and two of them
  * at once would send the same piece twice.
@@ -365,7 +377,7 @@ function scheduleLive(id: string) {
     } catch (err) {
       if (isGone(err)) {
         // The server finished it already. Nothing more to send.
-        await removeSession(id);
+        await dropClosedByServer(meta);
         return;
       }
       // Not lost: the chunks are still stored and go with the next attempt.
@@ -457,7 +469,7 @@ async function finalise(meta: SessionMeta, attempt: number) {
     return;
   } catch (err) {
     if (isGone(err)) {
-      await removeSession(meta.id);
+      await dropClosedByServer(meta);
       return;
     }
 

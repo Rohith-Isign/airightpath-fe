@@ -1,5 +1,6 @@
 import api, { extractApiError } from "./api.service";
 import { isRetryable } from "@/utils/recording-upload.utils";
+import { sendRecordingPiece } from "@/utils/recording-direct-upload";
 import { ENDPOINTS } from "@/config/api.endpoints";
 import type {
   StartInterviewRequest,
@@ -291,12 +292,25 @@ export const recordingUploadApi = {
   ): Promise<void> {
     for (let attempt = 1; ; attempt++) {
       try {
-        await api.post(`/api/interview/${scheduleId}/recording-upload/part`, piece, {
-          headers: { "Content-Type": "application/octet-stream" },
-          params: { uploadId: session.uploadId, blobName: session.blobName, part },
-          timeout: 5 * 60 * 1000,
-          _skipErrorToast: true,
-        } as never);
+        const base = `/api/interview/${scheduleId}/recording-upload`;
+        const params = { uploadId: session.uploadId, blobName: session.blobName, part };
+        await sendRecordingPiece(
+          piece,
+          async () => {
+            const res = await api.post<{ url: string }>(`${base}/part-url`, null, {
+              params: { ...params, size: piece.size },
+              _skipErrorToast: true,
+            } as never);
+            return res.data.url;
+          },
+          () =>
+            api.post(`${base}/part`, piece, {
+              headers: { "Content-Type": "application/octet-stream" },
+              params,
+              timeout: 5 * 60 * 1000,
+              _skipErrorToast: true,
+            } as never),
+        );
         return;
       } catch (err) {
         if (!isRetryable(err) || attempt > PIECE_BACKOFF_MS.length) throw err;

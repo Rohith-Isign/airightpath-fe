@@ -274,8 +274,6 @@ export function InterviewSchedulerPage() {
       setSelectedEmails(new Set());
       setDeadlineTime('');
       setStartTime(nowDateTimeLocal());
-      setQuestionsFromDate('');
-      setQuestionsToDate('');
 
       // Refresh the lists so the stages and windows shown are current
       if (selectedPrefix) {
@@ -411,7 +409,7 @@ export function InterviewSchedulerPage() {
                             {c.firstName} {c.lastName}
                           </p>
                           <p className="text-xs text-[var(--textSecondary)] truncate">
-                            {c.email} · {c.status.replaceAll('_', ' ').toLowerCase()}
+                            {c.email} · {c.status.replace(/_/g, ' ').toLowerCase()}
                           </p>
                           {bookingLine(c.email) && (
                             <p className="text-xs text-[var(--primary)]">{bookingLine(c.email)}</p>

@@ -113,10 +113,7 @@ export function useVoiceInterview() {
     null,
   );
 
-  // Item 14: Store last question audio for repeat
-  const [lastQuestionAudio, setLastQuestionAudio] = useState<string | null>(
-    null,
-  );
+  // Item 14: Store last question for repeat
   const [lastQuestionText, setLastQuestionText] = useState<string | null>(null);
   /**
    * The spoken question, chunk by chunk, for the replay control.
@@ -643,8 +640,11 @@ export function useVoiceInterview() {
 
         // Item 14: Store first question for repeat
         setLastQuestionText(firstQuestion);
+        // Kept with the chunks of later questions, so the next question replaces it. Held separately, it was never
+        // replaced, and "hear it again" on a question with no audio of its own played the first one.
+        questionAudioRef.current.clear();
         if (response.firstQuestionAudio) {
-          setLastQuestionAudio(response.firstQuestionAudio);
+          questionAudioRef.current.set(0, response.firstQuestionAudio);
         }
 
         // The turn they are being asked now — the tail of the transcript on a
@@ -852,6 +852,8 @@ export function useVoiceInterview() {
           const turn = detectAndCleanCodingTag(last.content);
           setIsCodingQuestion(turn.isCoding);
           setLastQuestionText(turn.cleanText);
+          // The audio held is for the question before this one.
+          questionAudioRef.current.clear();
           setConversation((prev) => [
             ...prev,
             {
@@ -1294,12 +1296,10 @@ export function useVoiceInterview() {
       return;
     }
 
-    if (lastQuestionAudio) {
-      enqueueAudioRef.current(lastQuestionAudio, lastQuestionText || "", true);
-    } else if (lastQuestionText) {
+    if (lastQuestionText) {
       playBrowserTTSRef.current(lastQuestionText);
     }
-  }, [audioPlayback, lastQuestionAudio, lastQuestionText]);
+  }, [audioPlayback, lastQuestionText]);
 
   // Fetch evaluation with polling (async generation may not be ready immediately)
   const fetchEvaluation = useCallback(async () => {
